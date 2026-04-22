@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "MockScore": {
+      "title": "MockScore",
+      "description": "Records of mock exams taken by the user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "examType": { "type": "string" },
+        "examRole": { "type": "string" },
+        "examPhase": { "type": "string" },
+        "examScope": { "type": "string" },
+        "mockName": { "type": "string" },
+        "date": { "type": "string" },
+        "score": { "type": "number" },
+        "percentile": { "type": "number" },
+        "percentage": { "type": "number" },
+        "quant": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number" },
+            "percentile": { "type": "number" }
+          }
+        },
+        "reasoning": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number" },
+            "percentile": { "type": "number" }
+          }
+        },
+        "english": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number" },
+            "percentile": { "type": "number" }
+          }
+        },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "examType", "mockName", "date", "score", "percentile", "percentage", "quant", "reasoning", "english"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/mocks/{mockId}": {
+      "schema": { "$ref": "#/entities/MockScore" },
+      "description": "Mock scores specific to a user."
+    }
+  }
+}

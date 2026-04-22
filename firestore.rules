@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function isValidId(id) { 
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function incoming() { 
+      return request.resource.data; 
+    }
+    
+    function existing() { 
+      return resource.data; 
+    }
+
+    function isValidNestedScore(nested) {
+      return nested is map 
+        && nested.keys().hasAll(['score', 'percentile']) 
+        && nested.keys().size() == 2
+        && nested.score is number 
+        && nested.percentile is number;
+    }
+
+    function isValidMockScore(data) {
+      return data.keys().hasAll(['id', 'userId', 'examType', 'mockName', 'date', 'score', 'percentile', 'percentage', 'quant', 'reasoning', 'english', 'createdAt'])
+        && data.keys().size() >= 12 && data.keys().size() <= 15
+        && data.id is string && data.id.size() <= 128 && data.id.size() > 0
+        && data.userId is string && data.userId == request.auth.uid
+        && data.examType is string && data.examType.size() <= 100
+        && (!data.keys().hasAny(['examRole']) || (data.examRole is string && data.examRole.size() <= 100))
+        && (!data.keys().hasAny(['examPhase']) || (data.examPhase is string && data.examPhase.size() <= 100))
+        && (!data.keys().hasAny(['examScope']) || (data.examScope is string && data.examScope.size() <= 100))
+        && data.mockName is string && data.mockName.size() <= 200
+        && data.date is string && data.date.size() <= 50
+        && data.score is number
+        && data.percentile is number
+        && data.percentage is number
+        && data.createdAt is timestamp
+        && isValidNestedScore(data.quant)
+        && isValidNestedScore(data.reasoning)
+        && isValidNestedScore(data.english);
+    }
+
+    match /users/{userId}/mocks/{mockId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+      
+      allow create: if isSignedIn() 
+        && request.auth.uid == userId
+        && isValidId(mockId)
+        && isValidMockScore(incoming())
+        && incoming().createdAt == request.time;
+        
+      allow update: if isSignedIn() 
+        && request.auth.uid == userId
+        && isValidId(mockId)
+        && isValidMockScore(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['examType', 'examRole', 'examPhase', 'examScope', 'mockName', 'date', 'score', 'percentile', 'percentage', 'quant', 'reasoning', 'english', 'createdAt'])
+        && incoming().createdAt == existing().createdAt;
+        
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(mockId);
+    }
+  }
+}
