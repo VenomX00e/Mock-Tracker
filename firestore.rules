@@ -22,37 +22,90 @@ service cloud.firestore {
       return resource.data; 
     }
 
+    function isAdminUser() {
+      return isSignedIn() && request.auth.token.email == 'mrityunjoyk29@gmail.com';
+    }
+
     function isValidNestedScore(nested) {
       return nested is map 
-        && nested.keys().hasAll(['score', 'percentile']) 
-        && nested.keys().size() == 2
-        && nested.score is number 
-        && nested.percentile is number;
+        && (!nested.keys().hasAny(['score']) || nested.score is number || nested.score == null)
+        && (!nested.keys().hasAny(['percentile']) || nested.percentile is number || nested.percentile == null)
+        && (!nested.keys().hasAny(['accuracy']) || nested.accuracy is number || nested.accuracy == null);
     }
 
     function isValidMockScore(data) {
-      return data.keys().hasAll(['id', 'userId', 'examType', 'mockName', 'date', 'score', 'percentile', 'percentage', 'quant', 'reasoning', 'english', 'createdAt'])
-        && data.keys().size() >= 12 && data.keys().size() <= 15
+      return data.keys().hasAll(['id', 'userId', 'examType', 'mockName', 'date', 'createdAt'])
+        && data.keys().size() >= 6 && data.keys().size() <= 25
         && data.id is string && data.id.size() <= 128 && data.id.size() > 0
         && data.userId is string && data.userId == request.auth.uid
+        && (!data.keys().hasAny(['userName']) || (data.userName is string && data.userName.size() <= 100))
         && data.examType is string && data.examType.size() <= 100
         && (!data.keys().hasAny(['examRole']) || (data.examRole is string && data.examRole.size() <= 100))
         && (!data.keys().hasAny(['examPhase']) || (data.examPhase is string && data.examPhase.size() <= 100))
         && (!data.keys().hasAny(['examScope']) || (data.examScope is string && data.examScope.size() <= 100))
+        && (!data.keys().hasAny(['platform']) || (data.platform is string && data.platform.size() <= 100))
+        && (!data.keys().hasAny(['customPlatform']) || (data.customPlatform is string && data.customPlatform.size() <= 100))
         && data.mockName is string && data.mockName.size() <= 200
         && data.date is string && data.date.size() <= 50
-        && data.score is number
-        && data.percentile is number
-        && data.percentage is number
+        && (!data.keys().hasAny(['score']) || data.score is number || data.score == null)
+        && (!data.keys().hasAny(['percentile']) || data.percentile is number || data.percentile == null)
+        && (!data.keys().hasAny(['percentage']) || data.percentage is number || data.percentage == null)
+        && (!data.keys().hasAny(['accuracy']) || data.accuracy is number || data.accuracy == null)
         && data.createdAt is timestamp
-        && isValidNestedScore(data.quant)
-        && isValidNestedScore(data.reasoning)
-        && isValidNestedScore(data.english);
+        && (!data.keys().hasAny(['quant']) || isValidNestedScore(data.quant))
+        && (!data.keys().hasAny(['reasoning']) || isValidNestedScore(data.reasoning))
+        && (!data.keys().hasAny(['english']) || isValidNestedScore(data.english))
+        && (!data.keys().hasAny(['ga']) || isValidNestedScore(data.ga))
+        && (!data.keys().hasAny(['streakAtTime']) || data.streakAtTime is number || data.streakAtTime == null);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['userId'])
+        && data.userId is string && data.userId == request.auth.uid
+        && (!data.keys().hasAny(['displayName']) || data.displayName is string)
+        && (!data.keys().hasAny(['photoURL']) || data.photoURL is string)
+        && (!data.keys().hasAny(['targetedExam']) || data.targetedExam is string)
+        && (!data.keys().hasAny(['avgPercentile']) || data.avgPercentile is number)
+        && (!data.keys().hasAny(['avgAccuracy']) || data.avgAccuracy is number)
+        && (!data.keys().hasAny(['avgQuantPercentile']) || data.avgQuantPercentile is number)
+        && (!data.keys().hasAny(['avgReasoningPercentile']) || data.avgReasoningPercentile is number)
+        && (!data.keys().hasAny(['avgEnglishPercentile']) || data.avgEnglishPercentile is number)
+        && (!data.keys().hasAny(['avgGaPercentile']) || data.avgGaPercentile is number)
+        && (!data.keys().hasAny(['totalTests']) || data.totalTests is number)
+        && (!data.keys().hasAny(['streak']) || data.streak is number)
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp)
+        && (!data.keys().hasAny(['isBanned']) || data.isBanned is bool)
+        && (!data.keys().hasAny(['isMuted']) || data.isMuted is bool)
+        && (!data.keys().hasAny(['lastMockDate']) || data.lastMockDate is string)
+        && (!data.keys().hasAny(['role']) || data.role is string);
+    }
+
+    match /system/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminUser();
+    }
+
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming());
+      allow update: if (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && (
+        !incoming().diff(existing()).affectedKeys().hasAny(['isBanned', 'isMuted', 'role'])
+      )) || isAdminUser();
+      allow delete: if false; // Users shouldn't delete profile or let's say false for now
+    }
+
+    match /{path=**}/mocks/{mockId} {
+      // Allow reading across all mocks to build the leaderboard
+       allow read: if isSignedIn();
     }
 
     match /users/{userId}/mocks/{mockId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow list: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
       
       allow create: if isSignedIn() 
         && request.auth.uid == userId
@@ -64,7 +117,7 @@ service cloud.firestore {
         && request.auth.uid == userId
         && isValidId(mockId)
         && isValidMockScore(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['examType', 'examRole', 'examPhase', 'examScope', 'mockName', 'date', 'score', 'percentile', 'percentage', 'quant', 'reasoning', 'english', 'createdAt'])
+        && incoming().diff(existing()).affectedKeys().hasOnly(['userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'streakAtTime'])
         && incoming().createdAt == existing().createdAt;
         
       allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(mockId);

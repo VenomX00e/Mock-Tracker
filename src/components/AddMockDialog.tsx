@@ -3,65 +3,9 @@ import { MockScore } from '../types';
 import { parseScorecardImage } from '../services/geminiService';
 import { X, Upload, Loader2, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { CustomDropdown } from './CustomDropdown';
 
-function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-medium ${!value ? 'text-slate-400' : 'text-slate-700'} flex justify-between items-center`}
-      >
-        <span>{value || placeholder}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] p-2 overflow-y-auto animate-in fade-in slide-in-from-top-2 flex flex-col max-h-64">
-          <div className="space-y-1">
-            {options.map(opt => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => { onChange(opt); setIsOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all ${value === opt ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 font-medium hover:bg-slate-50'}`}
-              >
-                {opt}
-              </button>
-            ))}
-            {allowCustom && (
-              <>
-                <div className="h-px bg-slate-100 my-2 mx-2" />
-                <button
-                  type="button"
-                  onClick={() => { onChange("Other"); setIsOpen(false); }}
-                  className="w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all text-slate-500 font-medium hover:bg-slate-50"
-                >
-                  Other...
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      {/* Hidden input to handle required natively if needed */}
-      {required && !value && <input type="text" className="absolute opacity-0 w-0 h-0 pointer-events-none" required value={value} onChange={() => {}} />}
-    </div>
-  );
-}
+import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from '../lib/constants';
 
 interface AddMockDialogProps {
   isOpen: boolean;
@@ -77,6 +21,8 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
 
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isCustomRole, setIsCustomRole] = useState(false);
+  const [isCustomPlatform, setIsCustomPlatform] = useState(false);
+  const [isCustomPhase, setIsCustomPhase] = useState(false);
 
   const defaultFormData = {
     examType: '',
@@ -84,33 +30,37 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
     examPhase: 'Prelims',
     examScope: 'Full',
     mockName: '',
+    platform: '',
     date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
     score: '',
     percentile: '',
     percentage: '',
-    quant: { score: '', percentile: '' },
-    reasoning: { score: '', percentile: '' },
-    english: { score: '', percentile: '' },
+    accuracy: '',
+    quant: { score: '', percentile: '', accuracy: '' },
+    reasoning: { score: '', percentile: '', accuracy: '' },
+    english: { score: '', percentile: '', accuracy: '' },
+    ga: { score: '', percentile: '', accuracy: '' },
   };
 
   const [formData, setFormData] = useState<any>(defaultFormData);
 
   React.useEffect(() => {
     if (initialMock && isOpen) {
-      setFormData(initialMock);
-      setIsCustomExam(!['SBI', 'IBPS', 'RRB', 'LIC', 'NICL', 'NIACL', 'RBI', 'NABARD', 'CGL'].includes(initialMock.examType));
-      setIsCustomRole(initialMock.examRole ? !['PO', 'Clerk', 'AO', 'AAO', 'Assistant'].includes(initialMock.examRole) : false);
+      setFormData({ ...defaultFormData, ...initialMock });
+      setIsCustomExam(!['', 'Live Mock', ...EXAMS].includes(initialMock.examType));
+      setIsCustomRole(initialMock.examRole ? !ROLES.includes(initialMock.examRole) : false);
+      setIsCustomPlatform(initialMock.platform ? !PLATFORMS.includes(initialMock.platform) : false);
+      setIsCustomPhase(initialMock.examPhase ? !PHASES.includes(initialMock.examPhase) : false);
     } else if (isOpen) {
       setFormData(defaultFormData);
+      setIsCustomExam(false);
+      setIsCustomRole(false);
+      setIsCustomPlatform(false);
+      setIsCustomPhase(false);
     }
   }, [initialMock, isOpen]);
 
-  const [selectedSection, setSelectedSection] = useState<'quant'|'reasoning'|'english'>('quant');
-
-  const EXAMS = ['SBI', 'IBPS', 'RRB', 'LIC', 'NICL', 'NIACL', 'RBI', 'NABARD', 'CGL'];
-  const ROLES = ['PO', 'Clerk', 'AO', 'AAO', 'Assistant'];
-  const PHASES = ['Prelims', 'Mains'];
-  const SCOPES = ['Full', 'Sectional'];
+  const [selectedSection, setSelectedSection] = useState<'quant'|'reasoning'|'english'|'ga'>('quant');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
@@ -161,11 +111,11 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, section?: 'quant' | 'reasoning' | 'english', field?: 'score' | 'percentile') => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, section?: 'quant' | 'reasoning' | 'english' | 'ga', field?: 'score' | 'percentile' | 'accuracy') => {
     const { name, value } = e.target;
     
     if (section && field) {
-      setFormData(prev => ({
+      setFormData((prev: any) => ({
         ...prev,
         [section]: {
           ...prev[section],
@@ -173,7 +123,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
         }
       }));
     } else {
-      setFormData(prev => ({
+      setFormData((prev: any) => ({
         ...prev,
         [name]: value
       }));
@@ -187,27 +137,42 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
       return;
     }
 
-    let finalScore = Number(formData.score) || 0;
-    let finalPercentile = Number(formData.percentile) || 0;
-    let finalQuant = { score: Number(formData.quant?.score) || 0, percentile: Number(formData.quant?.percentile) || 0 };
-    let finalReasoning = { score: Number(formData.reasoning?.score) || 0, percentile: Number(formData.reasoning?.percentile) || 0 };
-    let finalEnglish = { score: Number(formData.english?.score) || 0, percentile: Number(formData.english?.percentile) || 0 };
+    const parseVal = (val: any) => val === '' || val === null || val === undefined ? null : Number(val);
+    const parseSec = (sec: any) => ({
+      score: parseVal(sec?.score),
+      percentile: parseVal(sec?.percentile),
+      accuracy: parseVal(sec?.accuracy)
+    });
+
+    let finalScore = parseVal(formData.score);
+    let finalPercentile = parseVal(formData.percentile);
+    let finalAccuracy = parseVal(formData.accuracy);
+    let finalPercentage = parseVal(formData.percentage);
+    
+    let finalQuant = parseSec(formData.quant);
+    let finalReasoning = parseSec(formData.reasoning);
+    let finalEnglish = parseSec(formData.english);
+    let finalGa = formData.examPhase === 'Mains' ? parseSec(formData.ga) : { score: null, percentile: null, accuracy: null };
 
     if (formData.examScope === 'Sectional') {
-      const activeSectionScore = Number(formData[selectedSection]?.score) || 0;
-      const activeSectionPercentile = Number(formData[selectedSection]?.percentile) || 0;
+      const activeSectionScore = parseVal(formData[selectedSection]?.score);
+      const activeSectionPercentile = parseVal(formData[selectedSection]?.percentile);
+      const activeSectionAccuracy = parseVal(formData[selectedSection]?.accuracy);
       
       finalScore = activeSectionScore; // Sync with overall score for charts
       finalPercentile = activeSectionPercentile;
+      finalAccuracy = activeSectionAccuracy;
       
       // Clear other sections and only set the chosen one
-      finalQuant = { score: 0, percentile: 0 };
-      finalReasoning = { score: 0, percentile: 0 };
-      finalEnglish = { score: 0, percentile: 0 };
+      finalQuant = { score: null, percentile: null, accuracy: null };
+      finalReasoning = { score: null, percentile: null, accuracy: null };
+      finalEnglish = { score: null, percentile: null, accuracy: null };
+      finalGa = { score: null, percentile: null, accuracy: null };
       
-      if (selectedSection === 'quant') finalQuant = { score: activeSectionScore, percentile: activeSectionPercentile };
-      if (selectedSection === 'reasoning') finalReasoning = { score: activeSectionScore, percentile: activeSectionPercentile };
-      if (selectedSection === 'english') finalEnglish = { score: activeSectionScore, percentile: activeSectionPercentile };
+      if (selectedSection === 'quant') finalQuant = { score: activeSectionScore, percentile: activeSectionPercentile, accuracy: activeSectionAccuracy };
+      if (selectedSection === 'reasoning') finalReasoning = { score: activeSectionScore, percentile: activeSectionPercentile, accuracy: activeSectionAccuracy };
+      if (selectedSection === 'english') finalEnglish = { score: activeSectionScore, percentile: activeSectionPercentile, accuracy: activeSectionAccuracy };
+      if (selectedSection === 'ga') finalGa = { score: activeSectionScore, percentile: activeSectionPercentile, accuracy: activeSectionAccuracy };
     }
 
     const newMock: MockScore = {
@@ -217,25 +182,22 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
       examPhase: formData.examPhase || 'Prelims',
       examScope: formData.examScope || 'Full',
       mockName: formData.mockName || '',
+      platform: formData.platform || '',
       date: formData.date || new Date().toISOString().split('T')[0],
       score: finalScore,
       percentile: finalPercentile,
-      percentage: Number(formData.percentage) || 0,
+      percentage: finalPercentage,
+      accuracy: finalAccuracy,
       quant: finalQuant,
       reasoning: finalReasoning,
       english: finalEnglish,
+      ga: finalGa,
     };
 
     onSave(newMock);
     
     // Reset form
-    setFormData({
-      examType: '', examRole: '', examPhase: 'Prelims', examScope: 'Full', mockName: '', date: new Date().toISOString().split('T')[0],
-      score: '', percentile: '', percentage: '',
-      quant: { score: '', percentile: '' },
-      reasoning: { score: '', percentile: '' },
-      english: { score: '', percentile: '' },
-    });
+    setFormData(defaultFormData);
     setError('');
   };
 
@@ -351,12 +313,35 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
               </div>
               <div className="space-y-1.5 md:col-span-2 flex flex-col justify-end">
                 <div className="grid grid-cols-2 gap-3">
-                  <CustomDropdown
-                    value={formData.examPhase || 'Prelims'}
-                    placeholder="Phase"
-                    options={PHASES}
-                    onChange={(val) => setFormData((p: any) => ({ ...p, examPhase: val }))}
-                  />
+                  {!isCustomPhase ? (
+                    <CustomDropdown
+                      value={formData.examPhase || 'Prelims'}
+                      placeholder="Phase"
+                      options={PHASES}
+                      allowCustom
+                      onChange={(val) => {
+                        if (val === 'Other') {
+                          setIsCustomPhase(true);
+                          setFormData((p: any) => ({ ...p, examPhase: '' }));
+                        } else {
+                          setFormData((p: any) => ({ ...p, examPhase: val }));
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="examPhase"
+                        value={formData.examPhase}
+                        onChange={handleInputChange}
+                        placeholder="Custom Phase..."
+                        className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 pr-8 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                        autoFocus
+                      />
+                      <button type="button" onClick={() => { setIsCustomPhase(false); setFormData((p: any) => ({ ...p, examPhase: "Prelims" })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                    </div>
+                  )}
                   <CustomDropdown
                     value={formData.examScope || 'Full'}
                     placeholder="Scope"
@@ -367,7 +352,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Mock Name</label>
                 <input
@@ -379,6 +364,38 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                   className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
                   required
                 />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Platform</label>
+                {!isCustomPlatform ? (
+                  <CustomDropdown
+                    value={formData.platform || ''}
+                    placeholder="Platform"
+                    options={PLATFORMS}
+                    allowCustom
+                    onChange={(val) => {
+                      if (val === 'Other') {
+                        setIsCustomPlatform(true);
+                        setFormData((p: any) => ({ ...p, platform: '' }));
+                      } else {
+                        setFormData((p: any) => ({ ...p, platform: val }));
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="platform"
+                      value={formData.platform}
+                      onChange={handleInputChange}
+                      placeholder="Custom Platform..."
+                      className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 pr-8 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                      autoFocus
+                    />
+                    <button type="button" onClick={() => { setIsCustomPlatform(false); setFormData((p: any) => ({ ...p, platform: "" })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Date & Time</label>
@@ -399,10 +416,11 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                      <button type="button" onClick={() => setSelectedSection('quant')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'quant' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Q</button>
                      <button type="button" onClick={() => setSelectedSection('reasoning')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'reasoning' ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}>R</button>
                      <button type="button" onClick={() => setSelectedSection('english')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'english' ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:bg-slate-50'}`}>E</button>
+                     <button type="button" onClick={() => setSelectedSection('ga')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'ga' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}>GA</button>
                    </div>
                 </div>
                 <h3 className="text-sm font-semibold text-slate-900 mt-6 mb-4 capitalize">{selectedSection} Performance</h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Score</label>
                     <input
@@ -436,6 +454,17 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Accuracy%</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="accuracy"
+                      value={formData[selectedSection]?.accuracy}
+                      onChange={e => handleInputChange(e, selectedSection, 'accuracy')}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    />
+                  </div>
                 </div>
               </div>
             ) : (
@@ -445,14 +474,14 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                     <span className="w-1.5 h-4 bg-indigo-500 rounded-full mr-2"></span>
                     Overall Performance
                   </h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Score</label>
                       <input
                         type="number"
                         step="0.01"
                         name="score"
-                        value={formData.score}
+                        value={formData.score ?? ''}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
                       />
@@ -463,7 +492,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                         type="number"
                         step="0.01"
                         name="percentile"
-                        value={formData.percentile}
+                        value={formData.percentile ?? ''}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
                       />
@@ -474,7 +503,18 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                         type="number"
                         step="0.01"
                         name="percentage"
-                        value={formData.percentage}
+                        value={formData.percentage ?? ''}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Accuracy %</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        name="accuracy"
+                        value={formData.accuracy ?? ''}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
                       />
@@ -491,22 +531,31 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                   {/* Quant */}
                   <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
                     <div className="w-24 font-medium text-sm text-slate-700">Quant</div>
-                    <div className="flex-1 flex gap-4">
+                    <div className="flex-1 flex gap-2">
                       <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-3 text-xs text-slate-500 font-medium">Score</span>
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
                          <input
                           type="number" step="0.01"
-                          value={formData.quant?.score}
+                          value={formData.quant?.score ?? ''}
                           onChange={(e) => handleInputChange(e, 'quant', 'score')}
                           className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
                         />
                       </div>
                       <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-3 text-xs text-slate-500 font-medium">%ile</span>
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
                          <input
                           type="number" step="0.01"
-                          value={formData.quant?.percentile}
+                          value={formData.quant?.percentile ?? ''}
                           onChange={(e) => handleInputChange(e, 'quant', 'percentile')}
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                        />
+                      </div>
+                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                         <input
+                          type="number" step="0.01"
+                          value={formData.quant?.accuracy ?? ''}
+                          onChange={(e) => handleInputChange(e, 'quant', 'accuracy')}
                           className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
                         />
                       </div>
@@ -516,22 +565,31 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                    {/* Reasoning */}
                    <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
                     <div className="w-24 font-medium text-sm text-slate-700">Reasoning</div>
-                    <div className="flex-1 flex gap-4">
+                    <div className="flex-1 flex gap-2">
                       <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-3 text-xs text-slate-500 font-medium">Score</span>
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
                          <input
                           type="number" step="0.01"
-                          value={formData.reasoning?.score}
+                          value={formData.reasoning?.score ?? ''}
                           onChange={(e) => handleInputChange(e, 'reasoning', 'score')}
                           className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
                         />
                       </div>
                       <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-3 text-xs text-slate-500 font-medium">%ile</span>
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
                          <input
                           type="number" step="0.01"
-                          value={formData.reasoning?.percentile}
+                          value={formData.reasoning?.percentile ?? ''}
                           onChange={(e) => handleInputChange(e, 'reasoning', 'percentile')}
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                        />
+                      </div>
+                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                         <input
+                          type="number" step="0.01"
+                          value={formData.reasoning?.accuracy ?? ''}
+                          onChange={(e) => handleInputChange(e, 'reasoning', 'accuracy')}
                           className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
                         />
                       </div>
@@ -541,27 +599,72 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                    {/* English */}
                    <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
                     <div className="w-24 font-medium text-sm text-slate-700">English</div>
-                    <div className="flex-1 flex gap-4">
+                    <div className="flex-1 flex gap-2">
                       <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-3 text-xs text-slate-500 font-medium">Score</span>
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
                          <input
                           type="number" step="0.01"
-                          value={formData.english?.score}
+                          value={formData.english?.score ?? ''}
                           onChange={(e) => handleInputChange(e, 'english', 'score')}
                           className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
                         />
                       </div>
                       <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-3 text-xs text-slate-500 font-medium">%ile</span>
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
                          <input
                           type="number" step="0.01"
-                          value={formData.english?.percentile}
+                          value={formData.english?.percentile ?? ''}
                           onChange={(e) => handleInputChange(e, 'english', 'percentile')}
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                        />
+                      </div>
+                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                         <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                         <input
+                          type="number" step="0.01"
+                          value={formData.english?.accuracy ?? ''}
+                          onChange={(e) => handleInputChange(e, 'english', 'accuracy')}
                           className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
                         />
                       </div>
                     </div>
                   </div>
+
+                   {/* GA */}
+                   {formData.examPhase !== 'Prelims' && (
+                     <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
+                      <div className="w-24 font-medium text-sm text-slate-700">GA</div>
+                      <div className="flex-1 flex gap-2">
+                        <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                           <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
+                           <input
+                            type="number" step="0.01"
+                            value={formData.ga?.score ?? ''}
+                            onChange={(e) => handleInputChange(e, 'ga', 'score')}
+                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          />
+                        </div>
+                        <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                           <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
+                           <input
+                            type="number" step="0.01"
+                            value={formData.ga?.percentile ?? ''}
+                            onChange={(e) => handleInputChange(e, 'ga', 'percentile')}
+                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          />
+                        </div>
+                        <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+                           <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                           <input
+                            type="number" step="0.01"
+                            value={formData.ga?.accuracy ?? ''}
+                            onChange={(e) => handleInputChange(e, 'ga', 'accuracy')}
+                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                   )}
                 </div>
               </>
             )}
@@ -581,7 +684,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
             form="mock-form"
             className="px-6 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all"
           >
-            {initialMock ? 'Update Score' : 'Save Score'}
+            {initialMock?.id ? 'Update Score' : 'Save Score'}
           </button>
         </div>
       </div>

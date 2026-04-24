@@ -1,24 +1,29 @@
-import React, { useMemo, useState } from 'react';
-import { MockScore } from '../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import { MockScore, UserProfile } from '../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Legend, ReferenceLine
 } from 'recharts';
-import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw } from 'lucide-react';
+import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame } from 'lucide-react';
+import { getHeatmapColor, getPlatformShort } from '../lib/utils';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 interface DashboardProps {
   mocks: MockScore[];
+  profile?: UserProfile;
   onDeleteMock?: (id: string) => void;
   onEditMock?: (mock: MockScore) => void;
   lastDeletedMock?: MockScore | null;
   onRestoreMock?: () => void;
 }
 
-export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeletedMock, onRestoreMock }: DashboardProps) {
+export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, lastDeletedMock, onRestoreMock }: DashboardProps) {
   const [selectedExam, setSelectedExam] = useState<string>('Overview');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
   const [selectedScope, setSelectedScope] = useState<string>('All');
+  const [activeTrendId, setActiveTrendId] = useState<string>('overall');
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
 
   // get unique exam types
@@ -26,6 +31,26 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
     const types = new Set(mocks.map(m => m.examType).filter(Boolean));
     return ['Overview', ...Array.from(types).sort()];
   }, [mocks]);
+
+  const [leaderboardRank, setLeaderboardRank] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchRank = async () => {
+      if (!profile) return;
+      try {
+        const q = query(collection(db, 'users'), orderBy('avgPercentile', 'desc'));
+        const snap = await getDocs(q);
+        const users = snap.docs.map(d => d.data() as UserProfile).filter(u => !u.isBanned && !u.isMuted && u.totalTests > 0);
+        const rank = users.findIndex(u => u.userId === profile.userId) + 1;
+        if (rank > 0) {
+          setLeaderboardRank(rank);
+        }
+      } catch (e) {
+        console.error("Error fetching rank", e);
+      }
+    };
+    fetchRank();
+  }, [profile]);
 
   // reset subfilters when main exam changes
   React.useEffect(() => {
@@ -90,6 +115,9 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
     
     const avgScore = (displayedMocks.reduce((acc, m) => acc + m.score, 0) / displayedMocks.length).toFixed(1);
     const avgPercentile = (displayedMocks.reduce((acc, m) => acc + m.percentile, 0) / displayedMocks.length).toFixed(1);
+    const accuracyMocks = displayedMocks.filter(m => m.accuracy !== undefined && !isNaN(m.accuracy));
+    const avgAccuracy = accuracyMocks.length > 0 ? (accuracyMocks.reduce((acc, m) => acc + m.accuracy!, 0) / accuracyMocks.length).toFixed(1) : '-';
+    
     const totalTests = displayedMocks.length;
     
     // Recent trend (last vs second last)
@@ -98,7 +126,7 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
     const scoreDiff = prev ? (recent.score - prev.score).toFixed(1) : 0;
     const isScoreUp = prev ? recent.score >= prev.score : true;
 
-    return { avgScore, avgPercentile, totalTests, scoreDiff, isScoreUp, recent };
+    return { avgScore, avgPercentile, avgAccuracy, totalTests, scoreDiff, isScoreUp, recent };
   }, [displayedMocks]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -122,13 +150,14 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
               <span className="text-slate-400 font-medium">Overall Score</span>
               <span className="font-mono font-bold text-blue-400">{data.score || '-'}</span>
             </div>
-            {(data.quant?.score || data.reasoning?.score || data.english?.score) ? (
+            {(data.quant?.score || data.reasoning?.score || data.english?.score || data.ga?.score) ? (
               <>
                 <div className="border-t border-slate-800 my-1.5" />
                 <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 mt-2">Sectional Scores</div>
                 {data.quant?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Quant</span><span className="font-mono text-slate-100 font-medium text-xs">{data.quant.score}</span></div> : null}
                 {data.reasoning?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Reasoning</span><span className="font-mono text-slate-100 font-medium text-xs">{data.reasoning.score}</span></div> : null}
                 {data.english?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">English</span><span className="font-mono text-slate-100 font-medium text-xs">{data.english.score}</span></div> : null}
+                {data.ga?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">GA</span><span className="font-mono text-slate-100 font-medium text-xs">{data.ga.score}</span></div> : null}
               </>
             ) : null}
           </div>
@@ -138,25 +167,26 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
     return null;
   };
 
-  const getHeatmapColor = (percentile: number) => {
-    if (percentile >= 95) return 'bg-emerald-500 text-white shadow-sm ring-1 ring-emerald-600/20';
-    if (percentile >= 90) return 'bg-emerald-400 text-white shadow-sm ring-1 ring-emerald-500/20';
-    if (percentile >= 80) return 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500/20';
-    if (percentile >= 70) return 'bg-amber-100 text-amber-700 ring-1 ring-amber-500/20';
-    if (percentile > 0) return 'bg-rose-100 text-rose-700 ring-1 ring-rose-500/20';
-    return 'bg-slate-100 text-slate-400';
-  };
-
-  const renderCustomBarLabel = (props: any, section: 'quant' | 'reasoning' | 'english') => {
-    const { x, y, width, value, index } = props;
-    const mock = displayedMocks[index];
+  const renderCustomBarLabel = (props: any, section: 'quant' | 'reasoning' | 'english' | 'ga') => {
+    const { x, y, width, value, payload } = props;
+    const mock = payload;
     if (!mock) return null;
     const percentile = mock[section]?.percentile;
-    if (!value && !percentile) return null;
+    
+    const hasValue = value !== null && value !== undefined && value !== '';
+    const hasPercentile = percentile !== null && percentile !== undefined && percentile !== '';
+    
+    if (!hasValue && !hasPercentile) return null;
+    
+    // Position y needs to make sure text doesn't flow off the svg container top. 
+    // Usually y is close to 0 if the bar is very tall.
+    const scoreY = Math.max(y - 4, 16);
+    const percY = hasValue ? scoreY - 12 : scoreY;
+
     return (
       <g>
-        {percentile > 0 && <text x={x + width / 2} y={y - 16} fill="#64748b" fontSize="10" textAnchor="middle">{percentile}%</text>}
-        {value > 0 && <text x={x + width / 2} y={y - 4} fill="#334155" fontSize="11" fontWeight="bold" textAnchor="middle">{value}</text>}
+        {hasPercentile && <text x={x + width / 2} y={percY} fill="#64748b" fontSize="10" textAnchor="middle">{percentile}%</text>}
+        {hasValue && <text x={x + width / 2} y={scoreY} fill="#334155" fontSize="11" fontWeight="bold" textAnchor="middle">{value}</text>}
       </g>
     );
   };
@@ -260,54 +290,91 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
       {stats && (
         <>
           {/* Quick Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-blue-500">
-              <div className="flex items-center gap-3 text-slate-500 mb-2">
-                <Target className="w-5 h-5 text-blue-500" />
-                <span className="font-medium text-sm">Average Score</span>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            
+            {/* 1. Streak */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
+              <div className="flex items-center gap-2 text-slate-500 mb-2">
+                <Flame className="w-5 h-5 text-orange-500 animate-pulse drop-shadow-sm" />
+                <span className="font-medium text-xs sm:text-sm truncate">Streak</span>
               </div>
-              <div className="text-3xl font-light text-slate-900">{stats.avgScore}</div>
+              <div className="text-3xl font-light text-slate-900">{profile?.streak || 0}</div>
             </div>
 
+            {/* 2. Avg Percentile */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-indigo-500">
-              <div className="flex items-center gap-3 text-slate-500 mb-2">
+              <div className="flex items-center gap-2 text-slate-500 mb-2">
                 <Trophy className="w-5 h-5 text-indigo-500" />
-                <span className="font-medium text-sm">Avg Percentile</span>
+                <span className="font-medium text-xs sm:text-sm truncate">Avg Percentile</span>
               </div>
-              <div className="text-3xl font-light text-slate-900">{stats.avgPercentile}<span className="text-lg text-slate-400 ml-1">%ile</span></div>
+              <div className="text-3xl font-light text-slate-900">{stats.avgPercentile}<span className="text-sm sm:text-lg text-slate-400 ml-1">%</span></div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-emerald-500">
-              <div className="flex items-center gap-3 text-slate-500 mb-2">
-                <TrendingUp className="w-5 h-5 text-emerald-500" />
-                <span className="font-medium text-sm">Recent Trend</span>
+            {/* 3. Avg Accuracy */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-blue-500">
+              <div className="flex items-center gap-2 text-slate-500 mb-2">
+                <Target className="w-5 h-5 text-blue-500" />
+                <span className="font-medium text-xs sm:text-sm truncate">Avg Accuracy</span>
               </div>
-              <div className="flex items-end gap-2">
-                <span className="text-3xl font-light text-slate-900">{stats.recent.score}</span>
+              <div className="text-3xl font-light text-slate-900">{stats.avgAccuracy}{stats.avgAccuracy !== '-' && <span className="text-sm sm:text-lg text-slate-400 ml-1">%</span>}</div>
+            </div>
+
+            {/* 4. Recent Trend */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-emerald-500">
+              <div className="flex items-center gap-2 text-slate-500 mb-2">
+                <TrendingUp className="w-5 h-5 text-emerald-500" />
+                <span className="font-medium text-xs sm:text-sm truncate">Recent Trend</span>
+              </div>
+              <div className="flex pb-1 items-end gap-2">
+                <span className="text-3xl font-light leading-none text-slate-900">{stats.recent.score}</span>
                 {Number(stats.scoreDiff) !== 0 && (
-                  <span className={`text-sm font-medium mb-1 ${stats.isScoreUp ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  <span className={`text-xs font-medium leading-none ${stats.isScoreUp ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {stats.isScoreUp ? '+' : ''}{stats.scoreDiff}
                   </span>
                 )}
               </div>
             </div>
 
+            {/* 5. Total Tests */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-amber-500">
-               <div className="flex items-center gap-3 text-slate-500 mb-2">
+               <div className="flex items-center gap-2 text-slate-500 mb-2">
                 <CalendarDays className="w-5 h-5 text-amber-500" />
-                <span className="font-medium text-sm">Total Tests</span>
+                <span className="font-medium text-xs sm:text-sm truncate">Total Tests</span>
               </div>
               <div className="text-3xl font-light text-slate-900">{stats.totalTests}</div>
             </div>
+
+            {/* 6. Leaderboard Position */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-purple-500">
+               <div className="flex items-center gap-2 text-slate-500 mb-2">
+                <Trophy className="w-5 h-5 text-purple-500" />
+                <span className="font-medium text-xs sm:text-sm truncate">Rank</span>
+              </div>
+              <div className="text-3xl font-light text-slate-900">{leaderboardRank ? `#${leaderboardRank}` : '-'}</div>
+            </div>
+            
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart: Percentile Trend */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[300px] lg:col-span-2">
-              <h3 className="font-semibold text-slate-800 mb-6 flex items-center justify-between">
-                <span className="flex items-center"><Trophy className="w-5 h-5 mr-2 text-slate-400" /> Percentile Trend & Score Progression</span>
-              </h3>
-              <div className="flex-1 w-full relative">
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[300px] lg:col-span-2 relative">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2">
+                <h3 className="font-semibold text-slate-800 flex items-center mb-2 sm:mb-0">
+                  <Trophy className="w-5 h-5 mr-2 text-slate-400" /> Percentile Trend
+                </h3>
+                <div className="flex gap-2 flex-wrap">
+                  {['overall', 'quant', 'reasoning', 'english', 'ga'].map(key => (
+                    <button 
+                      key={key} 
+                      onClick={() => setActiveTrendId(key)}
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${activeTrendId === key ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                    >
+                      {key.charAt(0).toUpperCase() + key.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1 w-full mt-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={displayedMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
@@ -315,7 +382,7 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={[0, 100]} />
                     <RechartsTooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 1000 }} />
                     <ReferenceLine y={90} stroke="#10b981" strokeDasharray="3 3" opacity={0.5} />
-                    <Line type="monotone" dataKey="percentile" name="Percentile" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
+                    <Line type="monotone" dataKey={activeTrendId === 'overall' ? 'percentile' : `${activeTrendId}.percentile`} name={activeTrendId === 'overall' ? 'Percentile' : `${activeTrendId} %ile`} stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -338,6 +405,7 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
                     <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={28} label={(props: any) => renderCustomBarLabel(props, 'quant')} />
                     <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={28} label={(props: any) => renderCustomBarLabel(props, 'reasoning')} />
                     <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={28} label={(props: any) => renderCustomBarLabel(props, 'english')} />
+                    <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28} label={(props: any) => renderCustomBarLabel(props, 'ga')} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -357,18 +425,19 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
                 </button>
               )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500">
-                    <th className="p-4 font-semibold">Date</th>
+                    <th className="p-4 font-semibold text-center">Time</th>
+                    <th className="p-4 font-semibold">Exam</th>
                     <th className="p-4 font-semibold">Mock Name</th>
-                    {selectedExam === 'Overview' && <th className="p-4 font-semibold">Exam</th>}
-                    <th className="p-4 font-semibold text-right">Score</th>
-                    <th className="p-4 font-semibold text-right">Percentile</th>
-                    <th className="p-4 font-semibold text-right hidden sm:table-cell">Quant</th>
-                    <th className="p-4 font-semibold text-right hidden lg:table-cell">Reasoning</th>
-                    <th className="p-4 font-semibold text-right hidden lg:table-cell">English</th>
+                    <th className="p-4 font-semibold text-center">Score</th>
+                    <th className="p-4 font-semibold text-center">Percentile</th>
+                    <th className="p-4 font-semibold text-center">Quant</th>
+                    <th className="p-4 font-semibold text-center">Reasoning</th>
+                    <th className="p-4 font-semibold text-center">English</th>
+                    <th className="p-4 font-semibold text-center">GA</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm">
@@ -380,14 +449,17 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
                     
                     const currentDateString = mockDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
                     const prevDateString = index > 0 ? new Date(arr[index - 1].date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : null;
-                    const showDivider = index > 0 && currentDateString !== prevDateString;
+                    const showDivider = index === 0 || currentDateString !== prevDateString;
 
                     return (
                       <React.Fragment key={mock.id}>
                         {showDivider && (
                           <tr className="bg-slate-50/50">
-                            <td colSpan={selectedExam === 'Overview' ? 9 : 8} className="px-4 py-2 text-xs font-semibold text-slate-500 border-y border-slate-100">
-                              {currentDateString}
+                            <td colSpan={10} className="px-5 py-2 text-xs font-bold text-slate-800 border-y border-slate-100 text-left">
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                                {currentDateString}
+                              </div>
                             </td>
                           </tr>
                         )}
@@ -395,51 +467,80 @@ export default function Dashboard({ mocks, onDeleteMock, onEditMock, lastDeleted
                           onClick={(e) => setActiveRowId(activeRowId === mock.id ? null : mock.id)}
                           className={`border-b border-slate-50 hover:bg-slate-50/80 transition-colors group relative cursor-pointer ${activeRowId === mock.id ? 'bg-slate-50/80' : ''}`}
                         >
-                          <td className="p-4 text-slate-500 font-mono text-xs whitespace-nowrap">
-                            <div className="flex flex-col">
-                              {isTimeValid && <span className="text-[10px] text-slate-400 mb-0.5">{formattedTime}</span>}
-                              <span>{isTimeValid ? formattedDate : mock.date}</span>
+                          <td className="p-4 text-slate-500 font-mono text-xs whitespace-nowrap text-center">
+                            <div className="flex flex-col items-center">
+                              {isTimeValid ? <span>{formattedTime}</span> : <span>-</span>}
                             </div>
+                          </td>
+                          <td className="p-4 text-slate-600 text-center">
+                             <div className="flex flex-col items-center gap-1">
+                               <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-md text-xs font-semibold">
+                                 {mock.examType}
+                               </span>
+                               {mock.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 text-blue-600 font-medium">{mock.examRole}</span>}
+                             </div>
                           </td>
                           <td className="p-4 font-medium text-slate-800">
                             <div className="flex flex-col">
                                <span>{mock.mockName}</span>
                                <div className="flex gap-1.5 mt-1">
-                                 {mock.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-indigo-50 text-indigo-600 font-medium">{mock.examRole}</span>}
+                                 {mock.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 text-purple-600 font-medium">{getPlatformShort(mock.platform)}</span>}
                                  {mock.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-600 font-medium">{mock.examPhase}</span>}
                                  {mock.examScope && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-600 font-medium">{mock.examScope}</span>}
                                </div>
                              </div>
                           </td>
-                          {selectedExam === 'Overview' && (
-                            <td className="p-4 text-slate-600">
-                              <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-medium">
-                                {mock.examType}
-                              </span>
-                            </td>
-                          )}
-                          <td className="p-4 text-right font-mono font-medium text-blue-600">{mock.score}</td>
-                          <td className="p-4 text-right">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(mock.percentile)}`}>
-                              {mock.percentile}%
-                            </span>
+                          <td className="p-4 font-mono font-medium text-blue-600 text-center align-middle">
+                            {mock.score != null && mock.score !== 0 ? mock.score : '-'}
                           </td>
-                          <td className="p-4 text-right hidden sm:table-cell">
-                            <div className="flex flex-col items-end">
-                              <span className="font-mono text-slate-600">{mock.quant.score}</span>
-                              {mock.quant.percentile > 0 && <span className={`text-[10px] font-medium mt-0.5 px-1.5 rounded ${getHeatmapColor(mock.quant.percentile)}`}>{mock.quant.percentile}%</span>}
+                          <td className="p-4 text-center align-middle">
+                            <div className="flex flex-col items-center gap-1">
+                              {mock.percentile != null && mock.percentile !== 0 ? (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(mock.percentile)}`}>
+                                  {mock.percentile}%P
+                                </span>
+                              ) : <span className="text-slate-300">-</span>}
+                              {mock.accuracy != null && mock.accuracy !== 0 && (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-mono font-medium ${getHeatmapColor(mock.accuracy)}`}>
+                                  {mock.accuracy}%A
+                                </span>
+                              )}
                             </div>
                           </td>
-                          <td className="p-4 text-right hidden lg:table-cell">
-                            <div className="flex flex-col items-end">
-                              <span className="font-mono text-slate-600">{mock.reasoning.score}</span>
-                              {mock.reasoning.percentile > 0 && <span className={`text-[10px] font-medium mt-0.5 px-1.5 rounded ${getHeatmapColor(mock.reasoning.percentile)}`}>{mock.reasoning.percentile}%</span>}
+                          <td className="p-4 text-center align-middle">
+                            <div className="flex flex-col items-center">
+                              <span className="font-mono text-slate-600">{mock.quant?.score != null && mock.quant.score !== 0 ? mock.quant.score : '-'}</span>
+                              <div className="flex flex-col gap-0.5 mt-1 items-center">
+                                {mock.quant?.percentile != null && mock.quant.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.quant.percentile)}`}>{mock.quant.percentile}%P</span>}
+                                {mock.quant?.accuracy != null && mock.quant.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.quant.accuracy)}`}>{mock.quant.accuracy}%A</span>}
+                              </div>
                             </div>
                           </td>
-                          <td className="p-4 text-right hidden lg:table-cell">
-                             <div className="flex flex-col items-end">
-                              <span className="font-mono text-slate-600">{mock.english.score}</span>
-                              {mock.english.percentile > 0 && <span className={`text-[10px] font-medium mt-0.5 px-1.5 rounded ${getHeatmapColor(mock.english.percentile)}`}>{mock.english.percentile}%</span>}
+                          <td className="p-4 text-center align-middle">
+                            <div className="flex flex-col items-center">
+                              <span className="font-mono text-slate-600">{mock.reasoning?.score != null && mock.reasoning.score !== 0 ? mock.reasoning.score : '-'}</span>
+                              <div className="flex flex-col gap-0.5 mt-1 items-center">
+                                {mock.reasoning?.percentile != null && mock.reasoning.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.reasoning.percentile)}`}>{mock.reasoning.percentile}%P</span>}
+                                {mock.reasoning?.accuracy != null && mock.reasoning.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.reasoning.accuracy)}`}>{mock.reasoning.accuracy}%A</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-center align-middle">
+                             <div className="flex flex-col items-center">
+                              <span className="font-mono text-slate-600">{mock.english?.score != null && mock.english.score !== 0 ? mock.english.score : '-'}</span>
+                              <div className="flex flex-col gap-0.5 mt-1 items-center">
+                                {mock.english?.percentile != null && mock.english.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.english.percentile)}`}>{mock.english.percentile}%P</span>}
+                                {mock.english?.accuracy != null && mock.english.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.english.accuracy)}`}>{mock.english.accuracy}%A</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-center align-middle">
+                             <div className="flex flex-col items-center">
+                              <span className="font-mono text-slate-600">{mock.ga?.score != null && mock.ga.score !== 0 ? mock.ga.score : '-'}</span>
+                              <div className="flex flex-col gap-0.5 mt-1 items-center">
+                                {mock.ga?.percentile != null && mock.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.ga.percentile)}`}>{mock.ga.percentile}%P</span>}
+                                {mock.ga?.accuracy != null && mock.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.ga.accuracy)}`}>{mock.ga.accuracy}%A</span>}
+                              </div>
                             </div>
                           </td>
                           {(onDeleteMock || onEditMock) && (

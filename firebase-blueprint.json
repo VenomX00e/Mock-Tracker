@@ -1,5 +1,28 @@
 {
   "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with display name, image, and aggregated stats",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "targetedExam": { "type": "string" },
+        "avgPercentile": { "type": "number" },
+        "avgQuantPercentile": { "type": "number" },
+        "avgReasoningPercentile": { "type": "number" },
+        "avgEnglishPercentile": { "type": "number" },
+        "totalTests": { "type": "number" },
+        "streak": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "isBanned": { "type": "boolean" },
+        "isMuted": { "type": "boolean" },
+        "lastMockDate": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["userId"]
+    },
     "MockScore": {
       "title": "MockScore",
       "description": "Records of mock exams taken by the user",
@@ -7,6 +30,7 @@
       "properties": {
         "id": { "type": "string" },
         "userId": { "type": "string" },
+        "userName": { "type": "string" },
         "examType": { "type": "string" },
         "examRole": { "type": "string" },
         "examPhase": { "type": "string" },
@@ -37,12 +61,23 @@
             "percentile": { "type": "number" }
           }
         },
+        "ga": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number" },
+            "percentile": { "type": "number" }
+          }
+        },
         "createdAt": { "type": "string" }
       },
-      "required": ["id", "userId", "examType", "mockName", "date", "score", "percentile", "percentage", "quant", "reasoning", "english"]
+      "required": ["id", "userId", "examType", "mockName", "date", "score", "percentile", "percentage", "quant", "reasoning", "english", "ga"]
     }
   },
   "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile containing metadata and aggregates"
+    },
     "users/{userId}/mocks/{mockId}": {
       "schema": { "$ref": "#/entities/MockScore" },
       "description": "Mock scores specific to a user."
