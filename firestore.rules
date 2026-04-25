@@ -35,7 +35,7 @@ service cloud.firestore {
 
     function isValidMockScore(data) {
       return data.keys().hasAll(['id', 'userId', 'examType', 'mockName', 'date', 'createdAt'])
-        && data.keys().size() >= 6 && data.keys().size() <= 25
+        && data.keys().size() >= 6 && data.keys().size() <= 30
         && data.id is string && data.id.size() <= 128 && data.id.size() > 0
         && data.userId is string && data.userId == request.auth.uid
         && (!data.keys().hasAny(['userName']) || (data.userName is string && data.userName.size() <= 100))
@@ -56,7 +56,10 @@ service cloud.firestore {
         && (!data.keys().hasAny(['reasoning']) || isValidNestedScore(data.reasoning))
         && (!data.keys().hasAny(['english']) || isValidNestedScore(data.english))
         && (!data.keys().hasAny(['ga']) || isValidNestedScore(data.ga))
-        && (!data.keys().hasAny(['streakAtTime']) || data.streakAtTime is number || data.streakAtTime == null);
+        && (!data.keys().hasAny(['streakAtTime']) || data.streakAtTime is number || data.streakAtTime == null)
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp || data.updatedAt == null)
+        && (!data.keys().hasAny(['note']) || data.note is string || data.note == null)
+        && (!data.keys().hasAny(['tags']) || data.tags is list || data.tags == null);
     }
 
     function isValidUserProfile(data) {
@@ -117,8 +120,9 @@ service cloud.firestore {
         && request.auth.uid == userId
         && isValidId(mockId)
         && isValidMockScore(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'streakAtTime'])
-        && incoming().createdAt == existing().createdAt;
+        && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'updatedAt', 'streakAtTime', 'note', 'tags'])
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId;
         
       allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(mockId);
     }

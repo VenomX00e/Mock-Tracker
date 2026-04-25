@@ -47,4 +47,6 @@ export interface MockScore {
   reasoning?: SectionalScore;
   english?: SectionalScore;
   ga?: SectionalScore;
+  note?: string;
+  tags?: string[];
 }

@@ -21,6 +21,23 @@ export default function CommunityHub({
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [daysVisible, setDaysVisible] = useState(1);
   const [userMap, setUserMap] = useState<Record<string, UserProfile>>({});
+  const [reactions, setReactions] = useState<Record<string, { count: number, hasReacted: boolean }>>({});
+
+  const handleReact = (e: React.MouseEvent, mockId: string) => {
+    e.stopPropagation();
+    setReactions(prev => {
+      // Simulate random initial count based on ID if not interacted with before
+      const hash = mockId.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+      const initialCount = hash % 4; // 0 to 3
+      const current = prev[mockId] || { count: initialCount, hasReacted: false };
+      
+      if (current.hasReacted) {
+        return { ...prev, [mockId]: { count: Math.max(0, current.count - 1), hasReacted: false } };
+      } else {
+        return { ...prev, [mockId]: { count: current.count + 1, hasReacted: true } };
+      }
+    });
+  };
 
   // Fetch Leaderboard and Users
   useEffect(() => {
@@ -100,7 +117,7 @@ export default function CommunityHub({
              ...m,
              userName: profile.displayName || (m as any).userName || 'Anonymous',
              userStreak: calculatedStreak,
-             userStreakActive: true,
+             userStreakActive: profile.lastMockDate ? new Date(profile.lastMockDate).toDateString() === new Date().toDateString() : false,
              userPhoto: profile.photoURL || `https://ui-avatars.com/api/?name=${(m as any).userName || 'A'}`,
              userProfileRef: { ...profile, todaysMocks: profileToMocksMap[m.userId!].filter(tm => new Date(tm.date).toDateString() === new Date().toDateString()) }
           });
@@ -219,8 +236,8 @@ export default function CommunityHub({
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgReasoningPercentile)}`}>{user.avgReasoningPercentile}%</span></td>
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgEnglishPercentile)}`}>{user.avgEnglishPercentile}%</span></td>
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-300">{user.totalTests}</td>
-                    <td className="p-4 text-center text-amber-500 font-medium flex items-center justify-center gap-1">
-                      <Flame className="w-4 h-4" /> {user.streak}
+                    <td className={`p-4 text-center font-medium flex items-center justify-center gap-1 ${(user.lastMockDate && new Date(user.lastMockDate).toDateString() === new Date().toDateString()) ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                      <Flame className={`w-4 h-4 ${(user.lastMockDate && new Date(user.lastMockDate).toDateString() === new Date().toDateString()) ? '' : 'text-slate-300 dark:text-slate-600'}`} /> {user.streak}
                     </td>
                   </tr>
                 ))}
@@ -293,6 +310,7 @@ export default function CommunityHub({
                               <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('reasoning.score')}>Reasoning {getFeedSortConfig('reasoning.score')}</th>
                               <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('english.score')}>English {getFeedSortConfig('english.score')}</th>
                               <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('ga.score')}>GA {getFeedSortConfig('ga.score')}</th>
+                              <th className="px-4 py-3 w-10"></th>
                             </tr>
                           </thead>
                 );
@@ -393,6 +411,17 @@ export default function CommunityHub({
                                         {m.ga?.percentile != null && m.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.ga.percentile)}`}>{m.ga.percentile}%P</span>}
                                         {m.ga?.accuracy != null && m.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.ga.accuracy)}`}>{m.ga.accuracy}%A</span>}
                                       </div>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3 text-center align-middle">
+                                    <div className="flex justify-end pr-2">
+                                      <button 
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-full transition-colors text-xs font-medium text-slate-700 dark:text-slate-300"
+                                        onClick={(e) => handleReact(e, m.id)}
+                                      >
+                                        <span className="text-sm">🔥</span> 
+                                        <span>{reactions[m.id]?.count ?? (m.id.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0) % 4)}</span>
+                                      </button>
                                     </div>
                                 </td>
                               </tr>

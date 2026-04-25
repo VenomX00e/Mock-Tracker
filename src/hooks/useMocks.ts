@@ -184,6 +184,9 @@ export function useMocks() {
       }, { merge: true });
     } catch (error) {
       console.error("Error updating mock:", error);
+      if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
+          handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/mocks/${updatedMock.id}`);
+      }
     }
   };
   

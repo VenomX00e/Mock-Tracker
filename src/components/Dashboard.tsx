@@ -3,7 +3,8 @@ import { motion } from 'motion/react';
 import { MockScore, UserProfile } from '../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, ReferenceLine, LabelList
+  BarChart, Bar, Legend, ReferenceLine, LabelList,
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame } from 'lucide-react';
 import { getHeatmapColor, getPlatformShort } from '../lib/utils';
@@ -17,18 +18,47 @@ interface DashboardProps {
   onEditMock?: (mock: MockScore) => void;
   lastDeletedMock?: MockScore | null;
   onRestoreMock?: () => void;
+  onUpdateReflection?: (id: string, note: string, tags: string[]) => Promise<void>;
 }
 
-export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, lastDeletedMock, onRestoreMock }: DashboardProps) {
+export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, lastDeletedMock, onRestoreMock, onUpdateReflection }: DashboardProps) {
   const [selectedExam, setSelectedExam] = useState<string>('Overview');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
   const [selectedScope, setSelectedScope] = useState<string>('All');
   const [activeTrendId, setActiveTrendId] = useState<string>('overall');
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  
+  const [editingReflectionId, setEditingReflectionId] = useState<string | null>(null);
+  const [localNote, setLocalNote] = useState('');
+  const [localTags, setLocalTags] = useState('');
+  const [isSavingReflection, setIsSavingReflection] = useState(false);
 
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+  const [chartView, setChartView] = useState<'bar' | 'radar'>('bar');
+
+  const handleReflectionEditStart = (mock: MockScore) => {
+    setActiveRowId(mock.id);
+    setEditingReflectionId(mock.id);
+    setLocalNote(mock.note || '');
+    setLocalTags(mock.tags?.join(', ') || '');
+  };
+
+  const handleReflectionSave = async (mockId: string) => {
+    if (!onUpdateReflection) return;
+    setIsSavingReflection(true);
+    try {
+      const tagsArray = localTags.split(',').map(t => t.trim()).filter(Boolean);
+      await onUpdateReflection(mockId, localNote, tagsArray);
+      setEditingReflectionId(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingReflection(false);
+    }
+  };
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -80,6 +110,17 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
     setSelectedPhase('All');
     setSelectedScope('All');
   }, [selectedExam]);
+
+  const [goalPercentileStr, setGoalPercentileStr] = useState<string>(() => localStorage.getItem('goalPercentile') || '95');
+  const [statsCountRange, setStatsCountRange] = useState<number | 'all'>(10);
+  const [showPcntOptions, setShowPcntOptions] = useState(false);
+  const [showAccOptions, setShowAccOptions] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('goalPercentile', goalPercentileStr);
+  }, [goalPercentileStr]);
+  
+  const goalPercentile = Number(goalPercentileStr) || 0;
 
   // filter
   const displayedMocks = useMemo(() => {
@@ -133,26 +174,53 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
 
   // Overview stats calculation
   const chronologicalMocks = useMemo(() => {
-    return [...displayedMocks].reverse();
+    return [...displayedMocks].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [displayedMocks]);
 
   const stats = useMemo(() => {
     if (displayedMocks.length === 0) return null;
     
-    const avgScore = (displayedMocks.reduce((acc, m) => acc + m.score, 0) / displayedMocks.length).toFixed(1);
-    const avgPercentile = (displayedMocks.reduce((acc, m) => acc + m.percentile, 0) / displayedMocks.length).toFixed(1);
-    const accuracyMocks = displayedMocks.filter(m => m.accuracy !== undefined && !isNaN(m.accuracy));
+    const totalTests = displayedMocks.length;
+
+    // Filter recent active range of full length mocks for overall percentile and accuracy (displayedMocks is newest-first)
+    const fullMocksDescending = displayedMocks.filter(m => !m.examScope || m.examScope === 'Full');
+    const targetMocksLength = statsCountRange === 'all' ? fullMocksDescending.length : statsCountRange;
+    const lastNFullMocks = fullMocksDescending.slice(0, targetMocksLength);
+    
+    const avgScore = lastNFullMocks.length > 0 ? (lastNFullMocks.reduce((acc, m) => acc + m.score, 0) / lastNFullMocks.length).toFixed(1) : '-';
+    
+    const percentileMocks = lastNFullMocks.filter(m => m.percentile != null && !isNaN(m.percentile));
+    const avgPercentile = percentileMocks.length > 0 ? (percentileMocks.reduce((acc, m) => acc + m.percentile, 0) / percentileMocks.length).toFixed(1) : '-';
+
+    const accuracyMocks = lastNFullMocks.filter(m => m.accuracy != null && !isNaN(m.accuracy));
     const avgAccuracy = accuracyMocks.length > 0 ? (accuracyMocks.reduce((acc, m) => acc + m.accuracy!, 0) / accuracyMocks.length).toFixed(1) : '-';
     
-    const totalTests = displayedMocks.length;
-    
-    // Recent trend (last vs second last)
-    const recent = displayedMocks[displayedMocks.length - 1];
-    const prev = displayedMocks.length > 1 ? displayedMocks[displayedMocks.length - 2] : null;
-    const scoreDiff = prev ? (recent.score - prev.score).toFixed(1) : 0;
+    // For Radar chart - calculate average sectional percentiles off the last N mocks
+    const targetDescLength = statsCountRange === 'all' ? displayedMocks.length : statsCountRange;
+    const recentDescending = displayedMocks.slice(0, targetDescLength);
+
+    const quantMocks = recentDescending.filter(m => m.quant?.percentile != null && m.quant.percentile > 0);
+    const avgQuantPercentile = quantMocks.length ? quantMocks.reduce((acc, m) => acc + m.quant!.percentile!, 0) / quantMocks.length : 0;
+
+    const resMocks = recentDescending.filter(m => m.reasoning?.percentile != null && m.reasoning.percentile > 0);
+    const avgReasoningPercentile = resMocks.length ? resMocks.reduce((acc, m) => acc + m.reasoning!.percentile!, 0) / resMocks.length : 0;
+
+    const engMocks = recentDescending.filter(m => m.english?.percentile != null && m.english.percentile > 0);
+    const avgEnglishPercentile = engMocks.length ? engMocks.reduce((acc, m) => acc + m.english!.percentile!, 0) / engMocks.length : 0;
+
+    const gaMocks = recentDescending.filter(m => m.ga?.percentile != null && m.ga.percentile > 0);
+    const avgGaPercentile = gaMocks.length ? gaMocks.reduce((acc, m) => acc + m.ga!.percentile!, 0) / gaMocks.length : 0;
+
+    // Recent trend
+    const recent = fullMocksDescending.length > 0 ? fullMocksDescending[0] : displayedMocks[0];
+    const prev = fullMocksDescending.length > 1 ? fullMocksDescending[1] : null;
+    const scoreDiff = prev ? (recent.score - prev.score).toFixed(1) : Number(0).toFixed(1);
     const isScoreUp = prev ? recent.score >= prev.score : true;
 
-    return { avgScore, avgPercentile, avgAccuracy, totalTests, scoreDiff, isScoreUp, recent };
+    return { 
+      avgScore, avgPercentile, avgAccuracy, totalTests, scoreDiff, isScoreUp, recent,
+      avgQuantPercentile, avgReasoningPercentile, avgEnglishPercentile, avgGaPercentile 
+    };
   }, [displayedMocks]);
 
   const chartData = useMemo(() => {
@@ -345,17 +413,41 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
             </div>
 
             {/* 2. Avg Percentile */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-indigo-500">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-indigo-500 relative overflow-hidden group hover:border-indigo-300 dark:hover:border-indigo-500 transition-all cursor-pointer" onClick={() => setShowPcntOptions(!showPcntOptions)}>
+              {showPcntOptions && (
+                <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-medium animate-in slide-in-from-top-2 duration-200">
+                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(5); setShowPcntOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 5 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>5</button>
+                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(10); setShowPcntOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 10 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>10</button>
+                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange('all'); setShowPcntOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 'all' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>All</button>
+                </div>
+              )}
+              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-2 mt-1">
                 <Trophy className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
                 <span className="font-medium text-xs sm:text-sm truncate">Avg Percentile</span>
               </div>
-              <div className="text-3xl font-light text-slate-900 dark:text-slate-100">{stats.avgPercentile}<span className="text-sm sm:text-lg text-slate-400 dark:text-slate-500 ml-1">%</span></div>
+              <div className="text-3xl font-light text-slate-900 dark:text-slate-100 mb-2">{stats.avgPercentile}<span className="text-sm sm:text-lg text-slate-400 dark:text-slate-500 ml-1">%</span></div>
+              <div className="w-full bg-slate-100 dark:bg-slate-700/50 rounded-full h-1.5 overflow-hidden flex shadow-inner">
+                <div className="bg-indigo-500 dark:bg-indigo-400 h-1.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, Math.max(0, (Number(stats.avgPercentile) / goalPercentile) * 100 || 0))}%` }}></div>
+              </div>
+              <div className="flex justify-end w-full mt-1.5">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-0.5 group">
+                  Goal: 
+                  <input type="text" maxLength={3} value={goalPercentileStr} onChange={(e) => setGoalPercentileStr(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => !goalPercentileStr && setGoalPercentileStr('95')} className="w-6 text-right bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-[10px] leading-none mb-[2px] transition-colors hover:text-indigo-500 dark:hover:text-indigo-400 cursor-pointer text-slate-600 dark:text-slate-300" />
+                  %ile
+                </div>
+              </div>
             </div>
 
             {/* 3. Avg Accuracy */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-blue-500">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-blue-500 relative overflow-hidden group hover:border-blue-300 dark:hover:border-blue-500 transition-all cursor-pointer" onClick={() => setShowAccOptions(!showAccOptions)}>
+              {showAccOptions && (
+                <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-medium animate-in slide-in-from-top-2 duration-200">
+                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(5); setShowAccOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 5 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>5</button>
+                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(10); setShowAccOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 10 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>10</button>
+                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange('all'); setShowAccOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 'all' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>All</button>
+                </div>
+              )}
+              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-2 mt-1">
                 <Target className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                 <span className="font-medium text-xs sm:text-sm truncate">Avg Accuracy</span>
               </div>
@@ -418,7 +510,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                 </div>
               </div>
               <div className="flex-1 w-full mt-4">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                   <LineChart data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const d = new Date(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
@@ -433,239 +525,453 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
             
             {/* Chart: Sectional Scores */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[300px] lg:col-span-2">
-              <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-6 flex items-center justify-center">
-                <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> 
-                Sectional Score Breakdown
-              </h3>
-              <div className="flex-1 w-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chronologicalMocks} margin={{ top: 30, right: 20, left: -20, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                    <XAxis dataKey="mockName" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => val.length > 20 ? val.substring(0,20)+'...' : val} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                    <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ zIndex: 1000 }} />
-                    <Legend 
-                      wrapperStyle={{ paddingTop: '20px' }} 
-                      payload={[
-                        ...(chartData.hasQuant ? [{ value: 'Quant', type: 'square', id: 'quant', color: '#3b82f6' }] as any[] : []),
-                        ...(chartData.hasReasoning ? [{ value: 'Reasoning', type: 'square', id: 'reasoning', color: '#8b5cf6' }] as any[] : []),
-                        ...(chartData.hasEnglish ? [{ value: 'English', type: 'square', id: 'english', color: '#f59e0b' }] as any[] : []),
-                        ...(chartData.hasGA ? [{ value: 'GA', type: 'square', id: 'ga', color: '#10b981' }] as any[] : []),
-                      ]}
-                    />
-                    {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={28}>
-                      <LabelList dataKey="quant.score" content={(props: any) => renderCustomBarLabel(props, 'quant')} />
-                    </Bar>}
-                    {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={28}>
-                      <LabelList dataKey="reasoning.score" content={(props: any) => renderCustomBarLabel(props, 'reasoning')} />
-                    </Bar>}
-                    {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={28}>
-                      <LabelList dataKey="english.score" content={(props: any) => renderCustomBarLabel(props, 'english')} />
-                    </Bar>}
-                    {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28}>
-                      <LabelList dataKey="ga.score" content={(props: any) => renderCustomBarLabel(props, 'ga')} />
-                    </Bar>}
-                  </BarChart>
+              <div className="flex justify-between items-center mb-6">
+                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
+                    <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Sectional Score Breakdown
+                 </h3>
+                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50">
+                    <button onClick={() => setChartView('bar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Bar</button>
+                    <button onClick={() => setChartView('radar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'radar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Radar</button>
+                 </div>
+              </div>
+              <div className="flex-1 w-full relative h-[300px]">
+                {chartView === 'bar' ? (
+                <div className="w-full h-full overflow-x-auto scrollbar-hide">
+                  <div style={{ minWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? Math.max(100, (chronologicalMocks.length / 2) * 100) + '%' : '100%', height: '100%' }}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                      <BarChart data={chronologicalMocks} margin={{ top: 30, right: 20, left: -20, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                        <XAxis dataKey="mockName" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => val.length > 20 ? val.substring(0,20)+'...' : val} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                        <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ zIndex: 1000 }} />
+                        <Legend 
+                          wrapperStyle={{ paddingTop: '20px' }} 
+                          payload={[
+                            ...(chartData.hasQuant ? [{ value: 'Quant', type: 'square', id: 'quant', color: '#3b82f6' }] as any[] : []),
+                            ...(chartData.hasReasoning ? [{ value: 'Reasoning', type: 'square', id: 'reasoning', color: '#8b5cf6' }] as any[] : []),
+                            ...(chartData.hasEnglish ? [{ value: 'English', type: 'square', id: 'english', color: '#f59e0b' }] as any[] : []),
+                            ...(chartData.hasGA ? [{ value: 'GA', type: 'square', id: 'ga', color: '#10b981' }] as any[] : []),
+                          ]}
+                        />
+                        {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={28}>
+                          <LabelList dataKey="quant.score" content={(props: any) => renderCustomBarLabel(props, 'quant')} />
+                        </Bar>}
+                        {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={28}>
+                          <LabelList dataKey="reasoning.score" content={(props: any) => renderCustomBarLabel(props, 'reasoning')} />
+                        </Bar>}
+                        {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={28}>
+                          <LabelList dataKey="english.score" content={(props: any) => renderCustomBarLabel(props, 'english')} />
+                        </Bar>}
+                        {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28}>
+                          <LabelList dataKey="ga.score" content={(props: any) => renderCustomBarLabel(props, 'ga')} />
+                        </Bar>}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                ) : (
+                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                  <RadarChart cx="50%" cy="50%" outerRadius="100%" margin={{ top: 10, right: 10, bottom: 10, left: 10 }} data={[
+                    ...(chartData.hasQuant ? [{ subject: 'Quant', value: Number(stats?.avgQuantPercentile || 0).toFixed(1), fullMark: 100, color: '#3b82f6' }] : []),
+                    ...(chartData.hasReasoning ? [{ subject: 'Reasoning', value: Number(stats?.avgReasoningPercentile || 0).toFixed(1), fullMark: 100, color: '#8b5cf6' }] : []),
+                    ...(chartData.hasEnglish ? [{ subject: 'English', value: Number(stats?.avgEnglishPercentile || 0).toFixed(1), fullMark: 100, color: '#f59e0b' }] : []),
+                    ...(chartData.hasGA ? [{ subject: 'GA', value: Number(stats?.avgGaPercentile || 0).toFixed(1), fullMark: 100, color: '#10b981' }] : [])
+                  ]}>
+                    <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 13, fontWeight: 500 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={6} />
+                    <Radar name="Percentile" dataKey="value" stroke="#8b5cf6" strokeWidth={2} fill="#8b5cf6" fillOpacity={0.4} dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} label={(props: any) => { const { x, y, value, payload } = props; return <text x={x} y={y} dy={y < 150 ? -8 : 16} fill={payload?.color || '#8b5cf6'} fontSize={13} fontWeight={600} textAnchor="middle">{value}</text>; }} />
+                    <RechartsTooltip content={<CustomTooltip />} />
+                  </RadarChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Data Grid: Technical Style */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden mt-8">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-              <h3 className="font-semibold text-slate-800 dark:text-slate-100">History Log</h3>
-              {lastDeletedMock && onRestoreMock && (
-                <button
-                  onClick={onRestoreMock}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors animate-in fade-in slide-in-from-right-4"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Restore '{lastDeletedMock.mockName}'
-                </button>
-              )}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse whitespace-nowrap">
+          {/* Smart Insights */}
+          <div className="mt-8 mb-4 flex items-center gap-2">
+            <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100">Smart Insights</h3>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Beta</span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+             {(() => {
+                if (chronologicalMocks.length < 2) {
+                   return (
+                      <div className="col-span-full p-6 text-center text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700">
+                         Take at least 2 mocks to generate insights.
+                      </div>
+                   )
+                }
+
+                const recentMocks = [...chronologicalMocks].reverse().slice(0, 5); // Last 5 mocks (newest first)
+                
+                // 1. Trend Analysis
+                // We want to see if the newest mock is better than the oldest mock in this recent batch
+                const recentPercentiles = recentMocks.filter(m => m.percentile != null && m.percentile > 0).map(m => m.percentile).reverse();
+                const isImproving = recentPercentiles.length >= 2 && recentPercentiles[recentPercentiles.length - 1] >= recentPercentiles[0];
+                const trendIcon = isImproving ? "📈" : "📉";
+
+                // 2. Strongest / Weakest Sections by Percentile
+                type SectionScore = { name: string, percentile: number };
+                const secStats: Record<string, number[]> = { Quant: [], Reasoning: [], English: [], GA: [] };
+                
+                recentMocks.forEach(m => {
+                   if (m.quant?.percentile) secStats.Quant.push(m.quant.percentile);
+                   if (m.reasoning?.percentile) secStats.Reasoning.push(m.reasoning.percentile);
+                   if (m.english?.percentile) secStats.English.push(m.english.percentile);
+                   if (m.ga?.percentile) secStats.GA.push(m.ga.percentile);
+                });
+
+                const sectionAverages = Object.entries(secStats).map(([name, scores]) => ({
+                   name,
+                   avg: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
+                })).filter(s => s.avg > 0).sort((a, b) => b.avg - a.avg);
+
+                const strongest = sectionAverages.length > 0 ? sectionAverages[0] : null;
+                const weakest = sectionAverages.length > 1 ? sectionAverages[sectionAverages.length - 1] : null;
+                
+                // 3. Last Attempt Activity
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const lastMockDate = new Date(recentMocks[0].date);
+                lastMockDate.setHours(0, 0, 0, 0);
+                
+                const msSinceLast = today.getTime() - lastMockDate.getTime();
+                const daysSinceLast = Math.max(0, Math.floor(msSinceLast / (1000 * 60 * 60 * 24)));
+                const streakMessage = daysSinceLast === 0 ? "You took a mock today! 🔥" : daysSinceLast === 1 ? "You took a mock yesterday. Keep it up!" : `It's been ${daysSinceLast} days since your last mock.`;
+
+                return (
+                   <>
+                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors">
+                         <div className="text-3xl mb-2">{trendIcon}</div>
+                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Recent Trend (Last 5)</h4>
+                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium">
+                            {isImproving ? "Your percentiles are trending up!" : "Your percentiles are trending down. Time to review!"}
+                         </p>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors">
+                         <div className="text-3xl mb-2">💪</div>
+                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Strongest Section</h4>
+                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium whitespace-nowrap">
+                            {strongest ? `${strongest.name} (~${Math.round(strongest.avg)}%ile)` : "Need more data"}
+                         </p>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-rose-300 dark:hover:border-rose-600 transition-colors">
+                         <div className="text-3xl mb-2">🎯</div>
+                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Area of Focus</h4>
+                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium whitespace-nowrap">
+                            {weakest ? `${weakest.name} (~${Math.round(weakest.avg)}%ile)` : "Need more data"}
+                         </p>
+                      </div>
+                      
+                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-amber-300 dark:hover:border-amber-600 transition-colors">
+                         <div className="text-3xl mb-2">{daysSinceLast <= 1 ? "🔥" : "⏳"}</div>
+                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Consistency</h4>
+                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium">
+                            {streakMessage}
+                         </p>
+                      </div>
+                   </>
+                );
+             })()}
+          </div>
+
+          <div className="flex justify-between items-center mt-12 mb-6">
+            <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100">History Log</h3>
+            {lastDeletedMock && onRestoreMock && (
+              <button
+                onClick={onRestoreMock}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors animate-in fade-in slide-in-from-right-4"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Restore '{lastDeletedMock.mockName}'
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-8">
+            {(() => {
+              const tableHeader = (
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('date')}>Time {getSortConfig('date')}</th>
-                    <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('examType')}>Exam {getSortConfig('examType')}</th>
-                    <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('mockName')}>Mock Name {getSortConfig('mockName')}</th>
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('score')}>Score {getSortConfig('score')}</th>
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('percentile')}>Percentile {getSortConfig('percentile')}</th>
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('quant.score')}>Quant {getSortConfig('quant.score')}</th>
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('reasoning.score')}>Reasoning {getSortConfig('reasoning.score')}</th>
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('english.score')}>English {getSortConfig('english.score')}</th>
-                    <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('ga.score')}>GA {getSortConfig('ga.score')}</th>
+                  <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('date')}>Time {getSortConfig('date')}</th>
+                    <th className="px-4 py-3 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('examType')}>Exam {getSortConfig('examType')}</th>
+                    <th className="px-4 py-3 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('mockName')}>Mock Name {getSortConfig('mockName')}</th>
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('score')}>Score {getSortConfig('score')}</th>
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('percentile')}>Percentile {getSortConfig('percentile')}</th>
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('quant.score')}>Quant {getSortConfig('quant.score')}</th>
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('reasoning.score')}>Reasoning {getSortConfig('reasoning.score')}</th>
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('english.score')}>English {getSortConfig('english.score')}</th>
+                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('ga.score')}>GA {getSortConfig('ga.score')}</th>
+                    {(onDeleteMock || onEditMock) && <th className="px-4 py-3"></th>}
                   </tr>
                 </thead>
-                <tbody className="text-sm">
-                  {(() => {
-                    let data = [...displayedMocks].reverse();
-                    if (sortField && sortDirection) {
-                      data.sort((a, b) => {
-                        const getNestedVal = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
-                        let valA = getNestedVal(a, sortField);
-                        let valB = getNestedVal(b, sortField);
-                        
-                        // Handle potential undefined/null values
-                        if (valA == null) valA = '';
-                        if (valB == null) valB = '';
-                        
-                        // Numeric comparison if both are numbers or numeric strings
-                        const numA = Number(valA);
-                        const numB = Number(valB);
-                        if (!isNaN(numA) && !isNaN(numB) && valA !== '' && valB !== '') {
-                          return sortDirection === 'desc' ? numB - numA : numA - numB;
-                        }
-                        
-                        // String comparison
-                        valA = String(valA).toLowerCase();
-                        valB = String(valB).toLowerCase();
-                        if (valA < valB) return sortDirection === 'desc' ? 1 : -1;
-                        if (valA > valB) return sortDirection === 'desc' ? -1 : 1;
-                        return 0;
-                      });
-                    }
-                    return data.map((mock, index, arr) => {
-                      const mockDate = new Date(mock.date);
-                      const formattedDate = mockDate.toLocaleDateString('en-GB');
-                      const formattedTime = mockDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                      const isTimeValid = !isNaN(mockDate.getTime()) && mock.date.includes('T');
-                      
-                      const currentDateString = mockDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-                      const prevDateString = index > 0 ? new Date(arr[index - 1].date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : null;
-                      
-                      const showDivider = !sortField && (index === 0 || currentDateString !== prevDateString);
+              );
 
-                    return (
-                      <React.Fragment key={mock.id}>
-                        {showDivider && (
-                          <tr className="bg-slate-50/50 dark:bg-slate-900/50">
-                            <td colSpan={10} className="px-5 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 border-y border-slate-100 dark:border-slate-800 text-left">
-                              <div className="flex items-center gap-2">
-                                <CalendarDays className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                                {currentDateString}
-                              </div>
-                            </td>
-                          </tr>
+              const renderRow = (mock: any) => {
+                const mockDate = new Date(mock.date);
+                const formattedTime = mockDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                const isTimeValid = !isNaN(mockDate.getTime()) && mock.date.includes('T');
+                
+                return (
+                  <React.Fragment key={mock.id}>
+                  <tr 
+                    onClick={(e) => setActiveRowId(activeRowId === mock.id ? null : mock.id)}
+                    className={`border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors group relative cursor-pointer ${activeRowId === mock.id ? 'bg-slate-50/80 dark:bg-slate-700/50' : ''}`}
+                  >
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs whitespace-nowrap text-center align-middle w-[140px]">
+                      <div className="flex flex-col items-center">
+                        {isTimeValid ? <span className="text-[10px] uppercase font-semibold text-slate-400">{formattedTime}</span> : <span className="text-[10px] uppercase font-semibold text-slate-400">-</span>}
+                        {mock.tags && mock.tags.length > 0 && (
+                           <div className="flex flex-col gap-1 mt-1.5 w-full items-center">
+                              {mock.tags.slice(0, 2).map((t: string) => (
+                                 <span key={t} className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded text-[9px] text-slate-600 dark:text-slate-300 font-sans truncate max-w-[120px] cursor-help" title={t}>#{t}</span>
+                              ))}
+                           </div>
                         )}
-                        <tr 
-                          onClick={(e) => setActiveRowId(activeRowId === mock.id ? null : mock.id)}
-                          className={`border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors group relative cursor-pointer ${activeRowId === mock.id ? 'bg-slate-50/80 dark:bg-slate-700/50' : ''}`}
-                        >
-                          <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs whitespace-nowrap text-center">
-                            <div className="flex flex-col items-center">
-                              {isTimeValid ? <span>{formattedTime}</span> : <span>-</span>}
-                            </div>
-                          </td>
-                          <td className="p-4 text-slate-600 dark:text-slate-300 text-center">
-                             <div className="flex flex-col items-center gap-1">
-                               <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md text-xs font-semibold">
-                                 {mock.examType}
-                               </span>
-                               {mock.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium">{mock.examRole}</span>}
-                             </div>
-                          </td>
-                          <td className="p-4 font-medium text-slate-800 dark:text-slate-200">
-                            <div className="flex flex-col">
-                               <span>{mock.mockName}</span>
-                               <div className="flex gap-1.5 mt-1">
-                                 {mock.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-medium">{getPlatformShort(mock.platform)}</span>}
-                                 {mock.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-medium">{mock.examPhase}</span>}
-                                 {mock.examScope && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-medium">{mock.examScope}</span>}
-                               </div>
-                             </div>
-                          </td>
-                          <td className="p-4 font-mono font-medium text-blue-600 dark:text-blue-400 text-center align-middle">
-                            {mock.score != null && mock.score !== 0 ? mock.score : '-'}
-                          </td>
-                          <td className="p-4 text-center align-middle">
-                            <div className="flex flex-col items-center gap-1">
-                              {mock.percentile != null && mock.percentile !== 0 ? (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(mock.percentile)}`}>
-                                  {mock.percentile}%P
-                                </span>
-                              ) : <span className="text-slate-300 dark:text-slate-600">-</span>}
-                              {mock.accuracy != null && mock.accuracy !== 0 && (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-mono font-medium ${getHeatmapColor(mock.accuracy)}`}>
-                                  {mock.accuracy}%A
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-4 text-center align-middle">
-                            <div className="flex flex-col items-center">
-                              <span className="font-mono text-slate-600 dark:text-slate-300">{mock.quant?.score != null && mock.quant.score !== 0 ? mock.quant.score : '-'}</span>
-                              <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                {mock.quant?.percentile != null && mock.quant.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.quant.percentile)}`}>{mock.quant.percentile}%P</span>}
-                                {mock.quant?.accuracy != null && mock.quant.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.quant.accuracy)}`}>{mock.quant.accuracy}%A</span>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center align-middle">
-                            <div className="flex flex-col items-center">
-                              <span className="font-mono text-slate-600 dark:text-slate-300">{mock.reasoning?.score != null && mock.reasoning.score !== 0 ? mock.reasoning.score : '-'}</span>
-                              <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                {mock.reasoning?.percentile != null && mock.reasoning.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.reasoning.percentile)}`}>{mock.reasoning.percentile}%P</span>}
-                                {mock.reasoning?.accuracy != null && mock.reasoning.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.reasoning.accuracy)}`}>{mock.reasoning.accuracy}%A</span>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center align-middle">
-                             <div className="flex flex-col items-center">
-                              <span className="font-mono text-slate-600 dark:text-slate-300">{mock.english?.score != null && mock.english.score !== 0 ? mock.english.score : '-'}</span>
-                              <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                {mock.english?.percentile != null && mock.english.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.english.percentile)}`}>{mock.english.percentile}%P</span>}
-                                {mock.english?.accuracy != null && mock.english.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.english.accuracy)}`}>{mock.english.accuracy}%A</span>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center align-middle">
-                             <div className="flex flex-col items-center">
-                              <span className="font-mono text-slate-600 dark:text-slate-300">{mock.ga?.score != null && mock.ga.score !== 0 ? mock.ga.score : '-'}</span>
-                              <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                {mock.ga?.percentile != null && mock.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(mock.ga.percentile)}`}>{mock.ga.percentile}%P</span>}
-                                {mock.ga?.accuracy != null && mock.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(mock.ga.accuracy)}`}>{mock.ga.accuracy}%A</span>}
-                              </div>
-                            </div>
-                          </td>
-                          {(onDeleteMock || onEditMock) && (
-                            <td className="w-20 p-0 align-middle">
-                              <div className={`flex items-center justify-end pr-4 transition-opacity ${activeRowId === mock.id ? 'opacity-100' : 'opacity-0'}`}>
-                                {onEditMock && (
-                                  <button onClick={(e) => { e.stopPropagation(); onEditMock(mock); }} className="p-1.5 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors bg-blue-50 dark:bg-blue-900/20" title="Edit Mock">
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                                {onDeleteMock && (
-                                  <button onClick={(e) => { e.stopPropagation(); onDeleteMock(mock.id); }} className="p-1.5 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded-md transition-colors bg-rose-50 dark:bg-rose-900/20 ml-2" title="Remove Mock">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 text-center align-middle">
+                       <div className="flex flex-col items-center gap-1">
+                         <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md text-xs font-semibold whitespace-nowrap">
+                           {mock.examType}
+                         </span>
+                         {mock.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium whitespace-nowrap">{mock.examRole}</span>}
+                       </div>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 align-middle">
+                      <div className="flex flex-col max-w-[140px] sm:max-w-none">
+                         <span className="whitespace-nowrap truncate">{mock.mockName}</span>
+                         <div className="flex gap-1.5 mt-1 overflow-x-auto scrollbar-hide flex-nowrap md:flex-wrap pb-1">
+                           {mock.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">{getPlatformShort(mock.platform)}</span>}
+                           {mock.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-medium whitespace-nowrap">{mock.examPhase}</span>}
+                           {mock.examScope && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap">{mock.examScope}</span>}
+                         </div>
+                       </div>
+                    </td>
+                    <td className="px-4 py-3 font-mono font-medium text-blue-600 dark:text-blue-400 text-center align-middle whitespace-nowrap">
+                      {mock.score != null && mock.score !== 0 ? mock.score : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center align-middle">
+                      <div className="flex flex-col items-center gap-1">
+                        {mock.percentile != null && mock.percentile !== 0 ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium whitespace-nowrap ${getHeatmapColor(mock.percentile)}`}>
+                            {mock.percentile}%P
+                          </span>
+                        ) : <span className="text-slate-300 dark:text-slate-600">-</span>}
+                        {mock.accuracy != null && mock.accuracy !== 0 && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-mono font-medium whitespace-nowrap ${getHeatmapColor(mock.accuracy)}`}>
+                            {mock.accuracy}%A
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center align-middle">
+                      <div className="flex flex-col items-center">
+                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.quant?.score != null && mock.quant.score !== 0 ? mock.quant.score : '-'}</span>
+                        <div className="flex flex-col gap-0.5 mt-1 items-center">
+                          {mock.quant?.percentile != null && mock.quant.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.quant.percentile)}`}>{mock.quant.percentile}%P</span>}
+                          {mock.quant?.accuracy != null && mock.quant.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.quant.accuracy)}`}>{mock.quant.accuracy}%A</span>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center align-middle">
+                      <div className="flex flex-col items-center">
+                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.reasoning?.score != null && mock.reasoning.score !== 0 ? mock.reasoning.score : '-'}</span>
+                        <div className="flex flex-col gap-0.5 mt-1 items-center">
+                          {mock.reasoning?.percentile != null && mock.reasoning.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.reasoning.percentile)}`}>{mock.reasoning.percentile}%P</span>}
+                          {mock.reasoning?.accuracy != null && mock.reasoning.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.reasoning.accuracy)}`}>{mock.reasoning.accuracy}%A</span>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center align-middle">
+                       <div className="flex flex-col items-center">
+                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.english?.score != null && mock.english.score !== 0 ? mock.english.score : '-'}</span>
+                        <div className="flex flex-col gap-0.5 mt-1 items-center">
+                          {mock.english?.percentile != null && mock.english.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.english.percentile)}`}>{mock.english.percentile}%P</span>}
+                          {mock.english?.accuracy != null && mock.english.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.english.accuracy)}`}>{mock.english.accuracy}%A</span>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center align-middle">
+                       <div className="flex flex-col items-center">
+                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.ga?.score != null && mock.ga.score !== 0 ? mock.ga.score : '-'}</span>
+                        <div className="flex flex-col gap-0.5 mt-1 items-center">
+                          {mock.ga?.percentile != null && mock.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.ga.percentile)}`}>{mock.ga.percentile}%P</span>}
+                          {mock.ga?.accuracy != null && mock.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.ga.accuracy)}`}>{mock.ga.accuracy}%A</span>}
+                        </div>
+                      </div>
+                    </td>
+                    {(onDeleteMock || onEditMock) && (
+                      <td className="px-4 py-3 align-middle w-[160px]">
+                        <div className="flex items-center justify-start sm:pr-4 gap-3 mr-2">
+                          <div className={`flex items-center gap-1.5 transition-all ${activeRowId === mock.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'}`}>
+                            {onEditMock && (
+                              <button onClick={(e) => { e.stopPropagation(); onEditMock(mock); }} className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Edit Mock">
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            )}
+                            {onDeleteMock && (
+                              <button onClick={(e) => { e.stopPropagation(); onDeleteMock(mock.id); }} className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Remove Mock">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          {onUpdateReflection && (
+                            <button onClick={(e) => { e.stopPropagation(); handleReflectionEditStart(mock); }} className="p-2 text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg transition-colors bg-indigo-50 dark:bg-indigo-900/20 shadow-sm" title="Edit Reflection">
+                              <BookA className="w-4 h-4" />
+                            </button>
                           )}
-                        </tr>
-                      </React.Fragment>
-                    );
-                    })
-                  })()}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                  {(activeRowId === mock.id && (mock.note || (mock.tags && mock.tags.length > 0) || editingReflectionId === mock.id)) && (
+                     <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
+                        <td colSpan={onDeleteMock || onEditMock ? 10 : 9} className="px-6 py-4">
+                          <div className="flex flex-col gap-2 relative">
+                             <div className="absolute left-[-24px] top-0 bottom-0 w-1 bg-indigo-200 dark:bg-indigo-800 rounded-full"></div>
+                             
+                             {editingReflectionId === mock.id ? (
+                               <div className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                  <div>
+                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tags (comma separated)</label>
+                                    <input 
+                                      type="text" 
+                                      value={localTags} 
+                                      onChange={e => setLocalTags(e.target.value)} 
+                                      placeholder="e.g. Tough Quant, Bad English"
+                                      className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Reflection / Notes</label>
+                                    <textarea 
+                                      value={localNote} 
+                                      onChange={e => setLocalNote(e.target.value)} 
+                                      placeholder="What went well? What went wrong?"
+                                      className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200 min-h-[80px] resize-y custom-scrollbar"
+                                    />
+                                  </div>
+                                  <div className="flex justify-end gap-2 pt-1">
+                                    <button 
+                                      onClick={() => setEditingReflectionId(null)}
+                                      className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                    >Cancel</button>
+                                    <button 
+                                      onClick={() => handleReflectionSave(mock.id)}
+                                      disabled={isSavingReflection}
+                                      className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-70 flex items-center"
+                                    >
+                                      {isSavingReflection ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" /> : null}
+                                      Save Reflection
+                                    </button>
+                                  </div>
+                               </div>
+                             ) : (
+                               <>
+                                 {mock.tags && mock.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                       {mock.tags.map(t => <span key={t} className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-slate-700 dark:text-slate-300 text-[10px] rounded-md font-medium uppercase tracking-wider">#{t}</span>)}
+                                    </div>
+                                 )}
+                                 {mock.note && (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm whitespace-pre-wrap">
+                                       {mock.note}
+                                    </p>
+                                 )}
+                               </>
+                             )}
+                          </div>
+                        </td>
+                     </tr>
+                  )}
+                  </React.Fragment>
+                );
+              };
 
-            {/* Heatmap Legend beneath History Log */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-900/30">
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400 justify-center">
-                <span className="font-medium mr-2">Percentile Legend:</span>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-500 ring-1 ring-emerald-600/20"></div> &ge;95%ile</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-400 ring-1 ring-emerald-500/20 dark:ring-emerald-500/50"></div> 90-95%ile</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-100 dark:bg-emerald-900/50 ring-1 ring-emerald-500/20 dark:ring-emerald-500/50"></div> 80-90%ile</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-100 dark:bg-amber-900/50 ring-1 ring-amber-500/20 dark:ring-amber-500/50"></div> 70-80%ile</div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-rose-100 dark:bg-rose-900/50 ring-1 ring-rose-500/20 dark:ring-rose-500/50"></div> &lt;70%ile</div>
-              </div>
-            </div>
+              let data = [...displayedMocks].reverse();
+              if (sortField && sortDirection) {
+                // Sorting currently active, display in one list
+                data.sort((a, b) => {
+                  const getNestedVal = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+                  let valA = getNestedVal(a, sortField);
+                  let valB = getNestedVal(b, sortField);
+                  
+                  if (valA == null) valA = '';
+                  if (valB == null) valB = '';
+                  
+                  const numA = Number(valA);
+                  const numB = Number(valB);
+                  if (!isNaN(numA) && !isNaN(numB) && valA !== '' && valB !== '') {
+                    return sortDirection === 'desc' ? numB - numA : numA - numB;
+                  }
+                  
+                  valA = String(valA).toLowerCase();
+                  valB = String(valB).toLowerCase();
+                  if (valA < valB) return sortDirection === 'desc' ? 1 : -1;
+                  if (valA > valB) return sortDirection === 'desc' ? -1 : 1;
+                  return 0;
+                });
+
+                return (
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto text-sm">
+                      <table className="w-full text-left whitespace-nowrap">
+                        {tableHeader}
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                          {data.map(mock => renderRow(mock))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Group by date
+              const groups: { date: string, mocks: any[] }[] = [];
+              data.forEach(mock => {
+                const mockDate = new Date(mock.date);
+                const dateString = mockDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+                let group = groups.find(g => g.date === dateString);
+                if (!group) {
+                  group = { date: dateString, mocks: [] };
+                  groups.push(group);
+                }
+                group.mocks.push(mock);
+              });
+
+              return groups.map((group) => (
+                <div key={group.date} className="animate-in fade-in slide-in-from-bottom-2">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-slate-400 dark:text-slate-500" /> {group.date}
+                  </h4>
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto text-sm">
+                      <table className="w-full text-left whitespace-nowrap">
+                        {tableHeader}
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                          {group.mocks.map((mock: any) => renderRow(mock))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+
+          {/* Heatmap Legend beneath History Log */}
+          <div className="mt-8 p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-white/50 dark:bg-slate-800/50 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400 justify-center">
+            <span className="font-medium mr-2">Percentile Legend:</span>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-500 ring-1 ring-emerald-600/20"></div> &ge;95%ile</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-400 ring-1 ring-emerald-500/20 dark:ring-emerald-500/50"></div> 90-95%ile</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-100 dark:bg-emerald-900/50 ring-1 ring-emerald-500/20 dark:ring-emerald-500/50"></div> 80-90%ile</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-100 dark:bg-amber-900/50 ring-1 ring-amber-500/20 dark:ring-amber-500/50"></div> 70-80%ile</div>
+            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-rose-100 dark:bg-rose-900/50 ring-1 ring-rose-500/20 dark:ring-rose-500/50"></div> &lt;70%ile</div>
           </div>
         </>
       )}

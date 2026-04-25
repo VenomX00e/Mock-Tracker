@@ -9,7 +9,7 @@ import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
 import { useUserProfile } from './hooks/useUserProfile';
 import { MockScore } from './types';
-import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users } from 'lucide-react';
+import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key } from 'lucide-react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from './services/firebase';
 
@@ -54,7 +54,7 @@ export default function App() {
     setDismissedLiveMocks(updated);
     localStorage.setItem('dismissedLiveMocks', JSON.stringify(updated));
   };
-  
+
   const handleSaveApiKey = () => {
     localStorage.setItem('geminiApiKey', apiKeyInput);
     setIsApiModalOpen(false);
@@ -96,6 +96,12 @@ export default function App() {
   const handleEditMock = (mock: MockScore) => {
     setMockToEdit(mock);
     setIsAddModalOpen(true);
+  };
+
+  const handleUpdateReflection = async (id: string, note: string, tags: string[]) => {
+    const mockToUpdate = mocks.find(m => m.id === id);
+    if (!mockToUpdate) return;
+    await updateMock({ ...mockToUpdate, note, tags });
   };
 
   const handleDeleteMock = (id: string) => {
@@ -175,7 +181,7 @@ export default function App() {
       <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setIsApiModalOpen(true)}>
+            <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setIsApiModalOpen(true)} title="Configure API Key">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
               </div>
@@ -190,18 +196,13 @@ export default function App() {
                   <div className="flex items-center gap-1 sm:gap-2 mr-1 sm:mr-2">
                     <button
                       onClick={() => setActiveTab(activeTab === 'dashboard' ? 'community' : 'dashboard')}
-                      className="px-3 py-1.5 md:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700"
+                      className="px-2 sm:px-3 py-1.5 md:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700 w-9 sm:w-auto hover:bg-slate-200 dark:hover:bg-slate-700"
+                      title={activeTab === 'dashboard' ? 'Community' : 'My Mocks'}
                     >
                       {activeTab === 'dashboard' ? (
-                        <>
-                          <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                          <span>Community</span>
-                        </>
+                        <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                       ) : (
-                        <>
-                          <LayoutDashboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                          <span>My Mocks</span>
-                        </>
+                        <LayoutDashboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       )}
                     </button>
 
@@ -429,6 +430,7 @@ export default function App() {
                       onEditMock={handleEditMock} 
                       lastDeletedMock={lastDeletedMock}
                       onRestoreMock={handleRestoreMock}
+                      onUpdateReflection={handleUpdateReflection}
                     />
                   ) : (
                     <CommunityHub 

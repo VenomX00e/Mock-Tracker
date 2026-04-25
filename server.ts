@@ -12,8 +12,23 @@ async function startServer() {
   // Helper
   const getAiClient = (customApiKey?: string) => {
     let keyToUse = customApiKey || process.env.GEMINI_API_KEY;
-    if (!keyToUse) throw new Error("No Gemini API key available.");
+    if (!keyToUse) throw new Error("No Gemini API key available. Please add an API key.");
     return new GoogleGenAI({ apiKey: keyToUse });
+  };
+
+  // Helper to format Gemini err
+  const formatGeminiError = (error: any) => {
+    try {
+      const errStr = error.message || String(error);
+      const jsonMatch = errStr.match(/\{.*\}/s);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.error && parsed.error.message) {
+          return parsed.error.message;
+        }
+      }
+    } catch (e) {}
+    return error.message || "Failed to process";
   };
 
   // API route for Gemini extraction - Mock Announcement
@@ -67,7 +82,7 @@ async function startServer() {
       
     } catch (error: any) {
       console.error("Gemini Error:", error);
-      res.status(500).json({ error: error.message || "Failed to process " });
+      res.status(500).json({ error: formatGeminiError(error) });
     }
   });
 
@@ -162,7 +177,7 @@ async function startServer() {
       
     } catch (error: any) {
       console.error("Gemini Error:", error);
-      res.status(500).json({ error: error.message || "Failed to process " });
+      res.status(500).json({ error: formatGeminiError(error) });
     }
   });
 
