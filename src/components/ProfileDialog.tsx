@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Image as ImageIcon, Target } from 'lucide-react';
+import { X, User, Image as ImageIcon, Target, Edit2, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useUserProfile } from '../hooks/useUserProfile';
+import { useAuth } from '../services/AuthContext';
 import { CustomDropdown } from './CustomDropdown';
 
 interface ProfileDialogProps {
@@ -8,9 +10,10 @@ interface ProfileDialogProps {
   onClose: () => void;
 }
 
+
 const exams = ['SBI PO', 'IBPS PO', 'SBI Clerk', 'IBPS Clerk', 'RRB PO', 'RRB Clerk', 'RBI Grade B', 'RBI Assistant'];
 
-// 10 cartoon style avatars (using Dicebear adventurer/fun-emoji or bottts as reliable placeholders)
+// 15 avatars including animal themes (all graphical)
 const PRESET_AVATARS = [
   "https://api.dicebear.com/7.x/adventurer-neutral/svg?seed=Lion&backgroundColor=ffdfbf",
   "https://api.dicebear.com/7.x/adventurer-neutral/svg?seed=Tiger&backgroundColor=ffd5dc",
@@ -21,15 +24,22 @@ const PRESET_AVATARS = [
   "https://api.dicebear.com/7.x/bottts/svg?seed=Panda&backgroundColor=ffd5dc",
   "https://api.dicebear.com/7.x/bottts/svg?seed=Koala&backgroundColor=c0aede",
   "https://api.dicebear.com/7.x/bottts/svg?seed=Monkey&backgroundColor=b6e3f4",
-  "https://api.dicebear.com/7.x/bottts/svg?seed=Penguin&backgroundColor=d1d4f9"
+  "https://api.dicebear.com/7.x/bottts/svg?seed=Penguin&backgroundColor=d1d4f9",
+  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Cheetah&backgroundColor=ffdfbf",
+  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Eagle&backgroundColor=ffd5dc",
+  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Shark&backgroundColor=b6e3f4",
+  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Owl&backgroundColor=c0aede",
+  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Dolphin&backgroundColor=d1d4f9"
 ];
 
 export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
   const { profile, updateProfile, loading } = useUserProfile();
+  const { logout } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   const [targetedExam, setTargetedExam] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isPickingAvatar, setIsPickingAvatar] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -38,8 +48,6 @@ export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
       setTargetedExam(profile.targetedExam || 'SBI PO');
     }
   }, [profile]);
-
-  if (!isOpen) return null;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -52,103 +60,137 @@ export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
     onClose();
   };
 
+  const handleLogout = async () => {
+    onClose();
+    await logout();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
-          <h2 className="text-xl font-semibold text-slate-800">Edit Profile</h2>
-          <button 
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" 
+            onClick={onClose} 
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }} 
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 dark:border-slate-700 relative z-10"
           >
-            <X className="w-5 h-5" />
-          </button>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
+          <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Profile</h2>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 dark:hover:text-red-400 rounded-full transition-colors flex items-center gap-1.5"
+              title="Log Out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700"></div>
+            <button 
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-slate-500">Loading...</div>
+          <div className="p-8 text-center text-slate-500 dark:text-slate-400">Loading...</div>
         ) : (
-          <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-center mb-2">
-              <img 
-                src={photoURL || `https://ui-avatars.com/api/?name=${displayName || 'User'}`} 
-                alt="Avatar Preview" 
-                className="w-24 h-24 rounded-full border-4 border-white shadow-md object-cover bg-slate-100"
-                onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${displayName || 'User'}`}}
-              />
-            </div>
+          <div className="p-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+            
+            {isPickingAvatar ? (
+              <div className="space-y-4 animate-in slide-in-from-right-4 duration-200">
+                <div className="flex items-center gap-2 mb-4">
+                   <button onClick={() => setIsPickingAvatar(false)} className="text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline">← Back</button>
+                   <span className="text-slate-700 dark:text-slate-300 font-medium">Choose an Avatar</span>
+                </div>
+                <div className="grid grid-cols-5 gap-3">
+                  {PRESET_AVATARS.map((url, i) => (
+                    <div 
+                      key={i} 
+                      onClick={() => { setPhotoURL(url); setIsPickingAvatar(false); }}
+                      className={`cursor-pointer rounded-full p-1 border-2 transition-all ${photoURL === url ? 'border-blue-500 shadow-md scale-110' : 'border-transparent hover:border-slate-300 dark:hover:border-slate-600 hover:scale-105'}`}
+                    >
+                      <img src={url} alt={`Preset ${i}`} className="w-full aspect-square rounded-full object-cover bg-slate-50 dark:bg-slate-900" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5 animate-in slide-in-from-left-4 duration-200">
+                <div className="flex justify-center mb-4">
+                  <div className="relative">
+                    <img 
+                      src={photoURL || `https://ui-avatars.com/api/?name=${displayName || 'User'}`} 
+                      alt="Avatar Preview" 
+                      className="w-24 h-24 rounded-full border-4 border-white dark:border-slate-700 shadow-md object-cover bg-slate-100 dark:bg-slate-800"
+                      onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${displayName || 'User'}`}}
+                    />
+                    <button 
+                      onClick={() => setIsPickingAvatar(true)}
+                      className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white dark:border-slate-700 hover:bg-blue-700 transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
-            <div>
-               <label className="block text-sm font-medium text-slate-700 mb-2">Choose an Avatar</label>
-               <div className="grid grid-cols-5 gap-2">
-                 {PRESET_AVATARS.map((url, i) => (
-                   <div 
-                     key={i} 
-                     onClick={() => setPhotoURL(url)}
-                     className={`cursor-pointer rounded-full p-1 border-2 transition-all ${photoURL === url ? 'border-blue-500 shadow-md scale-110' : 'border-transparent hover:border-slate-300 hover:scale-105'}`}
-                   >
-                     <img src={url} alt={`Preset ${i}`} className="w-full aspect-square rounded-full object-cover bg-slate-50" />
-                   </div>
-                 ))}
-               </div>
-            </div>
+                <div className="pt-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-slate-400" /> Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm outline-none"
+                    placeholder="Enter your name"
+                  />
+                </div>
 
-            <div className="pt-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <User className="w-4 h-4 text-slate-400" /> Display Name
-              </label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm outline-none"
-                placeholder="Enter your name"
-              />
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <Target className="w-4 h-4 text-slate-400" /> Targeted Exam
+                  </label>
+                  <CustomDropdown
+                    value={targetedExam}
+                    onChange={setTargetedExam}
+                    options={exams}
+                    placeholder="Select targeted exam"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-slate-400" /> Profile Image URL
-              </label>
-              <input
-                type="text"
-                value={photoURL}
-                onChange={(e) => setPhotoURL(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm outline-none"
-                placeholder="https://example.com/avatar.jpg"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <Target className="w-4 h-4 text-slate-400" /> Targeted Exam
-              </label>
-              <CustomDropdown
-                value={targetedExam}
-                onChange={setTargetedExam}
-                options={exams}
-                placeholder="Select targeted exam"
-              />
-            </div>
-
-            <div className="pt-4 flex gap-3">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving || !displayName.trim()}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
+                <div className="pt-6 flex gap-3">
+                  <button
+                    onClick={onClose}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving || !displayName.trim()}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
+  )}
+</AnimatePresence>
   );
 }

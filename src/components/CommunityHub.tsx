@@ -14,7 +14,8 @@ export default function CommunityHub({
   onUserClick?: (profile: any) => void;
 }) {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof UserProfile, direction: 'asc'|'desc' }>({ key: 'avgPercentile', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState<{ key: keyof UserProfile | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
+  const [feedSort, setFeedSort] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: null, direction: null });
   const [feedLogs, setFeedLogs] = useState<any[]>([]);
   const [loadingTop, setLoadingTop] = useState(true);
   const [loadingFeed, setLoadingFeed] = useState(true);
@@ -136,14 +137,30 @@ export default function CommunityHub({
   }, [daysVisible, userMap]);
 
   const handleSort = (key: keyof UserProfile) => {
-    let direction: 'asc' | 'desc' = 'desc';
-    if (sortConfig.key === key && sortConfig.direction === 'desc') {
-      direction = 'asc';
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === 'desc') setSortConfig({ key, direction: 'asc' });
+      else if (sortConfig.direction === 'asc') setSortConfig({ key: null, direction: null });
+    } else {
+      setSortConfig({ key, direction: 'desc' });
     }
-    setSortConfig({ key, direction });
+  };
+
+  const handleFeedSort = (key: string) => {
+    if (feedSort.key === key) {
+      if (feedSort.direction === 'desc') setFeedSort({ key, direction: 'asc' });
+      else if (feedSort.direction === 'asc') setFeedSort({ key: null, direction: null });
+    } else {
+      setFeedSort({ key, direction: 'desc' });
+    }
+  };
+
+  const getFeedSortConfig = (key: string) => {
+    if (feedSort.key !== key) return null;
+    return feedSort.direction === 'desc' ? '⬇' : '⬆';
   };
 
   const sortedLeaderboard = [...allUsers].sort((a, b) => {
+    if (!sortConfig.key || !sortConfig.direction) return 0;
     const aVal = a[sortConfig.key] || 0;
     const bVal = b[sortConfig.key] || 0;
     if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -154,54 +171,54 @@ export default function CommunityHub({
   return (
     <div className="space-y-8 mt-12 mb-12">
       {/* LEADERBOARD */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
           </h3>
         </div>
         <div className="overflow-x-auto">
           {loadingTop ? (
-            <div className="p-8 text-center text-slate-400">Loading Leaderboard...</div>
+            <div className="p-8 text-center text-slate-400 dark:text-slate-500">Loading Leaderboard...</div>
           ) : (
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <th className="p-4 font-semibold text-center hidden sm:table-cell">Rank</th>
-                  <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('displayName')}>Aspirant {sortConfig.key === 'displayName' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('avgPercentile')}>Avg %ile {sortConfig.key === 'avgPercentile' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('avgQuantPercentile')}>Quant {sortConfig.key === 'avgQuantPercentile' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('avgReasoningPercentile')}>Reasoning {sortConfig.key === 'avgReasoningPercentile' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('avgEnglishPercentile')}>English {sortConfig.key === 'avgEnglishPercentile' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('totalTests')}>Tests {sortConfig.key === 'totalTests' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('streak')}>Streak {sortConfig.key === 'streak' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('displayName')}>Aspirant {sortConfig.key === 'displayName' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgPercentile')}>Avg %ile {sortConfig.key === 'avgPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgQuantPercentile')}>Quant {sortConfig.key === 'avgQuantPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgReasoningPercentile')}>Reasoning {sortConfig.key === 'avgReasoningPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgEnglishPercentile')}>English {sortConfig.key === 'avgEnglishPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('totalTests')}>Tests {sortConfig.key === 'totalTests' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('streak')}>Streak {sortConfig.key === 'streak' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
                 {sortedLeaderboard.map((user, idx) => (
-                  <tr key={user.userId} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 font-bold text-slate-400 text-center hidden sm:table-cell">#{idx + 1}</td>
+                  <tr key={user.userId} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="p-4 font-bold text-slate-400 dark:text-slate-500 text-center hidden sm:table-cell">#{idx + 1}</td>
                     <td className="p-4">
                       <div 
-                         className="flex items-center gap-3 cursor-pointer hover:bg-slate-100 p-1.5 rounded-lg transition-colors inline-flex"
+                         className="flex items-center gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors inline-flex"
                          onClick={() => {
                             if (onUserClick) {
                                onUserClick({ ...user, leaderboardRank: idx + 1 });
                             }
                          }}
                       >
-                        <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full bg-slate-200" />
+                        <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700" />
                         <div>
-                          <div className="font-semibold text-slate-800">{user.displayName}</div>
-                          <div className="text-[10px] text-slate-500">{user.targetedExam}</div>
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">{user.displayName}</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">{user.targetedExam}</div>
                         </div>
                       </div>
                     </td>
                     <td className="p-4 text-center font-mono font-medium"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgPercentile)}`}>{user.avgPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgQuantPercentile)}`}>{user.avgQuantPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgReasoningPercentile)}`}>{user.avgReasoningPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgEnglishPercentile)}`}>{user.avgEnglishPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600">{user.totalTests}</td>
+                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgQuantPercentile)}`}>{user.avgQuantPercentile}%</span></td>
+                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgReasoningPercentile)}`}>{user.avgReasoningPercentile}%</span></td>
+                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgEnglishPercentile)}`}>{user.avgEnglishPercentile}%</span></td>
+                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-300">{user.totalTests}</td>
                     <td className="p-4 text-center text-amber-500 font-medium flex items-center justify-center gap-1">
                       <Flame className="w-4 h-4" /> {user.streak}
                     </td>
@@ -209,7 +226,7 @@ export default function CommunityHub({
                 ))}
                 {sortedLeaderboard.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">No data available yet.</td>
+                    <td colSpan={8} className="p-8 text-center text-slate-400 dark:text-slate-500">No data available yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -219,50 +236,77 @@ export default function CommunityHub({
       </div>
 
       {/* FEED */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Users className="w-5 h-5 text-blue-500" /> Community Log
           </h3>
         </div>
-        <div className="p-4 bg-slate-50">
+        <div className="p-4 bg-slate-50 dark:bg-slate-900">
           {loadingFeed ? (
-            <div className="p-8 text-center text-slate-400">Loading community logs...</div>
+            <div className="p-8 text-center text-slate-400 dark:text-slate-500">Loading community logs...</div>
           ) : (
             <div className="space-y-8">
-              {feedLogs.slice(0, daysVisible).map((dayGroup, idx) => (
-                <div key={dayGroup.date} className="animate-in fade-in slide-in-from-bottom-2">
-                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-400" /> {dayGroup.date}
-                  </h4>
-                  <div className="space-y-4">
-                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left text-sm whitespace-nowrap">
+              {(() => {
+                const flattenFeed = () => {
+                  const flat: any[] = [];
+                  feedLogs.slice(0, daysVisible).forEach(dg => {
+                    flat.push(...dg.mocks);
+                  });
+                  return flat;
+                };
+
+                const flatFeed = flattenFeed();
+                let feedToDisplay = null;
+                
+                if (feedSort.key && feedSort.direction) {
+                  feedToDisplay = [...flatFeed].sort((a, b) => {
+                    let aVal = a[feedSort.key];
+                    let bVal = b[feedSort.key];
+                    if (feedSort.key.includes('.')) {
+                      const parts = feedSort.key.split('.');
+                      aVal = a[parts[0]]?.[parts[1]];
+                      bVal = b[parts[0]]?.[parts[1]];
+                    }
+                    if (aVal == null) aVal = '';
+                    if (bVal == null) bVal = '';
+                    const numA = Number(aVal);
+                    const numB = Number(bVal);
+                    if (!isNaN(numA) && !isNaN(numB) && aVal !== '' && bVal !== '') {
+                      return feedSort.direction === 'desc' ? numB - numA : numA - numB;
+                    }
+                    if (String(aVal).toLowerCase() < String(bVal).toLowerCase()) return feedSort.direction === 'asc' ? -1 : 1;
+                    if (String(aVal).toLowerCase() > String(bVal).toLowerCase()) return feedSort.direction === 'asc' ? 1 : -1;
+                    return 0;
+                  });
+                }
+                
+                const tableHeader = (
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase tracking-wider">
-                              <th className="px-4 py-3 font-semibold">Aspirant</th>
-                              <th className="px-4 py-3 font-semibold">Mock Name</th>
-                              <th className="px-4 py-3 font-semibold text-center">Exam</th>
-                              <th className="px-4 py-3 font-semibold text-center">Score</th>
-                              <th className="px-4 py-3 font-semibold text-center">Percentile</th>
-                              <th className="px-4 py-3 font-semibold text-center">Quant</th>
-                              <th className="px-4 py-3 font-semibold text-center">Reasoning</th>
-                              <th className="px-4 py-3 font-semibold text-center">English</th>
-                              <th className="px-4 py-3 font-semibold text-center">GA</th>
+                            <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                              <th className="px-4 py-3 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('userName')}>Aspirant {getFeedSortConfig('userName')}</th>
+                              <th className="px-4 py-3 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('mockName')}>Mock Name {getFeedSortConfig('mockName')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('examType')}>Exam {getFeedSortConfig('examType')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('score')}>Score {getFeedSortConfig('score')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('percentile')}>Percentile {getFeedSortConfig('percentile')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('quant.score')}>Quant {getFeedSortConfig('quant.score')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('reasoning.score')}>Reasoning {getFeedSortConfig('reasoning.score')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('english.score')}>English {getFeedSortConfig('english.score')}</th>
+                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('ga.score')}>GA {getFeedSortConfig('ga.score')}</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {dayGroup.mocks.map((m: MockScore, mIdx: number) => (
+                );
+
+                const renderFeedRow = (m: any) => (
                               <tr 
                                 key={m.id} 
-                                className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                                className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                                 onClick={() => onCopyMock && onCopyMock(m)}
                                 title="Add this mock score to your dashboard"
                               >
-                                <td className="px-4 py-3 font-medium text-slate-700">
+                                <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
                                   <div 
-                                    className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1.5 rounded-lg transition-colors inline-flex"
+                                    className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors inline-flex"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const rank = sortedLeaderboard.findIndex(u => u.userId === m.userId) + 1;
@@ -271,10 +315,10 @@ export default function CommunityHub({
                                         }
                                     }}
                                   >
-                                    <img src={(m as any).userPhoto} alt="" className="w-6 h-6 rounded-full border border-slate-200" />
-                                    <span>{(m as any).userName}</span>
+                                    <img src={(m as any).userPhoto} alt="" className="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700" />
+                                    <span className="text-slate-800 dark:text-slate-200">{(m as any).userName}</span>
                                     {(m as any).userStreak > 0 && (
-                                       <span className={`flex items-center ml-1 ${(m as any).userStreakActive ? 'text-amber-500' : 'text-slate-300'}`}>
+                                       <span className={`flex items-center ml-1 ${(m as any).userStreakActive ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`}>
                                          <Flame className={`w-3 h-3 ${(m as any).userStreakActive ? 'animate-pulse' : ''}`} /> {(m as any).userStreak}
                                        </span>
                                     )}
@@ -282,23 +326,23 @@ export default function CommunityHub({
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex flex-col">
-                                    <span className="font-medium text-slate-800">{m.mockName}</span>
+                                    <span className="font-medium text-slate-800 dark:text-slate-200">{m.mockName}</span>
                                     <div className="flex gap-1.5 mt-1">
-                                      {m.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 text-purple-600 font-medium">{getPlatformShort(m.platform)}</span>}
-                                      {m.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-600 font-medium">{m.examPhase}</span>}
-                                      {m.examScope && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-600 font-medium">{m.examScope}</span>}
+                                      {m.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-medium">{getPlatformShort(m.platform)}</span>}
+                                      {m.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-medium">{m.examPhase}</span>}
+                                      {m.examScope && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-medium">{m.examScope}</span>}
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-slate-600 text-center">
+                                <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-center">
                                   <div className="flex flex-col items-center gap-1">
-                                    <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-md text-xs font-semibold">
+                                    <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md text-xs font-semibold">
                                      {m.examType}
                                     </span>
-                                    {m.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 text-blue-600 font-medium">{m.examRole}</span>}
+                                    {m.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium">{m.examRole}</span>}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 font-mono font-medium text-blue-600 text-center align-middle">
+                                <td className="px-4 py-3 font-mono font-medium text-blue-600 dark:text-blue-400 text-center align-middle">
                                   {m.score != null && m.score !== 0 ? m.score : '-'}
                                 </td>
                                 <td className="px-4 py-3 text-center align-middle">
@@ -317,7 +361,7 @@ export default function CommunityHub({
                                 </td>
                                 <td className="px-4 py-3 text-center align-middle">
                                    <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600">{m.quant?.score != null && m.quant.score !== 0 ? m.quant.score : '-'}</span>
+                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.quant?.score != null && m.quant.score !== 0 ? m.quant.score : '-'}</span>
                                       <div className="flex flex-col gap-0.5 mt-1 items-center">
                                         {m.quant?.percentile != null && m.quant.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.quant.percentile)}`}>{m.quant.percentile}%P</span>}
                                         {m.quant?.accuracy != null && m.quant.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.quant.accuracy)}`}>{m.quant.accuracy}%A</span>}
@@ -326,7 +370,7 @@ export default function CommunityHub({
                                 </td>
                                 <td className="px-4 py-3 text-center align-middle">
                                     <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600">{m.reasoning?.score != null && m.reasoning.score !== 0 ? m.reasoning.score : '-'}</span>
+                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.reasoning?.score != null && m.reasoning.score !== 0 ? m.reasoning.score : '-'}</span>
                                       <div className="flex flex-col gap-0.5 mt-1 items-center">
                                         {m.reasoning?.percentile != null && m.reasoning.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.reasoning.percentile)}`}>{m.reasoning.percentile}%P</span>}
                                         {m.reasoning?.accuracy != null && m.reasoning.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.reasoning.accuracy)}`}>{m.reasoning.accuracy}%A</span>}
@@ -335,7 +379,7 @@ export default function CommunityHub({
                                 </td>
                                 <td className="px-4 py-3 text-center align-middle">
                                     <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600">{m.english?.score != null && m.english.score !== 0 ? m.english.score : '-'}</span>
+                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.english?.score != null && m.english.score !== 0 ? m.english.score : '-'}</span>
                                       <div className="flex flex-col gap-0.5 mt-1 items-center">
                                         {m.english?.percentile != null && m.english.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.english.percentile)}`}>{m.english.percentile}%P</span>}
                                         {m.english?.accuracy != null && m.english.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.english.accuracy)}`}>{m.english.accuracy}%A</span>}
@@ -344,7 +388,7 @@ export default function CommunityHub({
                                 </td>
                                 <td className="px-4 py-3 text-center align-middle">
                                     <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600">{m.ga?.score != null && m.ga.score !== 0 ? m.ga.score : '-'}</span>
+                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.ga?.score != null && m.ga.score !== 0 ? m.ga.score : '-'}</span>
                                       <div className="flex flex-col gap-0.5 mt-1 items-center">
                                         {m.ga?.percentile != null && m.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.ga.percentile)}`}>{m.ga.percentile}%P</span>}
                                         {m.ga?.accuracy != null && m.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.ga.accuracy)}`}>{m.ga.accuracy}%A</span>}
@@ -352,20 +396,49 @@ export default function CommunityHub({
                                     </div>
                                 </td>
                               </tr>
-                            ))}
+                );
+
+                if (feedToDisplay) {
+                  return (
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm mt-4">
+                      <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                          {tableHeader}
+                          <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                            {feedToDisplay.map((m: any) => renderFeedRow(m))}
                           </tbody>
                         </table>
                       </div>
                     </div>
+                  );
+                }
+
+                return feedLogs.slice(0, daysVisible).map((dayGroup, idx) => (
+                  <div key={dayGroup.date} className="animate-in fade-in slide-in-from-bottom-2">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500" /> {dayGroup.date}
+                    </h4>
+                    <div className="space-y-4">
+                      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm whitespace-nowrap">
+                            {tableHeader}
+                            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                              {dayGroup.mocks.map((m: MockScore) => renderFeedRow(m))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
 
               {daysVisible < feedLogs.length && (
                 <div className="text-center pt-4">
                   <button 
                     onClick={() => setDaysVisible(prev => prev + 5)}
-                    className="inline-flex items-center px-5 py-2.5 bg-white border border-slate-200 shadow-sm text-sm font-medium text-slate-700 rounded-xl hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                    className="inline-flex items-center px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-sm font-medium text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
                     View Next {Math.min(5, feedLogs.length - daysVisible)} Days <ArrowRight className="w-4 h-4 ml-1.5" />
                   </button>

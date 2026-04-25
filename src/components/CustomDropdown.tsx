@@ -20,32 +20,32 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-medium ${!value ? 'text-slate-400' : 'text-slate-700'} flex justify-between items-center`}
+        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm font-medium ${!value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'} flex justify-between items-center`}
       >
         <span>{value || placeholder}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] p-2 overflow-y-auto animate-in fade-in slide-in-from-top-2 flex flex-col max-h-64">
+        <div className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none p-2 overflow-y-auto animate-in fade-in slide-in-from-top-2 flex flex-col max-h-64">
           <div className="space-y-1">
             {options.map(opt => (
               <button
                 key={opt}
                 type="button"
                 onClick={() => { onChange(opt); setIsOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all ${value === opt ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 font-medium hover:bg-slate-50'}`}
+                className={`w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all ${value === opt ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-semibold' : 'text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
               >
                 {opt}
               </button>
             ))}
             {allowCustom && (
               <>
-                <div className="h-px bg-slate-100 my-2 mx-2" />
+                <div className="h-px bg-slate-100 dark:bg-slate-700 my-2 mx-2" />
                 <button
                   type="button"
                   onClick={() => { onChange("Other"); setIsOpen(false); }}
-                  className="w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all text-slate-500 font-medium hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-50 dark:hover:bg-slate-700/50"
                 >
                   Other...
                 </button>

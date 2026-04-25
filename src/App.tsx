@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import Dashboard from './components/Dashboard';
 import AddMockDialog from './components/AddMockDialog';
 import ProfileDialog from './components/ProfileDialog';
@@ -8,7 +9,7 @@ import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
 import { useUserProfile } from './hooks/useUserProfile';
 import { MockScore } from './types';
-import { Plus, Target, LayoutDashboard, DatabaseZap, LogOut, LogIn, Shield, Megaphone, ArrowRight, X } from 'lucide-react';
+import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users } from 'lucide-react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from './services/firebase';
 
@@ -28,6 +29,21 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState(localStorage.getItem('geminiApiKey') || '');
+
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('darkMode') === 'true' || false;
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }, [darkMode]);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'community'>('dashboard');
   const [notices, setNotices] = useState<any[]>([]);
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]'));
@@ -103,7 +119,7 @@ export default function App() {
 
   const handleCopyMock = (mock: MockScore) => {
     // Copy the details but remove the ID so it's treated as a new entry
-    const copiedMock = { ...mock, id: '', score: 0, percentile: 0, percentage: 0, quant: { score: 0, percentile: 0 }, reasoning: { score: 0, percentile: 0 }, english: { score: 0, percentile: 0 }};
+    const copiedMock = { ...mock, id: '', score: '', percentile: '', percentage: '', accuracy: '', quant: { score: '', percentile: '', accuracy: '' }, reasoning: { score: '', percentile: '', accuracy: '' }, english: { score: '', percentile: '', accuracy: '' }, ga: { score: '', percentile: '', accuracy: '' }};
     setMockToEdit(copiedMock as any);
     setIsAddModalOpen(true);
   };
@@ -155,52 +171,98 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-16">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-16 transition-colors duration-200">
+      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setIsApiModalOpen(true)}>
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm group-hover:bg-blue-700 transition-colors">
-                <Target className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors">
-                Bank Exam Mock Tracker
+              <h1 className="text-base sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors">
+                MockTracker <span className="text-[10px] sm:text-xs font-normal text-slate-500 dark:text-slate-400 ml-1 hidden sm:inline">by Joy</span>
               </h1>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               {user ? (
                 <>
-                  <div 
-                    className="hidden sm:flex items-center gap-2 mr-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                    onClick={() => setIsProfileModalOpen(true)}
-                  >
-                    <span className="text-sm font-semibold text-slate-700">{profile?.displayName || user.displayName}</span>
-                    <img src={profile?.photoURL || user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200 object-cover" />
+                  <div className="flex items-center gap-1 sm:gap-2 mr-1 sm:mr-2">
+                    <button
+                      onClick={() => setActiveTab(activeTab === 'dashboard' ? 'community' : 'dashboard')}
+                      className="px-3 py-1.5 md:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 border border-slate-200 dark:border-slate-700"
+                    >
+                      {activeTab === 'dashboard' ? (
+                        <>
+                          <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                          <span>Community</span>
+                        </>
+                      ) : (
+                        <>
+                          <LayoutDashboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          <span>My Mocks</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Desktop Tabs */}
+                    <div className="hidden md:flex items-center gap-1.5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl relative">
+                      <button
+                        onClick={() => setActiveTab('dashboard')}
+                        className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 ${
+                          activeTab === 'dashboard' 
+                            ? 'text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600' 
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
+                        }`}
+                      >
+                        <span className="relative z-10 block pointer-events-none">My Mocks</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('community')}
+                        className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 ${
+                          activeTab === 'community' 
+                            ? 'text-purple-600 dark:text-purple-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600' 
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
+                        }`}
+                      >
+                        <span className="relative z-10 block pointer-events-none">Community</span>
+                      </button>
+                    </div>
                   </div>
+
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="inline-flex items-center justify-center p-2 md:px-4 text-sm font-medium text-white transition-all bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-700 hover:to-indigo-700 shadow-sm shadow-blue-500/20"
+                  >
+                    <Plus className="w-4 h-4 md:mr-1.5" />
+                    <span className="hidden md:inline">Add Mock</span>
+                  </button>
+
+                  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-0.5 md:mx-1 hidden sm:block"></div>
+
+                  <button 
+                    onClick={() => setDarkMode(!darkMode)}
+                    className="p-1.5 md:p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors flex"
+                  >
+                    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  </button>
+
                   {isAdmin && (
                     <button
                       onClick={() => setIsAdminModalOpen(true)}
-                      className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-100 rounded-lg transition-colors mr-2"
+                      className="p-1.5 md:p-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border border-transparent rounded-lg transition-colors"
                       title="Admin Dashboard"
                     >
                       <Shield className="w-5 h-5" />
                     </button>
                   )}
-                  <button
-                    onClick={logout}
-                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
-                    title="Log out"
+
+                  <div 
+                    className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-1 md:p-1.5 rounded-lg transition-colors border border-transparent"
+                    onClick={() => setIsProfileModalOpen(true)}
                   >
-                    <LogOut className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white transition-all bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                  >
-                    <Plus className="w-4 h-4 text-white sm:mr-1.5" />
-                    <span className="hidden sm:inline">Add Mock</span>
-                  </button>
+                    <img src={profile?.photoURL || user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 object-cover" />
+                  </div>
                 </>
               ) : (
                 <button
@@ -242,18 +304,18 @@ export default function App() {
           <>
             {/* Notices */}
             {notices.map((n) => (
-              <div key={n.id} className="mb-6 p-6 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border border-amber-100 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-6 opacity-5">
-                  <Megaphone className="w-32 h-32 text-amber-900" />
+              <div key={n.id} className="mb-6 p-6 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10">
+                  <Megaphone className="w-32 h-32 text-amber-900 dark:text-amber-500" />
                 </div>
                 <div className="relative z-10 max-w-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-amber-200 text-amber-800">Notice</span>
-                      <h2 className="text-xl font-bold text-slate-900">{n.title}</h2>
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400">Notice</span>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{n.title}</h2>
                     </div>
                     {n.description && (
-                      <p className="text-slate-700 text-sm leading-relaxed">
+                      <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
                         {n.description}
                       </p>
                     )}
@@ -277,30 +339,30 @@ export default function App() {
             {liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
                <div>
                  <div className="flex justify-between items-end mb-3">
-                   <h3 className="text-lg font-bold text-slate-800">Active Live Mocks</h3>
+                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>
                    {dismissedLiveMocks.length > 0 && (
-                     <button onClick={restoreLiveMocks} className="text-xs text-slate-500 hover:text-indigo-600 transition-colors">Show hidden Live Mocks</button>
+                     <button onClick={restoreLiveMocks} className="text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Show hidden Live Mocks</button>
                    )}
                  </div>
                  <div className="mb-8 flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
                    {liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).map(liveMock => (
-                     <div key={liveMock.id} className="min-w-[300px] md:min-w-[400px] flex-shrink-0 p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 shadow-sm relative overflow-hidden snap-start">
+                     <div key={liveMock.id} className="min-w-[300px] md:min-w-[400px] flex-shrink-0 p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-100 dark:border-indigo-800/30 shadow-sm relative overflow-hidden snap-start">
                        
-                       <button onClick={(e) => dismissLiveMock(liveMock.id, e)} className="absolute top-3 right-3 p-1.5 bg-white/50 hover:bg-white rounded-full text-indigo-400 hover:text-rose-500 transition-colors z-20" title="Hide Live Mock">
+                       <button onClick={(e) => dismissLiveMock(liveMock.id, e)} className="absolute top-3 right-3 p-1.5 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 rounded-full text-indigo-400 dark:text-indigo-500 hover:text-rose-500 transition-colors z-20" title="Hide Live Mock">
                          <X className="w-4 h-4" />
                        </button>
 
-                       <div className="absolute top-0 right-0 p-4 opacity-5">
-                         <Target className="w-24 h-24 text-indigo-900" />
+                       <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10">
+                         <Target className="w-24 h-24 text-indigo-900 dark:text-indigo-400" />
                        </div>
                        <div className="relative z-10 flex flex-col h-full justify-between">
                        <div>
                          <div className="flex items-center gap-2 mb-2">
-                           <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-indigo-600 text-white animate-pulse">Live</span>
-                           <span className="text-xs font-semibold text-indigo-800">{liveMock.examType} {liveMock.examRole && liveMock.examRole}</span>
+                           <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-indigo-600 dark:bg-indigo-500 text-white animate-pulse">Live</span>
+                           <span className="text-xs font-semibold text-indigo-800 dark:text-indigo-300">{liveMock.examType} {liveMock.examRole && liveMock.examRole}</span>
                          </div>
-                         <h3 className="text-lg font-bold text-slate-900 mb-1">{liveMock.mockName}</h3>
-                         <p className="text-slate-600 text-xs mb-4">{liveMock.platform || 'Any Platform'} • {liveMock.examPhase} • {liveMock.examScope}</p>
+                         <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">{liveMock.mockName}</h3>
+                         <p className="text-slate-600 dark:text-slate-400 text-xs mb-4">{liveMock.platform || 'Any Platform'} • {liveMock.examPhase} • {liveMock.examScope}</p>
                        </div>
                        <button
                          onClick={() => {
@@ -359,19 +421,21 @@ export default function App() {
                  </div>
               ) : (
                 <>
-                  <Dashboard 
-                    mocks={mocks} 
-                    profile={profile || undefined}
-                    onDeleteMock={handleDeleteMock} 
-                    onEditMock={handleEditMock} 
-                    lastDeletedMock={lastDeletedMock}
-                    onRestoreMock={handleRestoreMock}
-                  />
-                  
-                  <CommunityHub 
-                     onCopyMock={handleCopyMock} 
-                     onUserClick={(u) => setActivePublicProfile(u)}
-                  />
+                  {activeTab === 'dashboard' ? (
+                    <Dashboard 
+                      mocks={mocks} 
+                      profile={profile || undefined}
+                      onDeleteMock={handleDeleteMock} 
+                      onEditMock={handleEditMock} 
+                      lastDeletedMock={lastDeletedMock}
+                      onRestoreMock={handleRestoreMock}
+                    />
+                  ) : (
+                    <CommunityHub 
+                       onCopyMock={handleCopyMock} 
+                       onUserClick={(u) => setActivePublicProfile(u)}
+                    />
+                  )}
                 </>
               )}
             </section>
@@ -426,18 +490,18 @@ export default function App() {
       {/* API Key Modal */}
       {isApiModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl animate-in fade-in zoom-in-95">
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Configure Gemini API Key</h2>
-            <p className="text-sm text-slate-500 mb-6 font-medium">To use the AI image extraction feature, paste your free Gemini API key below.</p>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl animate-in fade-in zoom-in-95">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Configure Gemini API Key</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">To use the AI image extraction feature, paste your free Gemini API key below.</p>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">API Key</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">API Key</label>
                 <input
                   type="password"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   placeholder="AIzaSy..."
                 />
               </div>
@@ -445,24 +509,24 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsApiModalOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-100 font-semibold text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
+                  className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 font-semibold text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveApiKey}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-200 transition-all"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 font-semibold text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-200 dark:shadow-none transition-all"
                 >
                   Save Key
                 </button>
               </div>
             </div>
             
-            <div className="mt-6 p-4 bg-blue-50 rounded-xl">
-              <h4 className="text-sm font-bold text-blue-900 mb-1">How to get a key?</h4>
-              <p className="text-xs text-blue-800 mt-1 leading-relaxed">
-                1. Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold hover:text-blue-600">Google AI Studio</a>.<br/>
+            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
+              <h4 className="text-sm font-bold text-blue-900 dark:text-blue-400 mb-1">How to get a key?</h4>
+              <p className="text-xs text-blue-800 dark:text-blue-300 mt-1 leading-relaxed">
+                1. Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold hover:text-blue-600 dark:hover:text-blue-400">Google AI Studio</a>.<br/>
                 2. Click "Create API Key".<br/>
                 3. Copy and paste it here. It's 100% free.
               </p>

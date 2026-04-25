@@ -35,11 +35,13 @@ function calculateStats(mocks: MockScore[]) {
   const uniqueDates = [...new Set(dates)];
   
   let streak = 0;
+  let streakActive = false;
   const today = new Date().setHours(0,0,0,0);
   const msPerDay = 86400000;
   
   if (uniqueDates.length > 0) {
     if (uniqueDates[0] === today) {
+      streakActive = true;
       streak = 1;
       let expectedNextDate = today - msPerDay;
       for (let i = 1; i < uniqueDates.length; i++) {
@@ -51,8 +53,10 @@ function calculateStats(mocks: MockScore[]) {
         }
       }
     } else if (uniqueDates[0] === today - msPerDay) {
+      // Pending upload today to keep it active
+      streakActive = false;
       streak = 1;
-      let expectedNextDate = today - 2 * msPerDay;
+      let expectedNextDate = uniqueDates[0] - msPerDay;
       for (let i = 1; i < uniqueDates.length; i++) {
         if (uniqueDates[i] === expectedNextDate) {
           streak++;
@@ -61,6 +65,10 @@ function calculateStats(mocks: MockScore[]) {
           break;
         }
       }
+    } else {
+      // Streak broken
+      streak = 0;
+      streakActive = false;
     }
   }
 
@@ -73,6 +81,7 @@ function calculateStats(mocks: MockScore[]) {
     avgGaPercentile: total > 0 && hasG ? Number((sumG / total).toFixed(2)) : 0,
     totalTests: total,
     streak,
+    streakActive,
     ...(lastMockDate ? { lastMockDate } : {})
   };
 }
@@ -102,6 +111,7 @@ export function useMocks() {
           id: doc.id,
         } as MockScore);
       });
+      mockData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setMocks(mockData);
       
       // Sync stats back to user profile when mock data changes

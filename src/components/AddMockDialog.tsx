@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { MockScore } from '../types';
 import { parseScorecardImage } from '../services/geminiService';
 import { X, Upload, Loader2, ChevronDown } from 'lucide-react';
@@ -45,19 +46,25 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
   const [formData, setFormData] = useState<any>(defaultFormData);
 
   React.useEffect(() => {
-    if (initialMock && isOpen) {
-      setFormData({ ...defaultFormData, ...initialMock });
-      setIsCustomExam(!['', 'Live Mock', ...EXAMS].includes(initialMock.examType));
-      setIsCustomRole(initialMock.examRole ? !ROLES.includes(initialMock.examRole) : false);
-      setIsCustomPlatform(initialMock.platform ? !PLATFORMS.includes(initialMock.platform) : false);
-      setIsCustomPhase(initialMock.examPhase ? !PHASES.includes(initialMock.examPhase) : false);
-    } else if (isOpen) {
-      setFormData(defaultFormData);
-      setIsCustomExam(false);
-      setIsCustomRole(false);
-      setIsCustomPlatform(false);
-      setIsCustomPhase(false);
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      if (initialMock) {
+        setFormData({ ...defaultFormData, ...initialMock });
+        setIsCustomExam(!['', 'Live Mock', ...EXAMS].includes(initialMock.examType));
+        setIsCustomRole(initialMock.examRole ? !ROLES.includes(initialMock.examRole) : false);
+        setIsCustomPlatform(initialMock.platform ? !PLATFORMS.includes(initialMock.platform) : false);
+        setIsCustomPhase(initialMock.examPhase ? !PHASES.includes(initialMock.examPhase) : false);
+      } else {
+        setFormData(defaultFormData);
+        setIsCustomExam(false);
+        setIsCustomRole(false);
+        setIsCustomPlatform(false);
+        setIsCustomPhase(false);
+      }
+    } else {
+      document.body.style.overflow = '';
     }
+    return () => { document.body.style.overflow = ''; };
   }, [initialMock, isOpen]);
 
   const [selectedSection, setSelectedSection] = useState<'quant'|'reasoning'|'english'|'ga'>('quant');
@@ -201,32 +208,44 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
     setError('');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
-        <div className="sticky top-0 bg-white border-b border-gray-100 p-6 flex items-center justify-between z-10 rounded-t-2xl">
-          <h2 className="text-xl font-semibold text-gray-900">Add Mock Score</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm" 
+            onClick={onClose} 
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }} 
+            className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col border border-slate-200 dark:border-slate-800 relative z-10"
+          >
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 p-6 flex items-center justify-between z-10 shrink-0">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{initialMock ? 'Edit Mock Score' : 'Add Mock Score'}</h2>
+          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="p-6">
-          <div className="mb-8">
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer hover:bg-slate-50 transition-colors bg-slate-50/50">
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="mb-6">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-200 dark:border-slate-700 border-dashed rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors bg-slate-50/50 dark:bg-slate-800/20">
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-2" />
-                    <p className="text-sm text-slate-600">Analyzing scorecard with AI...</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Analyzing scorecard with AI...</p>
                   </>
                 ) : (
                   <>
-                    <Upload className="w-8 h-8 text-indigo-400 mb-2" />
-                    <p className="text-sm font-medium text-slate-700">Upload Scorecard Image(s)</p>
-                    <p className="text-xs text-slate-500 mt-1">Multi-select supported (PNG, JPG)</p>
+                    <Upload className="w-8 h-8 text-indigo-400 dark:text-indigo-500 mb-2" />
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Upload Scorecard Image(s)</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">Multi-select supported (PNG, JPG)</p>
                   </>
                 )}
               </div>
@@ -246,12 +265,12 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
           <form id="mock-form" onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-sm font-semibold text-slate-800">Exam Header</label>
-                <div className="grid grid-cols-2 gap-3">
+                <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Exam Header</label>
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
                   {!isCustomExam ? (
                     <CustomDropdown
                       value={formData.examType || ""}
-                      placeholder="Exam (e.g. SBI)"
+                      placeholder="Exam"
                       options={EXAMS}
                       allowCustom
                       required
@@ -272,7 +291,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                         value={formData.examType}
                         onChange={handleInputChange}
                         placeholder="Custom Exam..."
-                        className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 pr-8 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         autoFocus
                         required
                       />
@@ -283,7 +302,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                   {!isCustomRole ? (
                     <CustomDropdown
                       value={formData.examRole || ""}
-                      placeholder="Role (e.g. PO)"
+                      placeholder="Role"
                       options={ROLES}
                       allowCustom
                       onChange={(val) => {
@@ -303,7 +322,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                         value={formData.examRole || ''}
                         onChange={handleInputChange}
                         placeholder="Custom Role..."
-                        className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 pr-8 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         autoFocus
                       />
                       <button type="button" onClick={() => { setIsCustomRole(false); setFormData((p: any) => ({ ...p, examRole: "" })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
@@ -312,7 +331,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                 </div>
               </div>
               <div className="space-y-1.5 md:col-span-2 flex flex-col justify-end">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
                   {!isCustomPhase ? (
                     <CustomDropdown
                       value={formData.examPhase || 'Prelims'}
@@ -336,7 +355,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                         value={formData.examPhase}
                         onChange={handleInputChange}
                         placeholder="Custom Phase..."
-                        className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 pr-8 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         autoFocus
                       />
                       <button type="button" onClick={() => { setIsCustomPhase(false); setFormData((p: any) => ({ ...p, examPhase: "Prelims" })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
@@ -352,21 +371,21 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Mock Name</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5 col-span-2 md:col-span-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mock Name</label>
                 <input
                   type="text"
                   name="mockName"
                   value={formData.mockName}
                   onChange={handleInputChange}
-                  placeholder="e.g. Mock Test 1"
-                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                  placeholder="Mock Name"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   required
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Platform</label>
+              <div className="space-y-1.5 col-span-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Platform</label>
                 {!isCustomPlatform ? (
                   <CustomDropdown
                     value={formData.platform || ''}
@@ -390,37 +409,37 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                       value={formData.platform}
                       onChange={handleInputChange}
                       placeholder="Custom Platform..."
-                      className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 pr-8 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                       autoFocus
                     />
                     <button type="button" onClick={() => { setIsCustomPlatform(false); setFormData((p: any) => ({ ...p, platform: "" })); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
                   </div>
                 )}
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Date & Time</label>
+              <div className="space-y-1.5 col-span-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Date & Time</label>
                 <input
                   type="datetime-local"
                   name="date"
                   value={formData.date}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-slate-800 dark:text-slate-200"
                 />
               </div>
             </div>
 
             {formData.examScope === 'Sectional' ? (
-              <div className="p-5 bg-slate-50 rounded-xl border border-slate-100 mt-6 relative pb-16">
+              <div className="p-5 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800 mt-6 relative pb-16">
                 <div className="absolute -top-4 w-full left-0 flex justify-center mt-[-10px]">
-                   <div className="flex bg-white shadow-sm border border-slate-200 rounded-lg p-1 gap-1">
-                     <button type="button" onClick={() => setSelectedSection('quant')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'quant' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>Q</button>
-                     <button type="button" onClick={() => setSelectedSection('reasoning')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'reasoning' ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:bg-slate-50'}`}>R</button>
-                     <button type="button" onClick={() => setSelectedSection('english')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'english' ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:bg-slate-50'}`}>E</button>
-                     <button type="button" onClick={() => setSelectedSection('ga')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'ga' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'}`}>GA</button>
+                   <div className="flex bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700/50 rounded-lg p-1 gap-1">
+                     <button type="button" onClick={() => setSelectedSection('quant')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'quant' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>Q</button>
+                     <button type="button" onClick={() => setSelectedSection('reasoning')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'reasoning' ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>R</button>
+                     <button type="button" onClick={() => setSelectedSection('english')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'english' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>E</button>
+                     <button type="button" onClick={() => setSelectedSection('ga')} className={`px-4 py-1.5 rounded-md font-medium text-sm transition-colors ${selectedSection === 'ga' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>GA</button>
                    </div>
                 </div>
-                <h3 className="text-sm font-semibold text-slate-900 mt-6 mb-4 capitalize">{selectedSection} Performance</h3>
-                <div className="grid grid-cols-4 gap-4">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-6 mb-4 capitalize">{selectedSection} Performance</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Score</label>
                     <input
@@ -429,7 +448,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                       name="score"
                       value={formData[selectedSection]?.score}
                       onChange={e => handleInputChange(e, selectedSection, 'score')}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm dark:text-slate-100"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -440,18 +459,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                       name="percentile"
                       value={formData[selectedSection]?.percentile}
                       onChange={e => handleInputChange(e, selectedSection, 'percentile')}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Percentage</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      name="percentage"
-                      value={formData.percentage}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm dark:text-slate-100"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -460,171 +468,161 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
                       type="number"
                       step="0.01"
                       name="accuracy"
-                      value={formData[selectedSection]?.accuracy}
+                      value={(formData as any)[selectedSection]?.accuracy ?? ''}
                       onChange={e => handleInputChange(e, selectedSection, 'accuracy')}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm dark:text-slate-100"
                     />
                   </div>
                 </div>
               </div>
             ) : (
               <>
-                <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
-                  <h3 className="text-sm font-semibold text-slate-900 mb-4 inline-flex items-center">
+                <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 inline-flex items-center">
                     <span className="w-1.5 h-4 bg-indigo-500 rounded-full mr-2"></span>
                     Overall Performance
                   </h3>
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Score</label>
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Score</label>
                       <input
                         type="number"
                         step="0.01"
                         name="score"
                         value={formData.score ?? ''}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm dark:text-slate-100"
+                        required
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Percentile</label>
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Percentile</label>
                       <input
                         type="number"
                         step="0.01"
                         name="percentile"
                         value={formData.percentile ?? ''}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm dark:text-slate-100"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Percentage</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        name="percentage"
-                        value={formData.percentage ?? ''}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Accuracy %</label>
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Accuracy %</label>
                       <input
                         type="number"
                         step="0.01"
                         name="accuracy"
                         value={formData.accuracy ?? ''}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm dark:text-slate-100"
                       />
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center">
                     <span className="w-1.5 h-4 bg-indigo-500 rounded-full mr-2"></span>
                     Sectional breakdown
                   </h3>
                   
                   {/* Quant */}
-                  <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
-                    <div className="w-24 font-medium text-sm text-slate-700">Quant</div>
+                  <div className="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50">
+                    <div className="w-24 font-medium text-sm text-slate-700 dark:text-slate-300">Quant</div>
                     <div className="flex-1 flex gap-2">
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="Score"
                           value={formData.quant?.score ?? ''}
                           onChange={(e) => handleInputChange(e, 'quant', 'score')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="%ile"
                           value={formData.quant?.percentile ?? ''}
                           onChange={(e) => handleInputChange(e, 'quant', 'percentile')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="Acc%"
                           value={formData.quant?.accuracy ?? ''}
                           onChange={(e) => handleInputChange(e, 'quant', 'accuracy')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
                     </div>
                   </div>
 
                    {/* Reasoning */}
-                   <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
-                    <div className="w-24 font-medium text-sm text-slate-700">Reasoning</div>
+                   <div className="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50">
+                    <div className="w-24 font-medium text-sm text-slate-700 dark:text-slate-300">Reasoning</div>
                     <div className="flex-1 flex gap-2">
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="Score"
                           value={formData.reasoning?.score ?? ''}
                           onChange={(e) => handleInputChange(e, 'reasoning', 'score')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="%ile"
                           value={formData.reasoning?.percentile ?? ''}
                           onChange={(e) => handleInputChange(e, 'reasoning', 'percentile')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="Acc%"
                           value={formData.reasoning?.accuracy ?? ''}
                           onChange={(e) => handleInputChange(e, 'reasoning', 'accuracy')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
                     </div>
                   </div>
 
                    {/* English */}
-                   <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
-                    <div className="w-24 font-medium text-sm text-slate-700">English</div>
+                   <div className="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50">
+                    <div className="w-24 font-medium text-sm text-slate-700 dark:text-slate-300">English</div>
                     <div className="flex-1 flex gap-2">
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="Score"
                           value={formData.english?.score ?? ''}
                           onChange={(e) => handleInputChange(e, 'english', 'score')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="%ile"
                           value={formData.english?.percentile ?? ''}
                           onChange={(e) => handleInputChange(e, 'english', 'percentile')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
-                      <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                         <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                      <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                          <input
                           type="number" step="0.01"
+                          placeholder="Acc%"
                           value={formData.english?.accuracy ?? ''}
                           onChange={(e) => handleInputChange(e, 'english', 'accuracy')}
-                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                          className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
                       </div>
                     </div>
@@ -632,34 +630,34 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
 
                    {/* GA */}
                    {formData.examPhase !== 'Prelims' && (
-                     <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-slate-200">
-                      <div className="w-24 font-medium text-sm text-slate-700">GA</div>
+                     <div className="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50">
+                      <div className="w-24 font-medium text-sm text-slate-700 dark:text-slate-300">GA</div>
                       <div className="flex-1 flex gap-2">
-                        <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                           <span className="px-2 text-[10px] text-slate-500 font-medium">Score</span>
+                        <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                            <input
                             type="number" step="0.01"
+                            placeholder="Score"
                             value={formData.ga?.score ?? ''}
                             onChange={(e) => handleInputChange(e, 'ga', 'score')}
-                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                           />
                         </div>
-                        <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                           <span className="px-2 text-[10px] text-slate-500 font-medium">%ile</span>
+                        <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                            <input
                             type="number" step="0.01"
+                            placeholder="%ile"
                             value={formData.ga?.percentile ?? ''}
                             onChange={(e) => handleInputChange(e, 'ga', 'percentile')}
-                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                           />
                         </div>
-                        <div className="flex-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
-                           <span className="px-2 text-[10px] text-slate-500 font-medium">Acc%</span>
+                        <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
                            <input
                             type="number" step="0.01"
+                            placeholder="Acc%"
                             value={formData.ga?.accuracy ?? ''}
                             onChange={(e) => handleInputChange(e, 'ga', 'accuracy')}
-                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm"
+                            className="w-full p-2 bg-transparent focus:outline-none font-mono text-sm dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                           />
                         </div>
                       </div>
@@ -671,11 +669,11 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
           </form>
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t border-gray-100 p-6 flex justify-end gap-3 rounded-b-2xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="flex-shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 p-6 flex justify-end gap-3 rounded-b-2xl">
           <button 
             type="button" 
             onClick={onClose}
-            className="px-5 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 transition-all"
+            className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:focus:ring-slate-700 focus:ring-offset-2 transition-all"
           >
             Cancel
           </button>
@@ -687,7 +685,9 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock }: 
             {initialMock?.id ? 'Update Score' : 'Save Score'}
           </button>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }

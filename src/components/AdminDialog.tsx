@@ -226,31 +226,31 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden my-8 flex flex-col md:flex-row h-[85vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden my-8 flex flex-col md:flex-row h-[85vh] border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
         
         {/* Sidebar Nav */}
-        <div className="w-full md:w-64 bg-slate-50 border-r border-slate-100 flex flex-col">
-          <div className="p-6 border-b border-slate-100 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-lg font-bold text-slate-800">Admin</h2>
+        <div className="w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-100 dark:border-slate-800 flex flex-col">
+          <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Admin</h2>
           </div>
           <div className="p-3 space-y-1 flex-1 overflow-y-auto">
             <button 
               onClick={() => setActiveTab('users')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-white shadow-sm text-indigo-600 border border-slate-100' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Users className="w-4 h-4" /> User Management
             </button>
             <button 
               onClick={() => setActiveTab('liveMock')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'liveMock' ? 'bg-white shadow-sm text-indigo-600 border border-slate-100' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'liveMock' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Radio className="w-4 h-4" /> Live Mock
             </button>
             <button 
               onClick={() => setActiveTab('notice')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'notice' ? 'bg-white shadow-sm text-indigo-600 border border-slate-100' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'notice' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <FileText className="w-4 h-4" /> Notice
             </button>
@@ -265,37 +265,37 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
           
           {activeTab === 'users' && (
             <div className="space-y-6 max-w-2xl mx-auto">
-              <h3 className="font-semibold text-slate-800 border-b border-slate-100 pb-2">User Management</h3>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">User Management</h3>
               
               {loading ? (
-                <div className="text-center py-4 text-slate-500">Loading users...</div>
+                <div className="text-center py-4 text-slate-500 dark:text-slate-400">Loading users...</div>
               ) : (
                 <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-semibold text-indigo-600 mb-3 flex items-center gap-1.5"><Users className="w-4 h-4" /> Active Users ({allAppUsers.length})</h4>
+                    <h4 className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-3 flex items-center gap-1.5"><Users className="w-4 h-4" /> Active Users ({allAppUsers.length})</h4>
                     {allAppUsers.length === 0 ? (
-                      <p className="text-sm text-slate-500 italic">No active users.</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">No active users.</p>
                     ) : (
-                      <ul className="divide-y divide-slate-100 border border-slate-200 rounded-lg max-h-60 overflow-y-auto w-full relative">
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
                         {allAppUsers.map(user => (
-                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50">
+                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
                             <div className="flex items-center gap-3">
                               <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
                               <div>
-                                <p className="text-sm font-medium text-slate-800">{user.displayName}</p>
-                                <p className="text-xs text-slate-500">{user.email || user.userId}</p>
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button 
                                 onClick={() => handleUpdateUserStatus(user.userId, { isMuted: true })}
-                                className="text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-700 rounded-md transition-colors flex items-center gap-1"
+                                className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-900/50 dark:hover:text-amber-400 rounded-md transition-colors flex items-center gap-1"
                               >
                                 Mute
                               </button>
                               <button 
                                 onClick={() => handleUpdateUserStatus(user.userId, { isBanned: true })}
-                                className="text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-700 rounded-md transition-colors flex items-center gap-1"
+                                className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/50 dark:hover:text-rose-400 rounded-md transition-colors flex items-center gap-1"
                               >
                                 Ban
                               </button>
@@ -306,23 +306,23 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                     )}
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-rose-600 mb-3 flex items-center gap-1.5"><UserX className="w-4 h-4" /> Banned Users ({bannedUsers.length})</h4>
+                    <h4 className="text-sm font-semibold text-rose-600 dark:text-rose-400 mb-3 flex items-center gap-1.5"><UserX className="w-4 h-4" /> Banned Users ({bannedUsers.length})</h4>
                     {bannedUsers.length === 0 ? (
-                      <p className="text-sm text-slate-500 italic">No banned users.</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">No banned users.</p>
                     ) : (
-                      <ul className="divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
                         {bannedUsers.map(user => (
-                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50">
+                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
                             <div className="flex items-center gap-3">
                               <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
                               <div>
-                                <p className="text-sm font-medium text-slate-800">{user.displayName}</p>
-                                <p className="text-xs text-slate-500">{user.email || user.userId}</p>
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
                               </div>
                             </div>
                             <button 
                               onClick={() => handleUpdateUserStatus(user.userId, { isBanned: false })}
-                              className="text-xs font-medium px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-md transition-colors flex items-center gap-1"
+                              className="text-xs font-medium px-3 py-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-md transition-colors flex items-center gap-1"
                             >
                               <UserCheck className="w-3.5 h-3.5" /> Unban
                             </button>
@@ -332,23 +332,23 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                     )}
                   </div>
                   <div>
-                     <h4 className="text-sm font-semibold text-amber-600 mb-3 flex items-center gap-1.5"><MessageSquareOff className="w-4 h-4" /> Muted Users ({mutedUsers.length})</h4>
+                     <h4 className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-1.5"><MessageSquareOff className="w-4 h-4" /> Muted Users ({mutedUsers.length})</h4>
                      {mutedUsers.length === 0 ? (
-                      <p className="text-sm text-slate-500 italic">No muted users.</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">No muted users.</p>
                     ) : (
-                      <ul className="divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
                         {mutedUsers.map(user => (
-                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50">
+                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
                              <div className="flex items-center gap-3">
                               <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
                               <div>
-                                <p className="text-sm font-medium text-slate-800">{user.displayName}</p>
-                                <p className="text-xs text-slate-500">{user.email || user.userId}</p>
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
                               </div>
                             </div>
                             <button 
                               onClick={() => handleUpdateUserStatus(user.userId, { isMuted: false })}
-                              className="text-xs font-medium px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-md transition-colors flex items-center gap-1"
+                              className="text-xs font-medium px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-md transition-colors flex items-center gap-1"
                             >
                               <MessageSquare className="w-3.5 h-3.5" /> Unmute
                             </button>
@@ -364,8 +364,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
 
           {activeTab === 'liveMock' && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6">
-               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                 <h3 className="font-semibold text-indigo-900 flex items-center gap-2"><Radio className="w-5 h-5" /> Host a Live Mock</h3>
+               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                 <h3 className="font-semibold text-indigo-900 dark:text-indigo-300 flex items-center gap-2"><Radio className="w-5 h-5" /> Host a Live Mock</h3>
                  
                  <div className="flex flex-col items-end gap-2">
                    <div>
@@ -379,7 +379,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                       />
                       <label 
                         htmlFor="adminFileUpload" 
-                        className={`text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors ${isProcessingImage ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                        className={`text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors ${isProcessingImage ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'}`}
                       >
                        {isProcessingImage ? 'Analyzing...' : 'Auto-fill from image'}
                      </label>
@@ -388,7 +388,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                </div>
                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-sm font-semibold text-slate-800">Exam Header</label>
+                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Exam Header</label>
                     <div className="grid grid-cols-2 gap-3">
                       {!isCustomExam ? (
                         <CustomDropdown
@@ -403,8 +403,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                         />
                       ) : (
                         <div className="relative">
-                          <input type="text" value={liveMockData.examType} onChange={e => setLiveMockData(p => ({ ...p, examType: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 pr-8 border border-slate-200 rounded-xl focus:outline-none text-sm" placeholder="Custom Exam" autoFocus />
-                          <button type="button" onClick={() => setIsCustomExam(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-4 h-4"/></button>
+                          <input type="text" value={liveMockData.examType} onChange={e => setLiveMockData(p => ({ ...p, examType: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Exam" autoFocus />
+                          <button type="button" onClick={() => setIsCustomExam(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                         </div>
                       )}
                       {!isCustomRole ? (
@@ -420,8 +420,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                         />
                       ) : (
                         <div className="relative">
-                          <input type="text" value={liveMockData.examRole} onChange={e => setLiveMockData(p => ({ ...p, examRole: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 pr-8 border border-slate-200 rounded-xl focus:outline-none text-sm" placeholder="Custom Role" autoFocus />
-                          <button type="button" onClick={() => setIsCustomRole(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-4 h-4"/></button>
+                          <input type="text" value={liveMockData.examRole} onChange={e => setLiveMockData(p => ({ ...p, examRole: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Role" autoFocus />
+                          <button type="button" onClick={() => setIsCustomRole(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                         </div>
                       )}
                     </div>
@@ -441,8 +441,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                         />
                       ) : (
                         <div className="relative">
-                          <input type="text" value={liveMockData.examPhase} onChange={e => setLiveMockData(p => ({ ...p, examPhase: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 pr-8 border border-slate-200 rounded-xl focus:outline-none text-sm" placeholder="Custom Phase" autoFocus />
-                          <button type="button" onClick={() => setIsCustomPhase(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-4 h-4"/></button>
+                          <input type="text" value={liveMockData.examPhase} onChange={e => setLiveMockData(p => ({ ...p, examPhase: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Phase" autoFocus />
+                          <button type="button" onClick={() => setIsCustomPhase(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                         </div>
                       )}
                       <CustomDropdown
@@ -457,11 +457,11 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
 
                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Mock Name</label>
-                    <input type="text" value={liveMockData.mockName} onChange={e => setLiveMockData(p => ({ ...p, mockName: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="e.g. Test 1" />
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mock Name</label>
+                    <input type="text" value={liveMockData.mockName} onChange={e => setLiveMockData(p => ({ ...p, mockName: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Test 1" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Platform</label>
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Platform</label>
                     {!isCustomPlatform ? (
                       <CustomDropdown
                         value={liveMockData.platform || ''}
@@ -475,14 +475,14 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                       />
                     ) : (
                       <div className="relative">
-                        <input type="text" value={liveMockData.platform} onChange={e => setLiveMockData(p => ({ ...p, platform: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 pr-8 border border-slate-200 rounded-xl focus:outline-none text-sm" placeholder="Custom Platform" autoFocus />
-                        <button type="button" onClick={() => setIsCustomPlatform(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-4 h-4"/></button>
+                        <input type="text" value={liveMockData.platform} onChange={e => setLiveMockData(p => ({ ...p, platform: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Custom Platform" autoFocus />
+                        <button type="button" onClick={() => setIsCustomPlatform(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                       </div>
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Date & Time</label>
-                    <input type="datetime-local" value={liveMockData.date} onChange={e => setLiveMockData(p => ({ ...p, date: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Date & Time</label>
+                    <input type="datetime-local" value={liveMockData.date} onChange={e => setLiveMockData(p => ({ ...p, date: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm" />
                   </div>
                </div>
                
@@ -491,16 +491,16 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                </button>
 
                {liveMocks.length > 0 && (
-                 <div className="mt-8 pt-6 border-t border-slate-100">
-                   <h4 className="font-semibold text-slate-800 mb-4">Active Live Mocks</h4>
+                 <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                   <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">Active Live Mocks</h4>
                    <ul className="space-y-3">
                      {liveMocks.map(m => (
-                       <li key={m.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                       <li key={m.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl flex items-center justify-between">
                          <div>
-                           <p className="font-medium text-slate-900">{m.title}</p>
-                           <p className="text-sm text-slate-500">{m.examType} {m.examRole} • {m.platform}</p>
+                           <p className="font-medium text-slate-900 dark:text-slate-100">{m.title}</p>
+                           <p className="text-sm text-slate-500 dark:text-slate-400">{m.examType} {m.examRole} • {m.platform}</p>
                          </div>
-                         <button onClick={() => deleteLiveMock(m.id)} className="text-slate-400 hover:text-rose-600 p-2"><X className="w-4 h-4" /></button>
+                         <button onClick={() => deleteLiveMock(m.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
                        </li>
                      ))}
                    </ul>
@@ -511,38 +511,38 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
 
           {activeTab === 'notice' && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                 <h3 className="font-semibold text-slate-800 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-indigo-600" /> Broadcast Notice</h3>
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                 <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Broadcast Notice</h3>
                </div>
               <div className="space-y-4">
                  <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
-                   <input type="text" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm bg-slate-50" placeholder="e.g. Server Maintenance" />
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Title</label>
+                   <input type="text" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Server Maintenance" />
                  </div>
                  <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                   <textarea rows={4} value={noticeDescription} onChange={e => setNoticeDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm bg-slate-50" placeholder="Type notice details here..." />
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                   <textarea rows={4} value={noticeDescription} onChange={e => setNoticeDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Type notice details here..." />
                  </div>
                  <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Action Link (Optional)</label>
-                   <input type="url" value={noticeLink} onChange={e => setNoticeLink(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm bg-slate-50" placeholder="https://..." />
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Action Link (Optional)</label>
+                   <input type="url" value={noticeLink} onChange={e => setNoticeLink(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="https://..." />
                  </div>
-                 <button onClick={saveNotice} disabled={savingAnnouncement} className="w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                 <button onClick={saveNotice} disabled={savingAnnouncement} className="w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 transition-colors">
                    <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Publishing...' : 'Publish Notice'}
                  </button>
               </div>
 
                {notices.length > 0 && (
-                 <div className="mt-8 pt-6 border-t border-slate-100">
-                   <h4 className="font-semibold text-slate-800 mb-4">Active Notices</h4>
+                 <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                   <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">Active Notices</h4>
                    <ul className="space-y-3">
                      {notices.map(n => (
-                       <li key={n.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                       <li key={n.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl flex items-center justify-between">
                          <div>
-                           <p className="font-medium text-slate-900">{n.title}</p>
-                           {n.description && <p className="text-sm text-slate-500 line-clamp-1">{n.description}</p>}
+                           <p className="font-medium text-slate-900 dark:text-slate-100">{n.title}</p>
+                           {n.description && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{n.description}</p>}
                          </div>
-                         <button onClick={() => deleteNotice(n.id)} className="text-slate-400 hover:text-rose-600 p-2"><X className="w-4 h-4" /></button>
+                         <button onClick={() => deleteNotice(n.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
                        </li>
                      ))}
                    </ul>

@@ -18,6 +18,7 @@ export interface UserProfile {
   avgGaPercentile?: number;
   totalTests: number;
   streak: number;
+  streakActive?: boolean;
   updatedAt?: any;
   isBanned?: boolean;
   isMuted?: boolean;
