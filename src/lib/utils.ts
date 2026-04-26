@@ -32,11 +32,17 @@ export const getPlatformShort = (platform?: string) => {
 };
 
 export function parseLocalDate(dateString: string): Date {
-  let d = new Date(dateString);
-  if (dateString && dateString.includes('-')) {
-    const parts = dateString.split('T')[0].split('-');
+  if (!dateString) return new Date();
+  
+  if (dateString.includes('T')) {
+    return new Date(dateString);
+  }
+
+  const d = new Date(dateString);
+  if (dateString.includes('-')) {
+    const parts = dateString.split('-');
     if (parts.length === 3) {
-      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     }
   }
   return d;

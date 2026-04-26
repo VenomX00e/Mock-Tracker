@@ -1,6 +1,6 @@
 {
-  "name": "Bank Exam Mock Tracker",
-  "description": "Mock score tracker with AI-powered scorecard image parsing for banking exams.",
+  "name": "MockTracker",
+  "description": "Mock score tracker with AI-powered scorecard image parsing for exams.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

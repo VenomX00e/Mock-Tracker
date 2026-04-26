@@ -92,6 +92,7 @@ function calculateStats(mocks: MockScore[]) {
 export function useMocks() {
   const { user } = useAuth();
   const [mocks, setMocks] = useState<MockScore[]>([]);
+  const [deletedMocks, setDeletedMocks] = useState<MockScore[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [stats, setStats] = useState<any>(null);
@@ -99,6 +100,7 @@ export function useMocks() {
   useEffect(() => {
     if (!user) {
       setMocks([]);
+      setDeletedMocks([]);
       setStats(null);
       setLoading(false);
       return;
@@ -107,16 +109,25 @@ export function useMocks() {
     const q = query(collection(db, 'users', user.uid, 'mocks'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const mockData: MockScore[] = [];
+      const deletedData: MockScore[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data() as any;
-        if (data.isDeleted) return; // Hide deleted mocks completely
-        mockData.push({
-          ...data,
-          id: doc.id,
-        } as MockScore);
+        if (data.isDeleted) {
+            deletedData.push({
+              ...data,
+              id: doc.id,
+            } as MockScore);
+        } else {
+            mockData.push({
+              ...data,
+              id: doc.id,
+            } as MockScore);
+        }
       });
       mockData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      deletedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setMocks(mockData);
+      setDeletedMocks(deletedData);
       
       // Sync stats back to user profile when mock data changes
       const calculatedStats = calculateStats(mockData);
@@ -204,5 +215,23 @@ export function useMocks() {
     }
   };
 
-  return { mocks, stats, loading, addMock, updateMock, deleteMock };
+  const permanentlyDeleteMock = async (id: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'mocks', id));
+    } catch (error) {
+      console.error("Error permanently deleting mock:", error);
+    }
+  };
+
+  const restoreDeletedMock = async (id: string) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'mocks', id), { isDeleted: false, updatedAt: serverTimestamp() }, { merge: true });
+    } catch (error) {
+      console.error("Error restoring mock:", error);
+    }
+  };
+
+  return { mocks, deletedMocks, stats, loading, addMock, updateMock, deleteMock, permanentlyDeleteMock, restoreDeletedMock };
 }

@@ -14,15 +14,16 @@ import { db } from '../services/firebase';
 
 interface DashboardProps {
   mocks: MockScore[];
+  deletedMocks?: MockScore[];
   profile?: UserProfile;
   onDeleteMock?: (id: string) => void;
   onEditMock?: (mock: MockScore) => void;
-  lastDeletedMock?: MockScore | null;
-  onRestoreMock?: () => void;
+  onRestoreMock?: (id: string) => void;
+  onPermanentlyDeleteMock?: (id: string) => void;
   onUpdateReflection?: (id: string, note: string, tags: string[]) => Promise<void>;
 }
 
-export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, lastDeletedMock, onRestoreMock, onUpdateReflection }: DashboardProps) {
+export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteMock, onEditMock, onRestoreMock, onPermanentlyDeleteMock, onUpdateReflection }: DashboardProps) {
   const [selectedExam, setSelectedExam] = useState<string>('Overview');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
@@ -43,6 +44,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
 
   const [chartView, setChartView] = useState<'bar' | 'radar'>('bar');
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
 
   const handleReflectionEditStart = (mock: MockScore) => {
     setActiveRowId(mock.id);
@@ -752,19 +754,32 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
           </div>
 
           <div className="flex justify-between items-center mt-12 mb-6">
-            <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100">History Log</h3>
-            {lastDeletedMock && onRestoreMock && (
-              <button
-                onClick={onRestoreMock}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors animate-in fade-in slide-in-from-right-4"
-              >
-                <RotateCcw className="w-3.5 h-3.5" /> Restore '{lastDeletedMock.mockName}'
-              </button>
-            )}
+            <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              {showRecycleBin ? 'Recycle Bin' : 'History Log'}
+              {showRecycleBin && deletedMocks.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400 text-xs font-bold uppercase tracking-wider">{deletedMocks.length}</span>
+              )}
+            </h3>
+            <button
+              onClick={() => setShowRecycleBin(!showRecycleBin)}
+              className={`p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+              title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
+            >
+              <Trash2 className="w-4 h-4" /> {/* <span className="hidden sm:inline">{showRecycleBin ? 'Close' : 'Recycle Bin'}</span> */}
+            </button>
           </div>
 
           <div className="space-y-8">
             {(() => {
+              const dataToRender = showRecycleBin ? deletedMocks : displayedMocks;
+              if (dataToRender.length === 0) {
+                 return (
+                    <div className="text-center py-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                       <Trash2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                       <p className="text-slate-500 dark:text-slate-400 font-medium">No {showRecycleBin ? 'deleted mocks' : 'history'} found.</p>
+                    </div>
+                 );
+              }
               const tableHeader = (
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -777,7 +792,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                     <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('reasoning.score')}>Reasoning {getSortConfig('reasoning.score')}</th>
                     <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('english.score')}>English {getSortConfig('english.score')}</th>
                     <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('ga.score')}>GA {getSortConfig('ga.score')}</th>
-                    {(onDeleteMock || onEditMock) && <th className="px-4 py-3"></th>}
+                    {(onDeleteMock || onEditMock || showRecycleBin) && <th className="px-4 py-3"></th>}
                   </tr>
                 </thead>
               );
@@ -876,22 +891,39 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                         </div>
                       </div>
                     </td>
-                    {(onDeleteMock || onEditMock) && (
-                      <td className="pr-4 py-3 align-middle text-right w-[100px]">
+                    {(onDeleteMock || onEditMock || showRecycleBin) && (
+                      <td className="pr-4 py-3 align-middle text-right w-[120px]">
                         <div className="flex items-center justify-end gap-3 text-right">
                           <div className={`flex items-center gap-1 transition-all ${activeRowId === mock.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'}`}>
-                            {onEditMock && (
-                              <button onClick={(e) => { e.stopPropagation(); onEditMock(mock); }} className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Edit Mock">
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {onDeleteMock && (
-                              <button onClick={(e) => { e.stopPropagation(); onDeleteMock(mock.id); }} className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Remove Mock">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                            {showRecycleBin ? (
+                              <>
+                                {onRestoreMock && (
+                                  <button onClick={(e) => { e.stopPropagation(); onRestoreMock(mock.id); }} className="p-1.5 text-emerald-600 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Restore Mock">
+                                    <RotateCcw className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {onPermanentlyDeleteMock && (
+                                  <button onClick={(e) => { e.stopPropagation(); onPermanentlyDeleteMock(mock.id); }} className="p-1.5 text-rose-600 hover:bg-rose-100 dark:text-rose-400 dark:hover:bg-rose-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Permanently Delete">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {onEditMock && (
+                                  <button onClick={(e) => { e.stopPropagation(); onEditMock(mock); }} className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Edit Mock">
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {onDeleteMock && (
+                                  <button onClick={(e) => { e.stopPropagation(); onDeleteMock(mock.id); }} className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Move to Recycle Bin">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
-                          {onUpdateReflection && (
+                          {!showRecycleBin && onUpdateReflection && (
                             <button onClick={(e) => { e.stopPropagation(); handleReflectionEditStart(mock); }} className="p-2 text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg transition-colors bg-indigo-50 dark:bg-indigo-900/20 shadow-sm" title="Edit Reflection">
                               <BookA className="w-4 h-4" />
                             </button>
@@ -964,7 +996,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                 );
               };
 
-              let data = [...displayedMocks].reverse();
+              let data = [...dataToRender].reverse();
               if (sortField && sortDirection) {
                 // Sorting currently active, display in one list
                 data.sort((a, b) => {

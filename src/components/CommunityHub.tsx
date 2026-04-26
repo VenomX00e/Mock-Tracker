@@ -283,8 +283,27 @@ export default function CommunityHub({
 
   const sortedLeaderboard = [...allUsers].sort((a, b) => {
     if (!sortConfig.key || !sortConfig.direction) return 0;
-    const aVal = (a as any)[sortConfig.key] || 0;
-    const bVal = (b as any)[sortConfig.key] || 0;
+    let aVal = (a as any)[sortConfig.key] || 0;
+    let bVal = (b as any)[sortConfig.key] || 0;
+    
+    // Fix streak sorting by using 0 if the streak is broken (older than yesterday)
+    if (sortConfig.key === 'streak') {
+      const todayDt = new Date();
+      const today = new Date(todayDt.getFullYear(), todayDt.getMonth(), todayDt.getDate()).getTime();
+      
+      if (a.lastMockDate) {
+         const dA = parseLocalDate(a.lastMockDate);
+         const lastDtA = new Date(dA.getFullYear(), dA.getMonth(), dA.getDate()).getTime();
+         if (lastDtA < today - 86400000) aVal = 0;
+      } else { aVal = 0; }
+      
+      if (b.lastMockDate) {
+         const dB = parseLocalDate(b.lastMockDate);
+         const lastDtB = new Date(dB.getFullYear(), dB.getMonth(), dB.getDate()).getTime();
+         if (lastDtB < today - 86400000) bVal = 0;
+      } else { bVal = 0; }
+    }
+    
     if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
     if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
     return 0;

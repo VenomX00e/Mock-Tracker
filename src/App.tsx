@@ -19,12 +19,11 @@ import { PublicProfileDialog } from './components/PublicProfileDialog';
 export default function App() {
   const { user, loading, signInWithGoogle, logout } = useAuth();
   const { profile } = useUserProfile();
-  const { mocks, loading: mocksLoading, addMock, updateMock, deleteMock } = useMocks();
+  const { mocks, deletedMocks, loading: mocksLoading, addMock, updateMock, deleteMock, permanentlyDeleteMock, restoreDeletedMock } = useMocks();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activePublicProfile, setActivePublicProfile] = useState<any>(null);
   const [mockToEdit, setMockToEdit] = useState<MockScore | undefined>(undefined);
-  const [lastDeletedMock, setLastDeletedMock] = useState<MockScore | null>(null);
   
   // Admin & Announcement states
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -108,22 +107,7 @@ export default function App() {
   };
 
   const handleDeleteMock = (id: string) => {
-    const mockToDelete = mocks.find(m => m.id === id);
-    if (mockToDelete) {
-      setLastDeletedMock(mockToDelete);
-      deleteMock(id);
-      
-      setTimeout(() => {
-        setLastDeletedMock(current => current?.id === mockToDelete.id ? null : current);
-      }, 15000);
-    }
-  };
-
-  const handleRestoreMock = () => {
-    if (lastDeletedMock) {
-      addMock(lastDeletedMock);
-      setLastDeletedMock(null);
-    }
+    deleteMock(id);
   };
 
   const handleCopyMock = (mock: MockScore) => {
@@ -439,11 +423,12 @@ export default function App() {
                   {activeTab === 'dashboard' ? (
                     <Dashboard 
                       mocks={mocks} 
+                      deletedMocks={deletedMocks}
                       profile={profile || undefined}
                       onDeleteMock={handleDeleteMock} 
                       onEditMock={handleEditMock} 
-                      lastDeletedMock={lastDeletedMock}
-                      onRestoreMock={handleRestoreMock}
+                      onRestoreMock={restoreDeletedMock}
+                      onPermanentlyDeleteMock={permanentlyDeleteMock}
                       onUpdateReflection={handleUpdateReflection}
                     />
                   ) : (
