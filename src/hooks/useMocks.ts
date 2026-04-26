@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp 
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
 import { MockScore } from '../types';
+import { parseLocalDate } from '../lib/utils';
 
 function calculateStats(mocks: MockScore[]) {
   if (!mocks.length) return { avgPercentile: 0, avgAccuracy: 0, avgQuantPercentile: 0, avgReasoningPercentile: 0, avgEnglishPercentile: 0, totalTests: 0, streak: 0, lastMockDate: '' };
@@ -28,47 +29,49 @@ function calculateStats(mocks: MockScore[]) {
     }
   });
 
-  const datesStr = mocks.map(m => m.date).sort((a,b) => new Date(b).getTime() - new Date(a).getTime());
+  const datesStr = mocks.map(m => m.date).sort((a,b) => parseLocalDate(b).getTime() - parseLocalDate(a).getTime());
   const lastMockDate = datesStr[0] || '';
 
-  const dates = mocks.map(m => new Date(m.date).setHours(0,0,0,0)).sort((a,b) => b - a);
+  const dates = mocks.map(m => {
+    const d = parseLocalDate(m.date);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }).sort((a,b) => b - a);
   const uniqueDates = [...new Set(dates)];
   
   let streak = 0;
   let streakActive = false;
-  const today = new Date().setHours(0,0,0,0);
-  const msPerDay = 86400000;
   
   if (uniqueDates.length > 0) {
+    let currentDt = new Date(uniqueDates[0]);
+    streak = 1;
+    
+    for (let i = 1; i < uniqueDates.length; i++) {
+       const expectedPrevDt = new Date(currentDt);
+       expectedPrevDt.setDate(expectedPrevDt.getDate() - 1);
+       if (uniqueDates[i] === expectedPrevDt.getTime()) {
+          streak++;
+          currentDt = expectedPrevDt;
+       } else {
+          break;
+       }
+    }
+    
+    const todayTime = new Date();
+    const today = new Date(todayTime.getFullYear(), todayTime.getMonth(), todayTime.getDate()).getTime();
+    
     if (uniqueDates[0] === today) {
-      streakActive = true;
-      streak = 1;
-      let expectedNextDate = today - msPerDay;
-      for (let i = 1; i < uniqueDates.length; i++) {
-        if (uniqueDates[i] === expectedNextDate) {
-          streak++;
-          expectedNextDate -= msPerDay;
-        } else {
-          break;
-        }
-      }
-    } else if (uniqueDates[0] === today - msPerDay) {
-      // Pending upload today to keep it active
-      streakActive = false;
-      streak = 1;
-      let expectedNextDate = uniqueDates[0] - msPerDay;
-      for (let i = 1; i < uniqueDates.length; i++) {
-        if (uniqueDates[i] === expectedNextDate) {
-          streak++;
-          expectedNextDate -= msPerDay;
-        } else {
-          break;
-        }
-      }
+       streakActive = true;
     } else {
-      // Streak broken
-      streak = 0;
-      streakActive = false;
+       const yesterdayTime = new Date(todayTime);
+       yesterdayTime.setDate(yesterdayTime.getDate() - 1);
+       const yesterday = new Date(yesterdayTime.getFullYear(), yesterdayTime.getMonth(), yesterdayTime.getDate()).getTime();
+       
+       if (uniqueDates[0] === yesterday) {
+          streakActive = false;
+       } else {
+          streak = 0;
+          streakActive = false;
+       }
     }
   }
 
@@ -106,6 +109,7 @@ export function useMocks() {
       const mockData: MockScore[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data() as any;
+        if (data.isDeleted) return; // Hide deleted mocks completely
         mockData.push({
           ...data,
           id: doc.id,
@@ -138,25 +142,29 @@ export function useMocks() {
       const docRef = doc(db, 'users', user.uid, 'mocks', mock.id);
       
       // Calculate what the streak will be after this mock is added
-      const mockDateObj = new Date(mock.date).setHours(0,0,0,0);
-      const today = new Date().setHours(0,0,0,0);
-      const dates = mocks.map(m => new Date(m.date).setHours(0,0,0,0));
-      const hasMockToday = dates.includes(today);
-      const hasMockOnDate = dates.includes(mockDateObj);
+      const targetDateStr = mock.date;
+      const targetTime = parseLocalDate(targetDateStr);
+      const targetTimeMidnight = new Date(targetTime.getFullYear(), targetTime.getMonth(), targetTime.getDate()).getTime();
       
-      let newStreakAtTime = stats?.streak || 0;
-      if (mockDateObj === today && !hasMockToday) {
-        // Adding a mock for today and none existed yet
-        const msPerDay = 86400000;
-        const hasMockYesterday = dates.includes(today - msPerDay);
-        if (hasMockYesterday) {
-            newStreakAtTime = (stats?.streak || 0) + 1;
+      const allDates = [...new Set([...mocks.map(m => {
+          const d = parseLocalDate(m.date);
+          return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      }), targetTimeMidnight])].sort((a,b) => b - a);
+      
+      const targetIdx = allDates.indexOf(targetTimeMidnight);
+      
+      let newStreakAtTime = 1;
+      let currentDt = new Date(targetTimeMidnight);
+      
+      for (let i = targetIdx + 1; i < allDates.length; i++) {
+        const expectedPrevDt = new Date(currentDt);
+        expectedPrevDt.setDate(expectedPrevDt.getDate() - 1);
+        if (allDates[i] === expectedPrevDt.getTime()) {
+           newStreakAtTime++;
+           currentDt = expectedPrevDt;
         } else {
-            newStreakAtTime = 1;
+           break;
         }
-      } else if (!hasMockOnDate && newStreakAtTime === 0) {
-          // Fallback basic streak count if needed
-          newStreakAtTime = 1;
       }
       
       await setDoc(docRef, {
@@ -184,16 +192,13 @@ export function useMocks() {
       }, { merge: true });
     } catch (error) {
       console.error("Error updating mock:", error);
-      if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
-          handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}/mocks/${updatedMock.id}`);
-      }
     }
   };
   
   const deleteMock = async (id: string) => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, 'users', user.uid, 'mocks', id));
+      await setDoc(doc(db, 'users', user.uid, 'mocks', id), { isDeleted: true, updatedAt: serverTimestamp() }, { merge: true });
     } catch (error) {
       console.error("Error deleting mock:", error);
     }

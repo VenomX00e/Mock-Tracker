@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { MockScore, UserProfile } from '../types';
 import {
@@ -7,7 +8,7 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame } from 'lucide-react';
-import { getHeatmapColor, getPlatformShort } from '../lib/utils';
+import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -33,6 +34,10 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
   const [localNote, setLocalNote] = useState('');
   const [localTags, setLocalTags] = useState('');
   const [isSavingReflection, setIsSavingReflection] = useState(false);
+
+  const lineChartRefInner = useRef<HTMLDivElement>(null);
+  const barChartRefInner = useRef<HTMLDivElement>(null);
+  const radarChartRefInner = useRef<HTMLDivElement>(null);
 
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
@@ -138,7 +143,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
       filtered = filtered.filter(m => m.examScope === selectedScope);
     }
     // sort by date asc for charts
-    return [...filtered].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return [...filtered].sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
   }, [mocks, selectedExam, selectedRole, selectedPhase, selectedScope]);
 
   // Derive unique roles and scopes for the current selection
@@ -174,7 +179,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
 
   // Overview stats calculation
   const chronologicalMocks = useMemo(() => {
-    return [...displayedMocks].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return [...displayedMocks].sort((a,b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
   }, [displayedMocks]);
 
   const stats = useMemo(() => {
@@ -221,7 +226,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
       avgScore, avgPercentile, avgAccuracy, totalTests, scoreDiff, isScoreUp, recent,
       avgQuantPercentile, avgReasoningPercentile, avgEnglishPercentile, avgGaPercentile 
     };
-  }, [displayedMocks]);
+  }, [displayedMocks, statsCountRange]);
 
   const chartData = useMemo(() => {
     const hasQuant = displayedMocks.some(m => m.quant?.score != null && m.quant.score !== 0);
@@ -231,11 +236,13 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
     return { hasQuant, hasReasoning, hasEnglish, hasGA };
   }, [displayedMocks]);
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label, coordinate, chartRefBox }: any) => {
+    // chartRefBox is the ref we will pass down as a custom prop from RechartsTooltip
     if (active && payload && payload.length) {
       const data = payload[0].payload as MockScore;
-      return (
-        <div className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px]">
+      
+      const content = (
+        <div className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-[99990]">
           <p className="font-semibold text-slate-100 mb-1.5">{data.mockName || 'Mock Test'}</p>
           <div className="flex flex-wrap gap-1.5 mb-3">
             <span className="text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-md text-slate-300 font-medium">{data.examType}</span>
@@ -265,31 +272,85 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
           </div>
         </div>
       );
+
+      if (chartRefBox && chartRefBox.current && coordinate && typeof document !== 'undefined') {
+        const rect = chartRefBox.current.getBoundingClientRect();
+        const screenX = rect.left + coordinate.x;
+        const screenY = rect.top + coordinate.y;
+
+        const isRight = screenX > window.innerWidth / 2;
+        const isBottom = screenY > window.innerHeight / 2;
+
+        const PortalContent = () => {
+          const tooltipRef = useRef<HTMLDivElement>(null);
+          
+          useEffect(() => {
+            const el = tooltipRef.current;
+            if (!el || !chartRefBox.current || !coordinate) return;
+            
+            let animationFrameId: number;
+            
+            const updatePosition = () => {
+               if (chartRefBox.current && tooltipRef.current && coordinate) {
+                  const r = chartRefBox.current.getBoundingClientRect();
+                  const currentScreenX = r.left + coordinate.x;
+                  const currentScreenY = r.top + coordinate.y;
+                  
+                  const rightHalf = currentScreenX > window.innerWidth / 2;
+                  const bottomHalf = currentScreenY > window.innerHeight / 2;
+                  
+                  tooltipRef.current.style.left = `${currentScreenX}px`;
+                  tooltipRef.current.style.top = `${currentScreenY}px`;
+                  tooltipRef.current.style.transform = `translate(${rightHalf ? '-110%' : '10%'}, ${bottomHalf ? '-110%' : '10%'})`;
+               }
+               animationFrameId = requestAnimationFrame(updatePosition);
+            };
+            
+            // Start loop
+            animationFrameId = requestAnimationFrame(updatePosition);
+            
+            return () => {
+              cancelAnimationFrame(animationFrameId);
+            };
+          }, []);
+
+          return createPortal(
+            <div 
+              ref={tooltipRef}
+              className="fixed z-[100000] pointer-events-none transition-opacity duration-75 ease-out opacity-100"
+              style={{ 
+                left: screenX, 
+                top: screenY,
+                transform: `translate(${isRight ? '-110%' : '10%'}, ${isBottom ? '-110%' : '10%'})`
+              }}
+            >
+              {content}
+            </div>,
+            document.body
+          );
+        };
+        
+        return <PortalContent />;
+      }
+
+      return content;
     }
     return null;
   };
 
-  const renderCustomBarLabel = (props: any, section: 'quant' | 'reasoning' | 'english' | 'ga') => {
-    const { x, y, width, value, index } = props;
-    const mock = chronologicalMocks[index];
-    if (!mock) return null;
-    const percentile = mock[section]?.percentile;
-    
-    const hasValue = value !== null && value !== undefined && value !== '';
-    const hasPercentile = percentile !== null && percentile !== undefined && percentile !== '';
-    
-    if (!hasValue && !hasPercentile) return null;
+  const chartDataReversed = useMemo(() => {
+    return [...chronologicalMocks].reverse();
+  }, [chronologicalMocks]);
+
+  const renderCustomBarLabel = (props: any) => {
+    const { x, y, width, value } = props;
+    if (value === null || value === undefined || value === '') return null;
     
     // Position y needs to make sure text doesn't flow off the svg container top. 
-    // Usually y is close to 0 if the bar is very tall.
-    const scoreY = Math.max(y - 4, 16);
-    const percY = hasValue ? scoreY - 12 : scoreY;
+    const scoreY = Math.max(y - 8, 16);
 
     return (
-      <g>
-        {hasPercentile && <text x={x + width / 2} y={percY} className="fill-slate-500 dark:fill-slate-400" fontSize="10" textAnchor="middle">{percentile}%</text>}
-        {hasValue && <text x={x + width / 2} y={scoreY} className="fill-slate-700 dark:fill-slate-200" fontSize="11" fontWeight="bold" textAnchor="middle">{value}</text>}
-      </g>
+      <text x={x + width / 2} y={scoreY} className="fill-slate-700 dark:fill-slate-200" fontSize="11" fontWeight="bold" textAnchor="middle">{value}</text>
     );
   };
 
@@ -497,29 +558,31 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center mb-2 sm:mb-0">
                   <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Percentile Trend
                 </h3>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-row overflow-x-auto custom-scrollbar gap-1.5 sm:gap-2 pb-1 sm:pb-0 w-full sm:w-auto">
                   {['overall', 'quant', 'reasoning', 'english', 'ga'].map(key => (
                     <button 
                       key={key} 
                       onClick={() => setActiveTrendId(key)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${activeTrendId === key ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap ${activeTrendId === key ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                     >
                       {key.charAt(0).toUpperCase() + key.slice(1)}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="flex-1 w-full mt-4">
-                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                  <LineChart data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const d = new Date(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
+              <div className="flex-1 w-full mt-4 overflow-x-auto custom-scrollbar touch-pan-x touch-pan-y">
+                <div style={{ height: '100%', minWidth: Math.max(chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope).length * 80, 200) }} ref={lineChartRefInner}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                    <LineChart style={{ touchAction: 'pan-x' }} data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
-                    <RechartsTooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 1000 }} />
+                    <RechartsTooltip content={<CustomTooltip chartRefBox={lineChartRefInner} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                     <ReferenceLine y={90} stroke="#10b981" strokeDasharray="3 3" opacity={0.5} />
                     <Line connectNulls={true} type="monotone" dataKey={activeTrendId === 'overall' ? 'percentile' : `${activeTrendId}.percentile`} name={activeTrendId === 'overall' ? 'Percentile' : `${activeTrendId} %ile`} stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
               </div>
             </div>
             
@@ -527,63 +590,71 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[300px] lg:col-span-2">
               <div className="flex justify-between items-center mb-6">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Sectional Score Breakdown
+                    <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Breakdown
                  </h3>
                  <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50">
                     <button onClick={() => setChartView('bar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Bar</button>
                     <button onClick={() => setChartView('radar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'radar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Radar</button>
                  </div>
               </div>
-              <div className="flex-1 w-full relative h-[300px]">
+              <div className="flex-1 w-full relative h-[300px] flex flex-col">
                 {chartView === 'bar' ? (
-                <div className="w-full h-full overflow-x-auto scrollbar-hide">
-                  <div style={{ minWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? Math.max(100, (chronologicalMocks.length / 2) * 100) + '%' : '100%', height: '100%' }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                      <BarChart data={chronologicalMocks} margin={{ top: 30, right: 20, left: -20, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                        <XAxis dataKey="mockName" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => val.length > 20 ? val.substring(0,20)+'...' : val} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                        <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ zIndex: 1000 }} />
-                        <Legend 
-                          wrapperStyle={{ paddingTop: '20px' }} 
-                          payload={[
-                            ...(chartData.hasQuant ? [{ value: 'Quant', type: 'square', id: 'quant', color: '#3b82f6' }] as any[] : []),
-                            ...(chartData.hasReasoning ? [{ value: 'Reasoning', type: 'square', id: 'reasoning', color: '#8b5cf6' }] as any[] : []),
-                            ...(chartData.hasEnglish ? [{ value: 'English', type: 'square', id: 'english', color: '#f59e0b' }] as any[] : []),
-                            ...(chartData.hasGA ? [{ value: 'GA', type: 'square', id: 'ga', color: '#10b981' }] as any[] : []),
-                          ]}
-                        />
-                        {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={28}>
-                          <LabelList dataKey="quant.score" content={(props: any) => renderCustomBarLabel(props, 'quant')} />
-                        </Bar>}
-                        {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={28}>
-                          <LabelList dataKey="reasoning.score" content={(props: any) => renderCustomBarLabel(props, 'reasoning')} />
-                        </Bar>}
-                        {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={28}>
-                          <LabelList dataKey="english.score" content={(props: any) => renderCustomBarLabel(props, 'english')} />
-                        </Bar>}
-                        {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28}>
-                          <LabelList dataKey="ga.score" content={(props: any) => renderCustomBarLabel(props, 'ga')} />
-                        </Bar>}
-                      </BarChart>
-                    </ResponsiveContainer>
+                <>
+                  <div className="w-full flex-1 overflow-x-auto custom-scrollbar touch-pan-x touch-pan-y">
+                    <div style={{ height: '100%', minWidth: Math.max(chartDataReversed.length * 120, 300) }} ref={barChartRefInner}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                        <BarChart style={{ touchAction: 'pan-x' }} data={chartDataReversed} margin={{ top: 30, right: 20, left: -20, bottom: 5 }} barCategoryGap="25%" barGap={2}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                          <XAxis dataKey="id" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const m = chartDataReversed.find(item => item.id === val); return m && m.mockName.length > 20 ? m.mockName.substring(0,20)+'...' : m?.mockName || val; }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                          <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
+                          
+                          {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="quant.score" content={renderCustomBarLabel} />
+                          </Bar>}
+                          {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="reasoning.score" content={renderCustomBarLabel} />
+                          </Bar>}
+                          {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="english.score" content={renderCustomBarLabel} />
+                          </Bar>}
+                          {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="ga.score" content={renderCustomBarLabel} />
+                          </Bar>}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                </div>
+                  {/* Custom Legend to prevent scrolling and control order */}
+                  <div className="flex flex-wrap justify-center gap-4 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                     {chartData.hasQuant && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#3b82f6] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">Quant</span></div>}
+                     {chartData.hasReasoning && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#8b5cf6] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">Reasoning</span></div>}
+                     {chartData.hasEnglish && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#f59e0b] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">English</span></div>}
+                     {chartData.hasGA && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#10b981] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">GA</span></div>}
+                  </div>
+                </>
                 ) : (
+                <div className="w-full h-full" ref={radarChartRefInner}>
                 <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                  <RadarChart cx="50%" cy="50%" outerRadius="100%" margin={{ top: 10, right: 10, bottom: 10, left: 10 }} data={[
-                    ...(chartData.hasQuant ? [{ subject: 'Quant', value: Number(stats?.avgQuantPercentile || 0).toFixed(1), fullMark: 100, color: '#3b82f6' }] : []),
-                    ...(chartData.hasReasoning ? [{ subject: 'Reasoning', value: Number(stats?.avgReasoningPercentile || 0).toFixed(1), fullMark: 100, color: '#8b5cf6' }] : []),
-                    ...(chartData.hasEnglish ? [{ subject: 'English', value: Number(stats?.avgEnglishPercentile || 0).toFixed(1), fullMark: 100, color: '#f59e0b' }] : []),
-                    ...(chartData.hasGA ? [{ subject: 'GA', value: Number(stats?.avgGaPercentile || 0).toFixed(1), fullMark: 100, color: '#10b981' }] : [])
-                  ]}>
-                    <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 13, fontWeight: 500 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={6} />
-                    <Radar name="Percentile" dataKey="value" stroke="#8b5cf6" strokeWidth={2} fill="#8b5cf6" fillOpacity={0.4} dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} label={(props: any) => { const { x, y, value, payload } = props; return <text x={x} y={y} dy={y < 150 ? -8 : 16} fill={payload?.color || '#8b5cf6'} fontSize={13} fontWeight={600} textAnchor="middle">{value}</text>; }} />
-                    <RechartsTooltip content={<CustomTooltip />} />
-                  </RadarChart>
+                  {(() => {
+                    const radarData = [
+                      ...(chartData.hasQuant ? [{ subject: 'Quant', value: Number(stats?.avgQuantPercentile || 0).toFixed(1), fullMark: 100, color: '#3b82f6' }] : []),
+                      ...(chartData.hasReasoning ? [{ subject: 'Reasoning', value: Number(stats?.avgReasoningPercentile || 0).toFixed(1), fullMark: 100, color: '#8b5cf6' }] : []),
+                      ...(chartData.hasEnglish ? [{ subject: 'English', value: Number(stats?.avgEnglishPercentile || 0).toFixed(1), fullMark: 100, color: '#f59e0b' }] : []),
+                      ...(chartData.hasGA ? [{ subject: 'GA', value: Number(stats?.avgGaPercentile || 0).toFixed(1), fullMark: 100, color: '#10b981' }] : [])
+                    ];
+                    return (
+                      <RadarChart cx="50%" cy="50%" outerRadius="75%" margin={{ top: 20, right: 20, bottom: 20, left: 20 }} data={radarData}>
+                        <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                        <PolarAngleAxis dataKey="subject" tick={(props: any) => { const { payload, x, y, textAnchor } = props; const colorMap: any = { 'Quant': '#3b82f6', 'Reasoning': '#8b5cf6', 'English': '#f59e0b', 'GA': '#10b981' }; return <text x={x} y={y} dy={y < 150 ? -6 : 16} fill={colorMap[payload.value] || '#64748b'} fontSize={13} fontWeight={600} textAnchor={textAnchor}>{payload.value}</text>; }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={6} />
+                        <Radar name="Percentile" dataKey="value" stroke="#ec4899" strokeWidth={2} fill="#ec4899" fillOpacity={0.3} dot={{ r: 3, fill: '#ec4899' }} activeDot={{ r: 5 }} label={(props: any) => { const { x, y, value, index } = props; return <text x={x} y={y} dy={y < 150 ? -16 : 24} fill={radarData[index]?.color || "#ec4899"} fontSize={12} fontWeight={700} textAnchor="middle">{value}%</text>; }} />
+                        <RechartsTooltip content={<CustomTooltip chartRefBox={radarChartRefInner} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
+                      </RadarChart>
+                    );
+                  })()}
                 </ResponsiveContainer>
+                </div>
                 )}
               </div>
             </div>
@@ -635,7 +706,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                 // 3. Last Attempt Activity
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const lastMockDate = new Date(recentMocks[0].date);
+                const lastMockDate = parseLocalDate(recentMocks[0].date);
                 lastMockDate.setHours(0, 0, 0, 0);
                 
                 const msSinceLast = today.getTime() - lastMockDate.getTime();
@@ -712,7 +783,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
               );
 
               const renderRow = (mock: any) => {
-                const mockDate = new Date(mock.date);
+                const mockDate = parseLocalDate(mock.date);
                 const formattedTime = mockDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                 const isTimeValid = !isNaN(mockDate.getTime()) && mock.date.includes('T');
                 
@@ -806,17 +877,17 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
                       </div>
                     </td>
                     {(onDeleteMock || onEditMock) && (
-                      <td className="px-4 py-3 align-middle w-[160px]">
-                        <div className="flex items-center justify-start sm:pr-4 gap-3 mr-2">
-                          <div className={`flex items-center gap-1.5 transition-all ${activeRowId === mock.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'}`}>
+                      <td className="pr-4 py-3 align-middle text-right w-[100px]">
+                        <div className="flex items-center justify-end gap-3 text-right">
+                          <div className={`flex items-center gap-1 transition-all ${activeRowId === mock.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'}`}>
                             {onEditMock && (
                               <button onClick={(e) => { e.stopPropagation(); onEditMock(mock); }} className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Edit Mock">
-                                <Edit2 className="w-3 h-3" />
+                                <Edit2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {onDeleteMock && (
                               <button onClick={(e) => { e.stopPropagation(); onDeleteMock(mock.id); }} className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/40 rounded transition-colors bg-white dark:bg-slate-800 shadow-sm" title="Remove Mock">
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
@@ -934,7 +1005,7 @@ export default function Dashboard({ mocks, profile, onDeleteMock, onEditMock, la
               // Group by date
               const groups: { date: string, mocks: any[] }[] = [];
               data.forEach(mock => {
-                const mockDate = new Date(mock.date);
+                const mockDate = parseLocalDate(mock.date);
                 const dateString = mockDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
                 let group = groups.find(g => g.date === dateString);
                 if (!group) {

@@ -20,18 +20,23 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   const [bannedUsers, setBannedUsers] = useState<UserProfile[]>([]);
   const [mutedUsers, setMutedUsers] = useState<UserProfile[]>([]);
   const [allAppUsers, setAllAppUsers] = useState<UserProfile[]>([]);
+  const [allFirebaseUsers, setAllFirebaseUsers] = useState<UserProfile[]>([]);
+  const [showAllUsers, setShowAllUsers] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Live mock & notice inputs
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeDescription, setNoticeDescription] = useState('');
   const [noticeLink, setNoticeLink] = useState('');
+  const [noticeDate, setNoticeDate] = useState('');
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
   
   // Custom states for Live Mock
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isCustomRole, setIsCustomRole] = useState(false);
   const [isCustomPhase, setIsCustomPhase] = useState(false);
   const [isCustomPlatform, setIsCustomPlatform] = useState(false);
+  const [editingLiveMockId, setEditingLiveMockId] = useState<string | null>(null);
 
   const [liveMockData, setLiveMockData] = useState({
     examType: '',
@@ -40,7 +45,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
     examScope: 'Full',
     mockName: '',
     platform: '',
-    date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+    date: '',
   });
 
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
@@ -60,7 +65,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
       const allUsers = snap.docs.map(d => d.data() as UserProfile);
       setBannedUsers(allUsers.filter(u => u.isBanned));
       setMutedUsers(allUsers.filter(u => u.isMuted && !u.isBanned));
-      setAllAppUsers(allUsers.filter(u => !u.isBanned && !u.isMuted && u.userId !== currentUser?.uid));
+      setAllAppUsers(allUsers.filter(u => !u.isBanned && !u.isMuted && u.totalTests > 0 && u.userId !== currentUser?.uid));
+      setAllFirebaseUsers(allUsers.filter(u => u.userId !== currentUser?.uid));
     } catch (error) {
       console.error("Error fetching users", error);
     }
@@ -99,24 +105,35 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
         setSavingAnnouncement(false);
         return;
       }
-      const newId = `notice_${Date.now()}`;
+      const newId = editingNoticeId || `notice_${Date.now()}`;
       await setDoc(doc(db, 'system', newId), {
         type: 'notice',
         title: noticeTitle,
         description: noticeDescription,
         link: noticeLink,
+        date: noticeDate,
         updatedAt: new Date().toISOString()
-      }, { merge: false });
-      alert("Notice saved successfully");
+      }, { merge: !!editingNoticeId });
+      alert(editingNoticeId ? "Notice updated successfully" : "Notice saved successfully");
+      setEditingNoticeId(null);
       setNoticeTitle('');
       setNoticeDescription('');
       setNoticeLink('');
+      setNoticeDate('');
       fetchAnnouncement();
     } catch (error) {
       console.error("Error saving notice", error);
       alert("Failed to save notice");
     }
     setSavingAnnouncement(false);
+  };
+
+  const handleEditNotice = (n: any) => {
+    setEditingNoticeId(n.id);
+    setNoticeTitle(n.title || '');
+    setNoticeDescription(n.description || '');
+    setNoticeLink(n.link || '');
+    setNoticeDate(n.date || '');
   };
 
   const saveLiveMock = async () => {
@@ -127,7 +144,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
         setSavingAnnouncement(false);
         return;
       }
-      const newId = `liveMock_${Date.now()}`;
+      const newId = editingLiveMockId || `liveMock_${Date.now()}`;
       await setDoc(doc(db, 'system', newId), {
         type: 'liveMock',
         ...liveMockData,
@@ -135,14 +152,36 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
         description: `Join the community in taking the ${liveMockData.examType} ${liveMockData.examRole} ${liveMockData.examPhase} mock on ${liveMockData.platform || 'any platform'}.`,
         link: '',
         updatedAt: new Date().toISOString()
-      }, { merge: false });
-      alert("Live Mock saved successfully");
+      }, { merge: !!editingLiveMockId });
+      alert(editingLiveMockId ? "Live Mock updated successfully" : "Live Mock saved successfully");
+      setEditingLiveMockId(null);
+      setLiveMockData({
+        examType: '', examRole: '', examPhase: 'Prelims', examScope: 'Full', mockName: '', platform: '', date: ''
+      });
       fetchAnnouncement();
     } catch (error) {
       console.error("Error saving live mock", error);
       alert("Failed to save live mock");
     }
     setSavingAnnouncement(false);
+  };
+
+  const handleEditLiveMock = (m: any) => {
+    setEditingLiveMockId(m.id);
+    if (!EXAMS.includes(m.examType)) setIsCustomExam(true); else setIsCustomExam(false);
+    if (!ROLES.includes(m.examRole)) setIsCustomRole(true); else setIsCustomRole(false);
+    if (!PHASES.includes(m.examPhase)) setIsCustomPhase(true); else setIsCustomPhase(false);
+    if (!PLATFORMS.includes(m.platform)) setIsCustomPlatform(true); else setIsCustomPlatform(false);
+    
+    setLiveMockData({
+      examType: m.examType || '',
+      examRole: m.examRole || '',
+      examPhase: m.examPhase || 'Prelims',
+      examScope: m.examScope || 'Full',
+      mockName: m.mockName || '',
+      platform: m.platform || '',
+      date: m.date || '',
+    });
   };
 
   const deleteLiveMock = async (id: string) => {
@@ -258,13 +297,13 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
         </div>
 
         {/* Form Content */}
-        <div className="flex-1 overflow-y-auto relative p-6 pr-14">
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-50 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors z-10">
+        <div className="flex-1 overflow-y-auto relative p-6">
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors z-10">
             <X className="w-5 h-5" />
           </button>
           
           {activeTab === 'users' && (
-            <div className="space-y-6 max-w-2xl mx-auto">
+            <div className="space-y-6 max-w-2xl mx-auto pt-6 md:pt-0">
               <h3 className="font-semibold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">User Management</h3>
               
               {loading ? (
@@ -272,12 +311,15 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
               ) : (
                 <div className="space-y-6">
                   <div>
-                    <h4 className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-3 flex items-center gap-1.5"><Users className="w-4 h-4" /> Active Users ({allAppUsers.length})</h4>
-                    {allAppUsers.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">No active users.</p>
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <button onClick={() => setShowAllUsers(false)} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${!showAllUsers ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4" /> Active Users ({allAppUsers.length})</button>
+                      <button onClick={() => setShowAllUsers(true)} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${showAllUsers ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4" /> All Users ({allFirebaseUsers.length})</button>
+                    </div>
+                    {(showAllUsers ? allFirebaseUsers : allAppUsers).length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">No users found.</p>
                     ) : (
                       <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
-                        {allAppUsers.map(user => (
+                        {(showAllUsers ? allFirebaseUsers : allAppUsers).map(user => (
                           <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
                             <div className="flex items-center gap-3">
                               <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
@@ -386,8 +428,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                    </div>
                  </div>
                </div>
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="space-y-1.5 md:col-span-2">
+               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 xl:col-span-1">
                     <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Exam Header</label>
                     <div className="grid grid-cols-2 gap-3">
                       {!isCustomExam ? (
@@ -426,7 +468,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                       )}
                     </div>
                   </div>
-                  <div className="space-y-1.5 md:col-span-2 flex flex-col justify-end">
+                  <div className="space-y-1.5 xl:col-span-1 flex flex-col justify-end">
                     <div className="grid grid-cols-2 gap-3">
                       {!isCustomPhase ? (
                         <CustomDropdown
@@ -500,7 +542,10 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                            <p className="font-medium text-slate-900 dark:text-slate-100">{m.title}</p>
                            <p className="text-sm text-slate-500 dark:text-slate-400">{m.examType} {m.examRole} • {m.platform}</p>
                          </div>
-                         <button onClick={() => deleteLiveMock(m.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
+                         <div className="flex gap-2 items-center">
+                            <button onClick={() => handleEditLiveMock(m)} className="text-sm text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">Edit</button>
+                            <button onClick={() => deleteLiveMock(m.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
+                         </div>
                        </li>
                      ))}
                    </ul>
@@ -527,6 +572,10 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Action Link (Optional)</label>
                    <input type="url" value={noticeLink} onChange={e => setNoticeLink(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="https://..." />
                  </div>
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Live Until (Optional)</label>
+                   <input type="datetime-local" value={noticeDate} onChange={e => setNoticeDate(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" />
+                 </div>
                  <button onClick={saveNotice} disabled={savingAnnouncement} className="w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 transition-colors">
                    <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Publishing...' : 'Publish Notice'}
                  </button>
@@ -542,7 +591,10 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                            <p className="font-medium text-slate-900 dark:text-slate-100">{n.title}</p>
                            {n.description && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{n.description}</p>}
                          </div>
-                         <button onClick={() => deleteNotice(n.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
+                         <div className="flex gap-2 items-center">
+                            <button onClick={() => handleEditNotice(n)} className="text-sm text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">Edit</button>
+                            <button onClick={() => deleteNotice(n.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
+                         </div>
                        </li>
                      ))}
                    </ul>

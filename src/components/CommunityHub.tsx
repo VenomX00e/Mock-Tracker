@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, getDocs, collectionGroup } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { UserProfile, MockScore } from '../types';
-import { Trophy, Flame, Target, Users, Calendar, ArrowRight } from 'lucide-react';
-import { getHeatmapColor, getPlatformShort } from '../lib/utils';
+import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore } from 'lucide-react';
+import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 
 export default function CommunityHub({ 
   onCopyMock,
-  onUserClick
+  onUserClick,
+  isAdmin
 }: { 
   onCopyMock?: (mock: MockScore) => void;
   onUserClick?: (profile: any) => void;
+  isAdmin?: boolean;
 }) {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof UserProfile | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
   const [feedSort, setFeedSort] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: null, direction: null });
   const [feedLogs, setFeedLogs] = useState<any[]>([]);
   const [loadingTop, setLoadingTop] = useState(true);
@@ -22,14 +24,38 @@ export default function CommunityHub({
   const [daysVisible, setDaysVisible] = useState(1);
   const [userMap, setUserMap] = useState<Record<string, UserProfile>>({});
   const [reactions, setReactions] = useState<Record<string, { count: number, hasReacted: boolean }>>({});
+  const [showTrash, setShowTrash] = useState(false);
+  const [deletedMocks, setDeletedMocks] = useState<MockScore[]>([]);
+  
+  // Global sort config effect
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const d = await getDoc(doc(db, 'system', 'leaderboardSettings'));
+        if (d.exists()) {
+           const data = d.data();
+           if (data.defaultSortKey) {
+             setSortConfig({ key: data.defaultSortKey, direction: data.defaultSortDirection || 'desc' });
+           }
+        }
+      } catch(e) {}
+    };
+    fetchSettings();
+  }, []);
+
+  const handleAdminChangeGlobalSort = async (key: string) => {
+     if (!isAdmin) return;
+     const direction = 'desc'; // Assuming desc by default for simplicity when changing
+     setSortConfig({ key, direction });
+     try {
+       await setDoc(doc(db, 'system', 'leaderboardSettings'), { defaultSortKey: key, defaultSortDirection: direction }, { merge: true });
+     } catch (e) { console.error("Error saving global sort", e); }
+  };
 
   const handleReact = (e: React.MouseEvent, mockId: string) => {
     e.stopPropagation();
     setReactions(prev => {
-      // Simulate random initial count based on ID if not interacted with before
-      const hash = mockId.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-      const initialCount = hash % 4; // 0 to 3
-      const current = prev[mockId] || { count: initialCount, hasReacted: false };
+      const current = prev[mockId] || { count: 0, hasReacted: false };
       
       if (current.hasReacted) {
         return { ...prev, [mockId]: { count: Math.max(0, current.count - 1), hasReacted: false } };
@@ -37,6 +63,55 @@ export default function CommunityHub({
         return { ...prev, [mockId]: { count: current.count + 1, hasReacted: true } };
       }
     });
+  };
+
+  const handleAdminSoftDelete = async (e: React.MouseEvent, mock: MockScore) => {
+     e.stopPropagation();
+     if (!isAdmin || !mock.userId) return;
+     if (window.confirm('Hide this mock from the community feed?')) {
+        try {
+           // Optimistic UI updates
+           setFeedLogs(logs => {
+              return logs.map(day => ({
+                 ...day,
+                 mocks: day.mocks.filter((m: MockScore) => m.id !== mock.id)
+              })).filter(day => day.mocks.length > 0);
+           });
+           setDeletedMocks(prev => [mock, ...prev]);
+
+            await updateDoc(doc(db, 'users', mock.userId, 'mocks', mock.id), { isDeleted: true, updatedAt: serverTimestamp() });
+        } catch (err) {
+           console.error("Error soft deleting mock:", err);
+           if (err instanceof Error) {
+               alert("Failed to delete from database: " + err.message + ". It is hidden for this session.");
+           } else {
+               alert("Failed to delete from database. It is hidden for this session.");
+           }
+        }
+     }
+  };
+
+  const handleAdminRestore = async (mock: MockScore) => {
+     if (!isAdmin || !mock.userId) return;
+     try {
+        setDeletedMocks(prev => prev.filter(m => m.id !== mock.id));
+        await updateDoc(doc(db, 'users', mock.userId, 'mocks', mock.id), { isDeleted: false, updatedAt: serverTimestamp() });
+        window.location.reload();
+     } catch (err) {
+        console.error("Error restoring mock", err);
+     }
+  };
+
+  const handleAdminPermanentDelete = async (mock: MockScore) => {
+     if (!isAdmin) return;
+     if (window.confirm('Permanently delete this mock from the database? This cannot be undone.')) {
+        try {
+           await deleteDoc(doc(db, 'users', mock.userId, 'mocks', mock.id));
+           setDeletedMocks(prev => prev.filter(m => m.id !== mock.id));
+        } catch (err) {
+           console.error("Error permanently deleting mock", err);
+        }
+     }
   };
 
   // Fetch Leaderboard and Users
@@ -72,10 +147,25 @@ export default function CommunityHub({
         const q = query(collectionGroup(db, 'mocks'), orderBy('date', 'desc'), limit(200));
         const snap = await getDocs(q);
         
-        let mocks = snap.docs.map(d => d.data() as MockScore);
+        let mocks = snap.docs.map(d => {
+            const data = d.data() as MockScore;
+            if (!data.id) {
+                data.id = d.id;
+            }
+            if (!data.userId) {
+                data.userId = d.ref.parent.parent?.id;
+            }
+            return data;
+        });
         
-        // Filter out mocks from banned or muted users
+        // Setup deleted mocks separately for admin
+        if (isAdmin) {
+           setDeletedMocks(mocks.filter(m => (m as any).isDeleted === true));
+        }
+
+        // Filter out mocks from banned or muted users, and soft deleted mocks
         mocks = mocks.filter(m => {
+           if ((m as any).isDeleted) return false;
            const p = userMap[m.userId!];
            if (!p) return true;
            if (p.isBanned || p.isMuted) return false;
@@ -83,43 +173,58 @@ export default function CommunityHub({
         });
 
         // Group by Date -> ExamName -> Mocks (sorted by percentile)
-        const grouped: any = {};
         const profileToMocksMap: Record<string, MockScore[]> = {};
-        
         mocks.forEach(m => {
           if (!profileToMocksMap[m.userId!]) profileToMocksMap[m.userId!] = [];
           profileToMocksMap[m.userId!].push(m);
+        });
+        
+        // Dynamically calculate user active streak mapping for the feed to fix corrupt DB fields
+        const userDateToStreakMap: Record<string, number> = {};
+        for (const [userId, userMocks] of Object.entries(profileToMocksMap)) {
+           const midnights = [...new Set(userMocks.map(m => {
+              const d = parseLocalDate(m.date);
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+           }))].sort((a,b) => b - a);
            
-          const mockDate = new Date(m.date);
+           for (let idx = 0; idx < midnights.length; idx++) {
+               let streak = 1;
+               let currentDt = new Date(midnights[idx]);
+               for (let i = idx + 1; i < midnights.length; i++) {
+                  let prev = new Date(currentDt);
+                  prev.setDate(prev.getDate() - 1);
+                  if (midnights[i] === prev.getTime()) {
+                      streak++;
+                      currentDt = prev;
+                  } else {
+                      break;
+                  }
+               }
+               // key format: userId_Mon, Apr 20, 2026
+               const targetDt = new Date(midnights[idx]);
+               const dateStrKey = targetDt.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+               userDateToStreakMap[`${userId}_${dateStrKey}`] = streak;
+           }
+        }
+
+        const grouped: any = {};
+        mocks.forEach(m => {
+           
+          const mockDate = parseLocalDate(m.date);
           const dateStr = mockDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
           if (!grouped[dateStr]) grouped[dateStr] = {};
           if (!grouped[dateStr][m.mockName]) grouped[dateStr][m.mockName] = [];
           
           const profile = userMap[m.userId!] || {};
+          const key = m.userId + '_' + dateStr;
           
-          let calculatedStreak = m.streakAtTime;
-          if (calculatedStreak === undefined) {
-              calculatedStreak = profile.streak || 0;
-              if (profile.lastMockDate && profile.streak > 0) {
-                 const mockD = new Date(mockDate.getFullYear(), mockDate.getMonth(), mockDate.getDate());
-                 const lastD = new Date(new Date(profile.lastMockDate).getFullYear(), new Date(profile.lastMockDate).getMonth(), new Date(profile.lastMockDate).getDate());
-                 const daysDiff = Math.round((lastD.getTime() - mockD.getTime()) / (1000 * 3600 * 24));
-                 if (daysDiff >= 0 && daysDiff < profile.streak) {
-                    calculatedStreak = profile.streak - daysDiff;
-                 }
-              }
-          }
-          if (!calculatedStreak || calculatedStreak <= 0) {
-              calculatedStreak = 1;
-          }
-
           grouped[dateStr][m.mockName].push({
              ...m,
              userName: profile.displayName || (m as any).userName || 'Anonymous',
-             userStreak: calculatedStreak,
-             userStreakActive: profile.lastMockDate ? new Date(profile.lastMockDate).toDateString() === new Date().toDateString() : false,
+             userStreak: userDateToStreakMap[key] || 1,
+             userStreakActive: true, // Always active in feed since they posted a mock that day
              userPhoto: profile.photoURL || `https://ui-avatars.com/api/?name=${(m as any).userName || 'A'}`,
-             userProfileRef: { ...profile, todaysMocks: profileToMocksMap[m.userId!].filter(tm => new Date(tm.date).toDateString() === new Date().toDateString()) }
+             userProfileRef: { ...profile, todaysMocks: profileToMocksMap[m.userId!].filter(tm => parseLocalDate(tm.date).toDateString() === new Date().toDateString()) }
           });
         });
 
@@ -132,7 +237,7 @@ export default function CommunityHub({
             // Sort mocks inside exam by percentile desc
             const sortedMocks = examsObj[examName].sort((a: MockScore, b: MockScore) => b.percentile - a.percentile);
             // Calculate earliest time of this exam to sort exams later
-            const earliestTime = Math.min(...sortedMocks.map((m: MockScore) => new Date(m.date).getTime()));
+            const earliestTime = Math.min(...sortedMocks.map((m: MockScore) => parseLocalDate(m.date).getTime()));
             examsArray.push({ examName, mocks: sortedMocks, earliestTime });
           }
           // Sort exams by earliest time descending (recent first, meaning first exam of the day is last) 
@@ -153,7 +258,7 @@ export default function CommunityHub({
     fetchFeed();
   }, [daysVisible, userMap]);
 
-  const handleSort = (key: keyof UserProfile) => {
+  const handleSort = (key: string) => {
     if (sortConfig.key === key) {
       if (sortConfig.direction === 'desc') setSortConfig({ key, direction: 'asc' });
       else if (sortConfig.direction === 'asc') setSortConfig({ key: null, direction: null });
@@ -178,8 +283,8 @@ export default function CommunityHub({
 
   const sortedLeaderboard = [...allUsers].sort((a, b) => {
     if (!sortConfig.key || !sortConfig.direction) return 0;
-    const aVal = a[sortConfig.key] || 0;
-    const bVal = b[sortConfig.key] || 0;
+    const aVal = (a as any)[sortConfig.key] || 0;
+    const bVal = (b as any)[sortConfig.key] || 0;
     if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
     if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
     return 0;
@@ -190,9 +295,24 @@ export default function CommunityHub({
       {/* LEADERBOARD */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
-          </h3>
+          <div className="flex items-center gap-3">
+             <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+               <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
+             </h3>
+             {isAdmin && (
+                <div className="flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-3">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-400">Admin Default</span>
+                  <div className="w-[180px]">
+                    <CustomDropdown 
+                       value={sortConfig.key || ''}
+                       onChange={handleAdminChangeGlobalSort}
+                       options={['avgPercentile', 'avgAccuracy', 'totalTests', 'streak']}
+                       placeholder="Select default"
+                    />
+                  </div>
+                </div>
+             )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           {loadingTop ? (
@@ -212,7 +332,26 @@ export default function CommunityHub({
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {sortedLeaderboard.map((user, idx) => (
+                {sortedLeaderboard.map((user, idx) => {
+                  const now = new Date();
+                  let displayStreak = 0;
+                  let isToday = false;
+                  
+                  if (user.lastMockDate) {
+                     const todayDt = new Date();
+                     const today = new Date(todayDt.getFullYear(), todayDt.getMonth(), todayDt.getDate()).getTime();
+                     const d = parseLocalDate(user.lastMockDate);
+                     const lastMockDt = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+                     
+                     // 86400000 ms is one day
+                     const isYesterday = lastMockDt === today - 86400000;
+                     isToday = lastMockDt === today;
+                     
+                     const isZeroStreak = lastMockDt < today - 86400000;
+                     displayStreak = isZeroStreak ? 0 : (user.streak || 0);
+                  }
+                  
+                  return (
                   <tr key={user.userId} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="p-4 font-bold text-slate-400 dark:text-slate-500 text-center hidden sm:table-cell">#{idx + 1}</td>
                     <td className="p-4">
@@ -236,11 +375,11 @@ export default function CommunityHub({
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgReasoningPercentile)}`}>{user.avgReasoningPercentile}%</span></td>
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgEnglishPercentile)}`}>{user.avgEnglishPercentile}%</span></td>
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-300">{user.totalTests}</td>
-                    <td className={`p-4 text-center font-medium flex items-center justify-center gap-1 ${(user.lastMockDate && new Date(user.lastMockDate).toDateString() === new Date().toDateString()) ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                      <Flame className={`w-4 h-4 ${(user.lastMockDate && new Date(user.lastMockDate).toDateString() === new Date().toDateString()) ? '' : 'text-slate-300 dark:text-slate-600'}`} /> {user.streak}
+                    <td className={`p-4 text-center font-medium flex items-center justify-center gap-1 ${isToday ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                      <Flame className={`w-4 h-4 ${isToday ? '' : 'text-slate-300 dark:text-slate-600'}`} /> {displayStreak}
                     </td>
                   </tr>
-                ))}
+                )})}
                 {sortedLeaderboard.length === 0 && (
                   <tr>
                     <td colSpan={8} className="p-8 text-center text-slate-400 dark:text-slate-500">No data available yet.</td>
@@ -414,13 +553,13 @@ export default function CommunityHub({
                                     </div>
                                 </td>
                                 <td className="px-4 py-3 text-center align-middle">
-                                    <div className="flex justify-end pr-2">
+                                    <div className="flex justify-end items-center gap-2 pr-2">
                                       <button 
                                         className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-full transition-colors text-xs font-medium text-slate-700 dark:text-slate-300"
                                         onClick={(e) => handleReact(e, m.id)}
                                       >
                                         <span className="text-sm">🔥</span> 
-                                        <span>{reactions[m.id]?.count ?? (m.id.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0) % 4)}</span>
+                                        <span>{reactions[m.id]?.count ?? 0}</span>
                                       </button>
                                     </div>
                                 </td>
@@ -480,6 +619,68 @@ export default function CommunityHub({
           )}
         </div>
       </div>
+      
+      {showTrash && isAdmin && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-4xl shadow-xl flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-red-500" />
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Moderation Trash</h3>
+              </div>
+              <button 
+                onClick={() => setShowTrash(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+               {deletedMocks.length === 0 ? (
+                  <p className="text-center text-slate-500 py-8">No deleted mocks.</p>
+               ) : (
+                  <div className="space-y-3">
+                     {deletedMocks.map(m => {
+                        const user = userMap[m.userId!] || {};
+                        return (
+                          <div key={m.id} className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center p-4 border border-red-100 dark:border-red-900/30 rounded-xl bg-red-50/50 dark:bg-red-900/10">
+                            <div>
+                               <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-medium text-slate-800 dark:text-slate-200">{user.displayName || 'Unknown'}</span>
+                                  <span className="text-xs text-slate-500">{new Date(m.date).toLocaleDateString()}</span>
+                               </div>
+                               <div className="text-sm font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+                                  {m.examType} - {m.mockName} 
+                                  <span className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded shadow-sm flex gap-2">
+                                      <span>Score: {m.score}</span>
+                                      <span>{m.percentile}%ile</span>
+                                  </span>
+                               </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                               <button 
+                                 onClick={() => handleAdminRestore(m)}
+                                 className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded-lg transition-colors"
+                               >
+                                 Restore
+                               </button>
+                               <button 
+                                 onClick={() => handleAdminPermanentDelete(m)}
+                                 className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 rounded-lg transition-colors flex items-center gap-1.5"
+                               >
+                                 <Trash2 className="w-4 h-4" /> Purge
+                               </button>
+                            </div>
+                          </div>
+                        )
+                     })}
+                  </div>
+               )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

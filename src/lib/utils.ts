@@ -30,3 +30,14 @@ export const getPlatformShort = (platform?: string) => {
   
   return p.substring(0, 3).toUpperCase();
 };
+
+export function parseLocalDate(dateString: string): Date {
+  let d = new Date(dateString);
+  if (dateString && dateString.includes('-')) {
+    const parts = dateString.split('T')[0].split('-');
+    if (parts.length === 3) {
+      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+  }
+  return d;
+}

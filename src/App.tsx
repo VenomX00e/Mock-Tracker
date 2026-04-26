@@ -12,6 +12,7 @@ import { MockScore } from './types';
 import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key } from 'lucide-react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from './services/firebase';
+import AddLiveMockDialog from './components/AddLiveMockDialog';
 
 import { PublicProfileDialog } from './components/PublicProfileDialog';
 
@@ -28,6 +29,7 @@ export default function App() {
   // Admin & Announcement states
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+  const [isAddLiveMockOpen, setIsAddLiveMockOpen] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState(localStorage.getItem('geminiApiKey') || '');
 
   const [darkMode, setDarkMode] = useState(() => {
@@ -74,6 +76,7 @@ export default function App() {
           let mocks: any[] = [];
           snap.forEach(d => {
             const data = d.data();
+            if (data.date && new Date(data.date).getTime() < new Date().getTime()) return;
             if (data.type === 'notice') {
               activeNotices.push({ id: d.id, ...data });
             } else if (data.type === 'liveMock') {
@@ -339,8 +342,13 @@ export default function App() {
             {/* Live Mocks or Default Banner */}
             {liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
                <div>
-                 <div className="flex justify-between items-end mb-3">
-                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>
+                 <div className="flex justify-between items-center mb-3">
+                   <div className="flex items-center gap-2">
+                     <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>
+                     <button onClick={() => setIsAddLiveMockOpen(true)} className="p-1 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors" title="Host Live Mock">
+                       <Plus className="w-4 h-4" />
+                     </button>
+                   </div>
                    {dismissedLiveMocks.length > 0 && (
                      <button onClick={restoreLiveMocks} className="text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Show hidden Live Mocks</button>
                    )}
@@ -387,12 +395,18 @@ export default function App() {
              </div>
             ) : (
               <div className="mb-8 relative">
-                {dismissedLiveMocks.length > 0 && (
-                  <div className="flex justify-end mb-3">
-                    <button onClick={restoreLiveMocks} className="text-xs text-slate-500 hover:text-indigo-600 transition-colors">Show hidden Live Mocks</button>
-                  </div>
-                )}
-                <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white shadow-xl relative overflow-hidden">
+                 <div className="flex justify-between items-center mb-3">
+                   <div className="flex items-center gap-2">
+                     <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>
+                     <button onClick={() => setIsAddLiveMockOpen(true)} className="p-1 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors" title="Host Live Mock">
+                       <Plus className="w-4 h-4" />
+                     </button>
+                   </div>
+                   {dismissedLiveMocks.length > 0 && (
+                     <button onClick={restoreLiveMocks} className="text-xs text-slate-500 hover:text-indigo-600 transition-colors">Show hidden Live Mocks</button>
+                   )}
+                 </div>
+                 <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white shadow-xl relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10">
                     <DatabaseZap className="w-48 h-48" />
                   </div>
@@ -436,6 +450,7 @@ export default function App() {
                     <CommunityHub 
                        onCopyMock={handleCopyMock} 
                        onUserClick={(u) => setActivePublicProfile(u)}
+                       isAdmin={isAdmin}
                     />
                   )}
                 </>
@@ -486,6 +501,14 @@ export default function App() {
         <AdminDialog 
           isOpen={isAdminModalOpen}
           onClose={() => setIsAdminModalOpen(false)}
+        />
+      )}
+
+      {user && (
+        <AddLiveMockDialog
+           isOpen={isAddLiveMockOpen}
+           onClose={() => setIsAddLiveMockOpen(false)}
+           onSuccess={() => setIsAddLiveMockOpen(false)}
         />
       )}
 
