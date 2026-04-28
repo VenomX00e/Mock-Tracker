@@ -39,31 +39,43 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
 
   const parsed = await response.json();
   
+  const cleanStr = (val: any) => {
+    if (val === null || val === undefined || String(val).toLowerCase() === 'null' || String(val).toLowerCase() === 'none' || String(val).toLowerCase() === 'unknown') return "";
+    return String(val);
+  };
+
   return {
-    examType: parsed.examType || "Unknown Exam",
-    examRole: parsed.examRole || "",
-    examPhase: parsed.examPhase || "",
-    examScope: parsed.examScope || "",
-    mockName: parsed.mockName || "Unknown Mock",
+    examType: cleanStr(parsed.examType),
+    examRole: cleanStr(parsed.examRole),
+    examPhase: cleanStr(parsed.examPhase),
+    examScope: cleanStr(parsed.examScope),
+    mockName: cleanStr(parsed.mockName),
+    platform: cleanStr(parsed.platform),
+    detectedSubject: parsed.detectedSubject || null,
     date: parsed.date || new Date().toISOString().split('T')[0],
     score: parsed.score != null ? Number(parsed.score) : null,
     percentile: parsed.percentile != null ? Number(parsed.percentile) : null,
     percentage: parsed.percentage != null ? Number(parsed.percentage) : null,
+    accuracy: parsed.accuracy != null ? Number(parsed.accuracy) : null,
     quant: {
       score: parsed.quant?.score != null ? Number(parsed.quant.score) : null,
       percentile: parsed.quant?.percentile != null ? Number(parsed.quant.percentile) : null,
+      accuracy: parsed.quant?.accuracy != null ? Number(parsed.quant.accuracy) : null,
     },
     reasoning: {
       score: parsed.reasoning?.score != null ? Number(parsed.reasoning.score) : null,
       percentile: parsed.reasoning?.percentile != null ? Number(parsed.reasoning.percentile) : null,
+      accuracy: parsed.reasoning?.accuracy != null ? Number(parsed.reasoning.accuracy) : null,
     },
     english: {
       score: parsed.english?.score != null ? Number(parsed.english.score) : null,
       percentile: parsed.english?.percentile != null ? Number(parsed.english.percentile) : null,
+      accuracy: parsed.english?.accuracy != null ? Number(parsed.english.accuracy) : null,
     },
     ga: {
       score: parsed.ga?.score != null ? Number(parsed.ga.score) : null,
       percentile: parsed.ga?.percentile != null ? Number(parsed.ga.percentile) : null,
+      accuracy: parsed.ga?.accuracy != null ? Number(parsed.ga.accuracy) : null,
     }
-  };
+  } as any;
 }

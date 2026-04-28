@@ -25,11 +25,20 @@ const PRESET_AVATARS = [
   "https://api.dicebear.com/7.x/bottts/svg?seed=Koala&backgroundColor=c0aede",
   "https://api.dicebear.com/7.x/bottts/svg?seed=Monkey&backgroundColor=b6e3f4",
   "https://api.dicebear.com/7.x/bottts/svg?seed=Penguin&backgroundColor=d1d4f9",
-  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Cheetah&backgroundColor=ffdfbf",
-  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Eagle&backgroundColor=ffd5dc",
-  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Shark&backgroundColor=b6e3f4",
-  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Owl&backgroundColor=c0aede",
-  "https://api.dicebear.com/7.x/fun-emoji/svg?seed=Dolphin&backgroundColor=d1d4f9"
+  
+  // 5 Aspirants (People vector illustrations)
+  "https://api.dicebear.com/7.x/notionists/svg?seed=Study1&backgroundColor=fbe7c6",
+  "https://api.dicebear.com/7.x/notionists/svg?seed=Study2&backgroundColor=b4f8c8",
+  "https://api.dicebear.com/7.x/lorelei/svg?seed=Focus1&backgroundColor=a0e7e5",
+  "https://api.dicebear.com/7.x/lorelei-neutral/svg?seed=Focus2&backgroundColor=ffaebc",
+  "https://api.dicebear.com/7.x/micah/svg?seed=Success&backgroundColor=e2f0cb",
+  
+  // 5 Animals (Vector illustrations)
+  "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f98a.svg", // Fox
+  "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f981.svg", // Lion
+  "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f43a.svg", // Wolf
+  "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f43c.svg", // Panda
+  "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f43b.svg"  // Bear
 ];
 
 export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {

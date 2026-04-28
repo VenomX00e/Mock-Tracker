@@ -7,10 +7,12 @@ import {
   BarChart, Bar, Legend, ReferenceLine, LabelList,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame } from 'lucide-react';
+import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download } from 'lucide-react';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import * as ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 interface DashboardProps {
   mocks: MockScore[];
@@ -45,6 +47,65 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
   const [chartView, setChartView] = useState<'bar' | 'radar'>('bar');
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+
+  const handleExportExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Mock History');
+    
+    sheet.columns = [
+      { header: 'Date', key: 'date', width: 12 },
+      { header: 'Exam', key: 'exam', width: 25 },
+      { header: 'Platform', key: 'platform', width: 15 },
+      { header: 'Score', key: 'score', width: 10 },
+      { header: 'Percentile', key: 'percentile', width: 12 },
+      { header: 'Quant', key: 'quant', width: 10 },
+      { header: 'Quant %ile', key: 'quant_percentile', width: 12 },
+      { header: 'Reasoning', key: 'reasoning', width: 12 },
+      { header: 'Reasoning %ile', key: 'reasoning_percentile', width: 14 },
+      { header: 'English', key: 'english', width: 10 },
+      { header: 'English %ile', key: 'english_percentile', width: 12 },
+      { header: 'GA', key: 'ga', width: 10 },
+      { header: 'GA %ile', key: 'ga_percentile', width: 10 },
+      { header: 'Computer', key: 'computer', width: 10 },
+      { header: 'Comp %ile', key: 'computer_percentile', width: 10 },
+    ];
+
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }; // Indigo-600
+
+    displayedMocks.forEach(mock => {
+      const mockDate = parseLocalDate(mock.date);
+      const row = sheet.addRow({
+        date: mockDate.toLocaleDateString(),
+        exam: mock.mockName || `${mock.examType} ${mock.examRole} ${mock.examPhase}`,
+        platform: mock.platform,
+        score: mock.score,
+        percentile: mock.percentile,
+        quant: mock.quant.score,
+        quant_percentile: mock.quant.percentile || '-',
+        reasoning: mock.reasoning.score,
+        reasoning_percentile: mock.reasoning.percentile || '-',
+        english: mock.english.score,
+        english_percentile: mock.english.percentile || '-',
+        ga: mock.ga?.score ?? '-',
+        ga_percentile: mock.ga?.percentile ?? '-',
+        computer: mock.computer?.score ?? '-',
+        computer_percentile: mock.computer?.percentile ?? '-',
+      });
+
+      // Color coding percentile
+      const pCell = row.getCell('percentile');
+      if (mock.percentile >= 95) pCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } }; // emerald-500
+      else if (mock.percentile >= 90) pCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF34D399' } }; // emerald-400
+      else if (mock.percentile >= 80) pCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } }; // emerald-100
+
+      // Optional: Add some standard colors to score cells if desired, keeping it simple for now
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    saveAs(new Blob([buffer]), `mock_history_${nowStr}.xlsx`);
+  };
 
   const handleReflectionEditStart = (mock: MockScore) => {
     setActiveRowId(mock.id);
@@ -760,13 +821,22 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                 <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400 text-xs font-bold uppercase tracking-wider">{deletedMocks.length}</span>
               )}
             </h3>
-            <button
-              onClick={() => setShowRecycleBin(!showRecycleBin)}
-              className={`p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
-              title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
-            >
-              <Trash2 className="w-4 h-4" /> {/* <span className="hidden sm:inline">{showRecycleBin ? 'Close' : 'Recycle Bin'}</span> */}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExportExcel}
+                className="p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/50"
+                title="Download History as Excel"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowRecycleBin(!showRecycleBin)}
+                className={`p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+                title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-8">

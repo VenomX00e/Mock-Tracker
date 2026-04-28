@@ -46,8 +46,10 @@ export default function App() {
   }, [darkMode]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'community'>('dashboard');
   const [notices, setNotices] = useState<any[]>([]);
+  const [countdowns, setCountdowns] = useState<any[]>([]);
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]'));
+  const [now, setNow] = useState(new Date().getTime());
 
   const dismissLiveMock = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -72,17 +74,27 @@ export default function App() {
         try {
           const snap = await getDocs(query(collection(db, 'system')));
           let activeNotices: any[] = [];
+          let activeCountdowns: any[] = [];
           let mocks: any[] = [];
+          const now = new Date().getTime();
           snap.forEach(d => {
             const data = d.data();
-            if (data.date && new Date(data.date).getTime() < new Date().getTime()) return;
             if (data.type === 'notice') {
-              activeNotices.push({ id: d.id, ...data });
+                if (data.date && new Date(data.date).getTime() < now) return;
+                activeNotices.push({ id: d.id, ...data });
             } else if (data.type === 'liveMock') {
-              mocks.push({ id: d.id, ...data });
+                if (data.date && new Date(data.date).getTime() < now) return;
+                mocks.push({ id: d.id, ...data });
+            } else if (data.type === 'countdown') {
+                if (data.date && new Date(data.date).getTime() < now) return;
+                activeCountdowns.push({ id: d.id, ...data });
             }
           });
+          
+          activeCountdowns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          
           setNotices(activeNotices);
+          setCountdowns(activeCountdowns);
           setLiveMocks(mocks);
         } catch (e) {
           console.error(e);
@@ -94,6 +106,21 @@ export default function App() {
       return () => clearInterval(interval);
     }
   }, [user, isAdminModalOpen]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date().getTime());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getCountdownFormat = (targetDate: string) => {
+    const diff = new Date(targetDate).getTime() - now;
+    if (diff <= 0) return { days: 0, hours: 0 };
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    return { days, hours };
+  };
 
   const handleEditMock = (mock: MockScore) => {
     setMockToEdit(mock);
@@ -182,7 +209,7 @@ export default function App() {
                 <>
                   <div className="flex items-center gap-1 sm:gap-2 mr-1 sm:mr-2">
                     <button
-                      onClick={() => setActiveTab(activeTab === 'dashboard' ? 'community' : 'dashboard')}
+                      onClick={() => { setActiveTab(activeTab === 'dashboard' ? 'community' : 'dashboard'); window.scrollTo(0, 0); }}
                       className="px-2 sm:px-3 py-1.5 md:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700 w-9 sm:w-auto hover:bg-slate-200 dark:hover:bg-slate-700"
                       title={activeTab === 'dashboard' ? 'Community' : 'My Mocks'}
                     >
@@ -196,7 +223,7 @@ export default function App() {
                     {/* Desktop Tabs */}
                     <div className="hidden md:flex items-center gap-1.5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl relative">
                       <button
-                        onClick={() => setActiveTab('dashboard')}
+                        onClick={() => { setActiveTab('dashboard'); window.scrollTo(0, 0); }}
                         className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 ${
                           activeTab === 'dashboard' 
                             ? 'text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600' 
@@ -206,7 +233,7 @@ export default function App() {
                         <span className="relative z-10 block pointer-events-none">My Mocks</span>
                       </button>
                       <button
-                        onClick={() => setActiveTab('community')}
+                        onClick={() => { setActiveTab('community'); window.scrollTo(0, 0); }}
                         className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 ${
                           activeTab === 'community' 
                             ? 'text-purple-600 dark:text-purple-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600' 
@@ -290,6 +317,73 @@ export default function App() {
           </div>
         ) : (
           <>
+            {/* Countdowns */}
+            {activeTab === 'dashboard' && countdowns.length > 0 && (
+              <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {countdowns.map(c => {
+                  const { days, hours } = getCountdownFormat(c.date);
+                  
+                  const getThemeColors = (color: string) => {
+                     switch(color) {
+                       case 'green': return { bg: 'bg-emerald-50 dark:bg-emerald-900/10', border: 'border-emerald-200 dark:border-emerald-800/50', text: 'text-emerald-600 dark:text-emerald-400', label: 'text-emerald-400 dark:text-emerald-500', bar: 'bg-emerald-500', barBg: 'bg-emerald-200 dark:bg-emerald-900/50', pop: 'text-emerald-700 dark:text-emerald-300', note: 'text-emerald-600/80 dark:text-emerald-400/80' };
+                       case 'light-green': return { bg: 'bg-lime-50 dark:bg-lime-900/10', border: 'border-lime-200 dark:border-lime-800/50', text: 'text-lime-600 dark:text-lime-400', label: 'text-lime-500 dark:text-lime-600', bar: 'bg-lime-500', barBg: 'bg-lime-200 dark:bg-lime-900/50', pop: 'text-lime-700 dark:text-lime-300', note: 'text-lime-600/80 dark:text-lime-400/80' };
+                       case 'orange': return { bg: 'bg-orange-50 dark:bg-orange-900/10', border: 'border-orange-200 dark:border-orange-800/50', text: 'text-orange-600 dark:text-orange-400', label: 'text-orange-400 dark:text-orange-500', bar: 'bg-orange-500', barBg: 'bg-orange-200 dark:bg-orange-900/50', pop: 'text-orange-700 dark:text-orange-300', note: 'text-orange-600/80 dark:text-orange-400/80' };
+                       case 'light-red': return { bg: 'bg-rose-50 dark:bg-rose-900/10', border: 'border-rose-200 dark:border-rose-800/50', text: 'text-rose-500 dark:text-rose-400', label: 'text-rose-400 dark:text-rose-500', bar: 'bg-rose-400', barBg: 'bg-rose-200 dark:bg-rose-900/50', pop: 'text-rose-600 dark:text-rose-300', note: 'text-rose-500/80 dark:text-rose-400/80' };
+                       case 'red': return { bg: 'bg-red-50 dark:bg-red-900/10', border: 'border-red-200 dark:border-red-800/50', text: 'text-red-600 dark:text-red-400', label: 'text-red-400 dark:text-red-500', bar: 'bg-red-600', barBg: 'bg-red-200 dark:bg-red-900/50', pop: 'text-red-700 dark:text-red-400', note: 'text-red-600/80 dark:text-red-400/80' };
+                       default: return { bg: 'bg-emerald-50 dark:bg-emerald-900/10', border: 'border-emerald-200 dark:border-emerald-800/50', text: 'text-emerald-600 dark:text-emerald-400', label: 'text-emerald-400 dark:text-emerald-500', bar: 'bg-emerald-500', barBg: 'bg-emerald-200 dark:bg-emerald-900/50', pop: 'text-emerald-700 dark:text-emerald-300', note: 'text-emerald-600/80 dark:text-emerald-400/80' };
+                     }
+                  };
+                  
+                  const theme = getThemeColors(c.color || 'green');
+                  
+                  // Calculate progress
+                  const targetDate = new Date(c.date);
+                  const targetTime = targetDate.getTime();
+                  // Progress starts from Jan 1st of the target year
+                  const createdTime = new Date(targetDate.getFullYear(), 0, 1).getTime();
+                  const total = targetTime - createdTime;
+                  const remaining = targetTime - now;
+                  const progress = Math.max(0, Math.min(100, 100 - (remaining / total) * 100));
+
+                  return (
+                    <div key={c.id} className={`p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm`}>
+                      <div className="mb-3 relative z-10">
+                         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate`} style={{ fontSize: '26px', fontFamily: '"Times New Roman", Times, serif', fontStyle: 'normal', textDecoration: 'none' }} title={c.title}>{c.title}</h3>
+                      </div>
+                      
+                      <div className="flex flex-col relative z-10">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className={`text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider`}>IN</span>
+                          <div className="flex items-baseline gap-2">
+                            <div className="flex flex-col items-center">
+                              <span className={`text-2xl font-black ${theme.text} leading-none`}>{days}</span>
+                              <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Days</span>
+                            </div>
+                            <span className={`text-lg font-bold ${theme.label} opacity-50`}>:</span>
+                            <div className="flex flex-col items-center">
+                              <span className={`text-2xl font-black ${theme.text} leading-none`}>{hours}</span>
+                              <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Hrs</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Progress bar as divider */}
+                        <div className={`h-1.5 w-full rounded-full overflow-hidden mb-2 ${theme.barBg}`}>
+                          <div className={`h-full rounded-full ${theme.bar} transition-all duration-1000 ease-out`} style={{ width: `${progress}%` }} />
+                        </div>
+                      </div>
+                      
+                      <div className="h-4">
+                        {c.note && (
+                          <p className={`text-xs font-semibold italic truncate`} style={{ color: '#ed3838' }} title={c.note}>{c.note}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Notices */}
             {notices.map((n) => (
               <div key={n.id} className="mb-6 p-6 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
@@ -324,7 +418,7 @@ export default function App() {
             ))}
 
             {/* Live Mocks or Default Banner */}
-            {liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
+            {activeTab === 'dashboard' && (liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
                <div>
                  <div className="flex justify-between items-center mb-3">
                    <div className="flex items-center gap-2">
@@ -339,14 +433,14 @@ export default function App() {
                  </div>
                  <div className="mb-8 flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
                    {liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).map(liveMock => (
-                     <div key={liveMock.id} className="min-w-[300px] md:min-w-[400px] flex-shrink-0 p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-100 dark:border-indigo-800/30 shadow-sm relative overflow-hidden snap-start">
+                     <div key={liveMock.id} className="min-w-[280px] md:min-w-[320px] flex-shrink-0 p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-100 dark:border-indigo-800/30 shadow-sm relative overflow-hidden snap-start">
                        
-                       <button onClick={(e) => dismissLiveMock(liveMock.id, e)} className="absolute top-3 right-3 p-1.5 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 rounded-full text-indigo-400 dark:text-indigo-500 hover:text-rose-500 transition-colors z-20" title="Hide Live Mock">
-                         <X className="w-4 h-4" />
+                       <button onClick={(e) => dismissLiveMock(liveMock.id, e)} className="absolute top-2 right-2 p-1.5 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 rounded-full text-indigo-400 dark:text-indigo-500 hover:text-rose-500 transition-colors z-20" title="Hide Live Mock">
+                         <X className="w-3 h-3" />
                        </button>
 
-                       <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10">
-                         <Target className="w-24 h-24 text-indigo-900 dark:text-indigo-400" />
+                       <div className="absolute top-0 right-0 p-3 opacity-5 dark:opacity-10">
+                         <Target className="w-16 h-16 text-indigo-900 dark:text-indigo-400" />
                        </div>
                        <div className="relative z-10 flex flex-col h-full justify-between">
                        <div>
@@ -411,7 +505,7 @@ export default function App() {
                 </div>
               </div>
               </div>
-            )}
+            ))}
 
             <section className="w-full">
               {mocksLoading ? (

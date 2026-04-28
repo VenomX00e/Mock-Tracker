@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, addDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useAuth } from '../services/AuthContext';
 import { UserProfile, MockScore } from '../types';
-import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore } from 'lucide-react';
+import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore, Send, MessageSquare, Pencil, X } from 'lucide-react';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 
@@ -15,6 +16,7 @@ export default function CommunityHub({
   onUserClick?: (profile: any) => void;
   isAdmin?: boolean;
 }) {
+  const { user } = useAuth();
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
   const [feedSort, setFeedSort] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: null, direction: null });
@@ -26,6 +28,13 @@ export default function CommunityHub({
   const [reactions, setReactions] = useState<Record<string, { count: number, hasReacted: boolean }>>({});
   const [showTrash, setShowTrash] = useState(false);
   const [deletedMocks, setDeletedMocks] = useState<MockScore[]>([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string>('');
+  const [isSending, setIsSending] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   
   // Global sort config effect
   useEffect(() => {
@@ -111,6 +120,96 @@ export default function CommunityHub({
         } catch (err) {
            console.error("Error permanently deleting mock", err);
         }
+     }
+  };
+
+  useEffect(() => {
+    const timeLimit = Date.now() - 48 * 60 * 60 * 1000;
+    
+    // Cleanup old messages to save storage
+    const cleanupOldMessages = async () => {
+      if (!user) return;
+      try {
+        const oldMsgsQ = query(collection(db, 'community_chat'), where('createdAt', '<=', timeLimit));
+        const oldSnap = await getDocs(oldMsgsQ);
+        oldSnap.docs.forEach(d => {
+           if (isAdmin || d.data().userId === user.uid) {
+             deleteDoc(d.ref).catch(() => {});
+           }
+        });
+      } catch(e) {}
+    };
+    cleanupOldMessages();
+
+    const q = query(collection(db, 'community_chat'), where('createdAt', '>', timeLimit), orderBy('createdAt', 'asc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setChatMessages(messages);
+      setTimeout(() => {
+         const chatDiv = document.getElementById('community-chat-scroll');
+         if (chatDiv) {
+           chatDiv.scrollTo({ top: chatDiv.scrollHeight, behavior: 'smooth' });
+         }
+      }, 100);
+    }, (error) => {
+      console.warn("Chat subscription error:", error);
+    });
+    return () => unsubscribe();
+  }, [user, isAdmin]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !user || isSending) return;
+    
+    // Check limit
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const startOfDay = midnight.getTime();
+    const userMsgCount = chatMessages.filter(m => m.userId === user.uid && m.createdAt > startOfDay).length;
+    
+    if (userMsgCount >= 10 && !isAdmin && !editingMessageId) {
+      setChatError(`You have reached the limit of 10 messages today. Try again tomorrow!`);
+      setTimeout(() => setChatError(''), 4000);
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      if (editingMessageId) {
+        await updateDoc(doc(db, 'community_chat', editingMessageId), {
+          text: newMessage.trim(),
+          isEdited: true,
+          updatedAt: Date.now()
+        });
+        setEditingMessageId(null);
+        setNewMessage('');
+        setIsSending(false);
+        return;
+      }
+
+      await addDoc(collection(db, 'community_chat'), {
+        userId: user.uid,
+        userName: user.displayName || 'Anonymous',
+        userPhoto: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'A'}`,
+        text: newMessage.trim(),
+        createdAt: Date.now()
+      });
+      setNewMessage('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: string, authorId: string) => {
+     if (user?.uid !== authorId && !isAdmin) return;
+     try {
+        await deleteDoc(doc(db, 'community_chat', msgId));
+     } catch (err: any) { 
+        console.error(err);
+        setChatError(err.message || 'Failed to delete message');
+        setTimeout(() => setChatError(''), 3000);
      }
   };
 
@@ -310,7 +409,7 @@ export default function CommunityHub({
   });
 
   return (
-    <div className="space-y-8 mt-12 mb-12">
+    <div className="space-y-8 mt-6 lg:mt-8 mb-4">
       {/* LEADERBOARD */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
@@ -622,12 +721,12 @@ export default function CommunityHub({
               })()}
 
               {daysVisible < feedLogs.length && (
-                <div className="text-center pt-4">
+                <div className="text-center pt-0 pb-1 -mt-2 -mb-1">
                   <button 
-                    onClick={() => setDaysVisible(prev => prev + 5)}
-                    className="inline-flex items-center px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-sm font-medium text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    onClick={() => setDaysVisible(prev => prev + 3)}
+                    className="inline-flex items-center px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-sm font-medium text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
-                    View Next {Math.min(5, feedLogs.length - daysVisible)} Days <ArrowRight className="w-4 h-4 ml-1.5" />
+                    View Next {Math.min(3, feedLogs.length - daysVisible)} Days <ArrowRight className="w-4 h-4 ml-1.5" />
                   </button>
                 </div>
               )}
@@ -636,6 +735,110 @@ export default function CommunityHub({
               )}
             </div>
           )}
+        </div>
+      </div>
+      
+      {/* CHAT SECTION */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[450px]">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-indigo-500" /> Community Chat
+          </h3>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 px-2 py-1 rounded">Messages vanish after 48h</span>
+        </div>
+        <div id="community-chat-scroll" className="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar bg-slate-50/30 dark:bg-slate-900/30">
+          {chatMessages.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">Say hi to everyone!</div>
+          ) : (
+            chatMessages.map(msg => {
+              const uProfile = userMap[msg.userId] || {};
+              const displayName = msg.userId === user?.uid ? 'You' : (uProfile.displayName || msg.userName);
+              const photoURL = uProfile.photoURL || msg.userPhoto;
+              return (
+                <div 
+                  key={msg.id} 
+                  className={`flex gap-3 max-w-[85%] ${msg.userId === user?.uid ? 'ml-auto flex-row-reverse' : ''}`}
+                  onClick={() => setActiveMsgId(activeMsgId === msg.id ? null : msg.id)}
+                >
+                  <img src={photoURL} alt="" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover" />
+                  <div className={`flex flex-col gap-1 ${msg.userId === user?.uid ? 'items-end' : 'items-start'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{displayName}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className={`relative px-4 py-2 text-sm rounded-2xl group ${msg.userId === user?.uid ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-600 shadow-sm rounded-tl-sm'}`}>
+                      {msg.text}
+                      {msg.isEdited && <span className="text-[10px] opacity-70 ml-2">(edited)</span>}
+                      {(msg.userId === user?.uid || isAdmin) && (
+                        <div className={`absolute top-1/2 -translate-y-1/2 transition-opacity flex items-center gap-1.5 z-10 ${activeMsgId === msg.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'} ${msg.userId === user?.uid ? '-left-[4.5rem]' : '-right-[4.5rem]'}`}>
+                         {msg.userId === user?.uid && (
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setEditingMessageId(msg.id); 
+                                setNewMessage(msg.text); 
+                                setActiveMsgId(null);
+                              }} 
+                              className={`p-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full shadow-sm hover:scale-110`} 
+                              title="Edit message"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                         )}
+                         <button 
+                           onClick={(e) => { 
+                              e.stopPropagation(); 
+                              handleDeleteMessage(msg.id, msg.userId); 
+                              setActiveMsgId(null);
+                           }} 
+                           className={`p-1.5 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full shadow-sm hover:scale-110`} 
+                           title="Delete message"
+                         >
+                           <Trash2 className="w-3.5 h-3.5" />
+                         </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+          )}
+          <div ref={chatBottomRef} />
+        </div>
+        <div className="relative">
+          {chatError && (
+             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-red-100 dark:bg-red-900/90 text-red-600 dark:text-red-200 px-4 py-2 rounded-lg text-sm font-medium z-10 whitespace-nowrap shadow-md">
+               {chatError}
+             </div>
+          )}
+          <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex gap-2">
+            {editingMessageId && (
+               <button type="button" onClick={() => { setEditingMessageId(null); setNewMessage(''); }} className="p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                 <X className="w-5 h-5" />
+               </button>
+            )}
+            <input 
+              type="text" 
+              autoComplete="off"
+              spellCheck="false"
+              name="chatMsg"
+              id="chatMsg"
+              maxLength={2000}
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              placeholder={editingMessageId ? "Edit message..." : (user ? "Type a message..." : "Sign in to chat")}
+              disabled={!user || isSending}
+              className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 text-slate-800 dark:text-slate-200"
+            />
+            <button 
+              type="submit" 
+              disabled={!user || !newMessage.trim() || isSending}
+              className="p-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors disabled:opacity-50 disabled:hover:bg-indigo-600"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </form>
         </div>
       </div>
       

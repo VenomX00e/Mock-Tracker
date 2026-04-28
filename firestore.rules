@@ -83,6 +83,16 @@ service cloud.firestore {
         && (!data.keys().hasAny(['role']) || data.role is string);
     }
 
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['userId', 'userName', 'userPhoto', 'text', 'createdAt'])
+        && data.keys().size() == 5
+        && data.userId is string && data.userId == request.auth.uid
+        && data.userName is string && data.userName.size() <= 100
+        && data.userPhoto is string && data.userPhoto.size() <= 500
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.createdAt is number;
+    }
+
     match /system/{docId} {
       allow read: if isSignedIn();
       allow create: if isAdminUser() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
@@ -92,6 +102,14 @@ service cloud.firestore {
 
     match /test/{docId} {
       allow read: if true;
+    }
+
+    match /community_chat/{messageId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidChatMessage(incoming());
+      allow update: if isAdminUser() || (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isEdited', 'updatedAt']) && incoming().text is string && incoming().text.size() > 0 && incoming().text.size() <= 2000);
+      allow delete: if isAdminUser() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     match /users/{userId} {

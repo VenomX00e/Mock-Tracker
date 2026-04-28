@@ -71,6 +71,19 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "userId", "examType", "mockName", "date", "score", "percentile", "percentage", "quant", "reasoning", "english", "ga"]
+    },
+    "CommunityChat": {
+      "title": "CommunityChat",
+      "description": "Messages sent by users in the community hub",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "userName", "userPhoto", "text", "createdAt"]
     }
   },
   "firestore": {
@@ -81,6 +94,10 @@
     "users/{userId}/mocks/{mockId}": {
       "schema": { "$ref": "#/entities/MockScore" },
       "description": "Mock scores specific to a user."
+    },
+    "community_chat/{messageId}": {
+      "schema": { "$ref": "#/entities/CommunityChat" },
+      "description": "Community chat messages"
     }
   }
 }

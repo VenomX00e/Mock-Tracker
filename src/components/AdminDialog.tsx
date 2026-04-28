@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { UserProfile } from '../types';
-import { Shield, UserX, UserCheck, MessageSquareOff, MessageSquare, AlertCircle, Save, X, Radio, FileText, Users, Calendar } from 'lucide-react';
+import { Shield, UserX, UserCheck, MessageSquareOff, MessageSquare, AlertCircle, Save, X, Radio, FileText, Users, Calendar, Timer } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from '../lib/constants';
 import { parseMockAnnouncementImage } from '../services/geminiService';
@@ -16,7 +16,7 @@ import { useAuth } from '../services/AuthContext';
 
 export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown'>('users');
   const [bannedUsers, setBannedUsers] = useState<UserProfile[]>([]);
   const [mutedUsers, setMutedUsers] = useState<UserProfile[]>([]);
   const [allAppUsers, setAllAppUsers] = useState<UserProfile[]>([]);
@@ -30,6 +30,13 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   const [noticeLink, setNoticeLink] = useState('');
   const [noticeDate, setNoticeDate] = useState('');
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+
+  // Countdown inputs
+  const [countdownTitle, setCountdownTitle] = useState('');
+  const [countdownDate, setCountdownDate] = useState('');
+  const [countdownNote, setCountdownNote] = useState('');
+  const [countdownColor, setCountdownColor] = useState('green');
+  const [editingCountdownId, setEditingCountdownId] = useState<string | null>(null);
   
   // Custom states for Live Mock
   const [isCustomExam, setIsCustomExam] = useState(false);
@@ -74,24 +81,28 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   };
 
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
-
   const [notices, setNotices] = useState<any[]>([]);
+  const [countdowns, setCountdowns] = useState<any[]>([]);
 
   const fetchAnnouncement = async () => {
     try {
       const snap = await getDocs(query(collection(db, 'system')));
       const tempMocks: any[] = [];
       const tempNotices: any[] = [];
+      const tempCountdowns: any[] = [];
       snap.forEach(d => {
         const data = d.data();
         if (data.type === 'notice') {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === 'liveMock') {
           tempMocks.push({ id: d.id, ...data });
+        } else if (data.type === 'countdown') {
+          tempCountdowns.push({ id: d.id, ...data });
         }
       });
       setLiveMocks(tempMocks);
       setNotices(tempNotices);
+      setCountdowns(tempCountdowns);
     } catch (error) {
       console.error(error);
     }
@@ -195,6 +206,60 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
     }
   };
 
+  const saveCountdown = async () => {
+    setSavingAnnouncement(true);
+    try {
+      if (!countdownTitle || !countdownDate) {
+        alert("Countdown title and date are required");
+        setSavingAnnouncement(false);
+        return;
+      }
+      const newId = editingCountdownId || `countdown_${Date.now()}`;
+      const payload: any = {
+        type: 'countdown',
+        title: countdownTitle,
+        date: countdownDate,
+        note: countdownNote || '',
+        color: countdownColor,
+        updatedAt: new Date().toISOString()
+      };
+      if (!editingCountdownId) {
+        payload.createdAt = new Date().toISOString();
+      }
+      await setDoc(doc(db, 'system', newId), payload, { merge: !!editingCountdownId });
+      alert(editingCountdownId ? "Countdown updated successfully" : "Countdown saved successfully");
+      setEditingCountdownId(null);
+      setCountdownTitle('');
+      setCountdownDate('');
+      setCountdownNote('');
+      setCountdownColor('green');
+      fetchAnnouncement();
+    } catch (error) {
+      console.error("Error saving countdown", error);
+      alert("Failed to save countdown");
+    }
+    setSavingAnnouncement(false);
+  };
+
+  const handleEditCountdown = (c: any) => {
+    setEditingCountdownId(c.id);
+    setCountdownTitle(c.title || '');
+    setCountdownDate(c.date || '');
+    setCountdownNote(c.note || '');
+    setCountdownColor(c.color || 'green');
+  };
+
+  const deleteCountdown = async (id: string) => {
+    try {
+      const { deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, 'system', id));
+      fetchAnnouncement();
+    } catch(e) {
+      console.error(e);
+      alert("Failed to delete countdown");
+    }
+  };
+
   const deleteNotice = async (id: string) => {
     try {
       const { deleteDoc } = await import('firebase/firestore');
@@ -292,6 +357,12 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'notice' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <FileText className="w-4 h-4" /> Notice
+            </button>
+            <button 
+              onClick={() => setActiveTab('countdown')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'countdown' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
+            >
+              <Timer className="w-4 h-4" /> Countdowns
             </button>
           </div>
         </div>
@@ -545,6 +616,61 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                          <div className="flex gap-2 items-center">
                             <button onClick={() => handleEditLiveMock(m)} className="text-sm text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">Edit</button>
                             <button onClick={() => deleteLiveMock(m.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
+                         </div>
+                       </li>
+                     ))}
+                   </ul>
+                 </div>
+               )}
+            </div>
+          )}
+
+          {activeTab === 'countdown' && (
+            <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                 <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Timer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Manage Countdowns</h3>
+               </div>
+              <div className="space-y-4">
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Exam / Event Name</label>
+                   <input type="text" autoComplete="off" spellCheck="false" value={countdownTitle} onChange={e => setCountdownTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. IBPS PO Prelims" />
+                 </div>
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date & Time</label>
+                   <input type="datetime-local" value={countdownDate} onChange={e => setCountdownDate(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" />
+                 </div>
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Short Note (Optional)</label>
+                   <input type="text" autoComplete="off" spellCheck="false" value={countdownNote} onChange={e => setCountdownNote(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Admit cards out soon!" />
+                 </div>
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Theme Color</label>
+                   <select value={countdownColor} onChange={e => setCountdownColor(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200">
+                     <option value="green">Green</option>
+                     <option value="light-green">Light Green</option>
+                     <option value="orange">Orange</option>
+                     <option value="light-red">Light Red</option>
+                     <option value="red">Red</option>
+                   </select>
+                 </div>
+                 <button onClick={saveCountdown} disabled={savingAnnouncement} className="w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 transition-colors">
+                   <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Saving...' : 'Save Countdown'}
+                 </button>
+              </div>
+
+               {countdowns.length > 0 && (
+                 <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                   <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">Active Countdowns</h4>
+                   <ul className="space-y-3">
+                     {countdowns.map(c => (
+                       <li key={c.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl flex items-center justify-between">
+                         <div>
+                           <p className="font-medium text-slate-900 dark:text-slate-100">{c.title}</p>
+                           <p className="text-sm text-slate-500 dark:text-slate-400">{new Date(c.date).toLocaleString()} {c.note && `- ${c.note}`}</p>
+                         </div>
+                         <div className="flex gap-2 items-center">
+                            <button onClick={() => handleEditCountdown(c)} className="text-sm text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">Edit</button>
+                            <button onClick={() => deleteCountdown(c.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"><X className="w-4 h-4" /></button>
                          </div>
                        </li>
                      ))}
