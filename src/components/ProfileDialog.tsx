@@ -47,6 +47,7 @@ export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
   const [displayName, setDisplayName] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   const [targetedExam, setTargetedExam] = useState('');
+  const [isCustomExam, setIsCustomExam] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingAvatar, setIsPickingAvatar] = useState(false);
 
@@ -55,6 +56,7 @@ export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
       setDisplayName(profile.displayName || '');
       setPhotoURL(profile.photoURL || '');
       setTargetedExam(profile.targetedExam || 'SBI PO');
+      setIsCustomExam(profile.targetedExam ? !['', ...exams].includes(profile.targetedExam) : false);
     }
   }, [profile]);
 
@@ -170,12 +172,39 @@ export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                     <Target className="w-4 h-4 text-slate-400" /> Targeted Exam
                   </label>
-                  <CustomDropdown
-                    value={targetedExam}
-                    onChange={setTargetedExam}
-                    options={exams}
-                    placeholder="Select targeted exam"
-                  />
+                  {!isCustomExam ? (
+                    <CustomDropdown
+                      value={targetedExam}
+                      onChange={(val) => {
+                        if (val === 'Other') {
+                          setIsCustomExam(true);
+                          setTargetedExam('');
+                        } else {
+                          setTargetedExam(val);
+                        }
+                      }}
+                      options={exams}
+                      placeholder="Select targeted exam"
+                      allowCustom={true}
+                    />
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={targetedExam}
+                        onChange={(e) => setTargetedExam(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm outline-none pr-10"
+                        placeholder="Enter targeted exam"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => { setIsCustomExam(false); setTargetedExam('SBI PO'); }} 
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-6 flex gap-3">

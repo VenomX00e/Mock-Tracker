@@ -191,7 +191,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-16 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-[45px] pl-[0px] transition-colors duration-200">
       <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -210,7 +210,7 @@ export default function App() {
                   <div className="flex items-center gap-1 sm:gap-2 mr-1 sm:mr-2">
                     <button
                       onClick={() => { setActiveTab(activeTab === 'dashboard' ? 'community' : 'dashboard'); window.scrollTo(0, 0); }}
-                      className="px-2 sm:px-3 py-1.5 md:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700 w-9 sm:w-auto hover:bg-slate-200 dark:hover:bg-slate-700"
+                      className="px-2 sm:px-3 py-1.5 lg:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700 w-9 sm:w-auto hover:bg-slate-200 dark:hover:bg-slate-700"
                       title={activeTab === 'dashboard' ? 'Community' : 'My Mocks'}
                     >
                       {activeTab === 'dashboard' ? (
@@ -221,7 +221,7 @@ export default function App() {
                     </button>
 
                     {/* Desktop Tabs */}
-                    <div className="hidden md:flex items-center gap-1.5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl relative">
+                    <div className="hidden lg:flex items-center gap-1.5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl relative">
                       <button
                         onClick={() => { setActiveTab('dashboard'); window.scrollTo(0, 0); }}
                         className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 ${
@@ -247,10 +247,10 @@ export default function App() {
 
                   <button
                     onClick={() => setIsAddModalOpen(true)}
-                    className="inline-flex items-center justify-center p-2 md:px-4 text-sm font-medium text-white transition-all bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-700 hover:to-indigo-700 shadow-sm shadow-blue-500/20"
+                    className="inline-flex items-center justify-center p-2 lg:px-4 text-sm font-medium text-white transition-all bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:from-blue-700 hover:to-indigo-700 shadow-sm shadow-blue-500/20"
                   >
-                    <Plus className="w-4 h-4 md:mr-1.5" />
-                    <span className="hidden md:inline">Add Mock</span>
+                    <Plus className="w-4 h-4 lg:mr-1.5" />
+                    <span className="hidden lg:inline">Add Mock</span>
                   </button>
 
                   <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-0.5 md:mx-1 hidden sm:block"></div>
@@ -294,7 +294,7 @@ export default function App() {
       </header>
 
       {/* Main Layout */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <main className="max-w-7xl mx-auto px-[15px] sm:px-6 lg:px-8 py-8 pt-[25px] w-full">
         {!user ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-2xl mx-auto px-4">
              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-8 text-blue-600 shadow-inner">
@@ -319,7 +319,7 @@ export default function App() {
           <>
             {/* Countdowns */}
             {activeTab === 'dashboard' && countdowns.length > 0 && (
-              <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              <div className="mb-6 flex gap-3 overflow-x-auto pb-4 custom-scrollbar snap-x">
                 {countdowns.map(c => {
                   const { days, hours } = getCountdownFormat(c.date);
                   
@@ -346,7 +346,7 @@ export default function App() {
                   const progress = Math.max(0, Math.min(100, 100 - (remaining / total) * 100));
 
                   return (
-                    <div key={c.id} className={`p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm`}>
+                    <div key={c.id} className={`flex-shrink-0 w-[155px] xs:w-[180px] md:w-[240px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start`}>
                       <div className="mb-3 relative z-10">
                          <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate`} style={{ fontSize: '26px', fontFamily: '"Times New Roman", Times, serif', fontStyle: 'normal', textDecoration: 'none' }} title={c.title}>{c.title}</h3>
                       </div>
@@ -386,7 +386,7 @@ export default function App() {
 
             {/* Notices */}
             {notices.map((n) => (
-              <div key={n.id} className="mb-6 p-6 rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
+              <div key={n.id} className="mb-[10px] p-[12px] rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10">
                   <Megaphone className="w-32 h-32 text-amber-900 dark:text-amber-500" />
                 </div>
@@ -397,20 +397,22 @@ export default function App() {
                       <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{n.title}</h2>
                     </div>
                     {n.description && (
-                      <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
+                      <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
                         {n.description}
                       </p>
                     )}
                   </div>
                   {n.link && (
                     <div className="flex-shrink-0">
-                      <button
-                        onClick={() => window.open(n.link, '_blank')}
+                      <a
+                        href={n.link}
+                        target="_blank"
+                        rel="noreferrer"
                         className="inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-amber-900 transition-all bg-amber-200 rounded-xl hover:bg-amber-300 hover:shadow-md"
                       >
                         View Details
                         <ArrowRight className="w-4 h-4 ml-2" />
-                      </button>
+                      </a>
                     </div>
                   )}
                 </div>
@@ -419,7 +421,7 @@ export default function App() {
 
             {/* Live Mocks or Default Banner */}
             {activeTab === 'dashboard' && (liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
-               <div>
+               <div className="mb-[10px] pt-[12px] px-[12px] pb-[2px]">
                  <div className="flex justify-between items-center mb-3">
                    <div className="flex items-center gap-2">
                      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>
@@ -472,7 +474,7 @@ export default function App() {
                </div>
              </div>
             ) : (
-              <div className="mb-8 relative">
+              <div className="relative mb-[10px] pt-[12px] px-[12px] pb-[2px]">
                  <div className="flex justify-between items-center mb-3">
                    <div className="flex items-center gap-2">
                      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>

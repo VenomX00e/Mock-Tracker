@@ -770,7 +770,7 @@ export default function CommunityHub({
                       {msg.text}
                       {msg.isEdited && <span className="text-[10px] opacity-70 ml-2">(edited)</span>}
                       {(msg.userId === user?.uid || isAdmin) && (
-                        <div className={`absolute top-1/2 -translate-y-1/2 transition-opacity flex items-center gap-1.5 z-10 ${activeMsgId === msg.id ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'} ${msg.userId === user?.uid ? '-left-[4.5rem]' : '-right-[4.5rem]'}`}>
+                        <div className={`absolute top-1/2 -translate-y-1/2 transition-opacity flex items-center gap-1.5 z-10 ${activeMsgId === msg.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'} ${msg.userId === user?.uid ? '-left-[4.5rem]' : '-right-[4.5rem]'}`}>
                          {msg.userId === user?.uid && (
                             <button 
                               onClick={(e) => { 
@@ -819,8 +819,8 @@ export default function CommunityHub({
                </button>
             )}
             <input 
-              type="text" 
-              autoComplete="off"
+              type="search" 
+              autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="x-dummy"
               spellCheck="false"
               name="chatMsg"
               id="chatMsg"

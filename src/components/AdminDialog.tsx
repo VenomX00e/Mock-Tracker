@@ -516,7 +516,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                         />
                       ) : (
                         <div className="relative">
-                          <input type="text" value={liveMockData.examType} onChange={e => setLiveMockData(p => ({ ...p, examType: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Exam" autoFocus />
+                          <input type="search" value={liveMockData.examType} onChange={e => setLiveMockData(p => ({ ...p, examType: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Exam" autoFocus />
                           <button type="button" onClick={() => setIsCustomExam(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                         </div>
                       )}
@@ -533,7 +533,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                         />
                       ) : (
                         <div className="relative">
-                          <input type="text" value={liveMockData.examRole} onChange={e => setLiveMockData(p => ({ ...p, examRole: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Role" autoFocus />
+                          <input type="search" value={liveMockData.examRole} onChange={e => setLiveMockData(p => ({ ...p, examRole: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Role" autoFocus />
                           <button type="button" onClick={() => setIsCustomRole(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                         </div>
                       )}
@@ -554,7 +554,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                         />
                       ) : (
                         <div className="relative">
-                          <input type="text" value={liveMockData.examPhase} onChange={e => setLiveMockData(p => ({ ...p, examPhase: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Phase" autoFocus />
+                          <input type="search" value={liveMockData.examPhase} onChange={e => setLiveMockData(p => ({ ...p, examPhase: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm" placeholder="Custom Phase" autoFocus />
                           <button type="button" onClick={() => setIsCustomPhase(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                         </div>
                       )}
@@ -571,7 +571,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mock Name</label>
-                    <input type="text" value={liveMockData.mockName} onChange={e => setLiveMockData(p => ({ ...p, mockName: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Test 1" />
+                    <input type="search" value={liveMockData.mockName} onChange={e => setLiveMockData(p => ({ ...p, mockName: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Test 1" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Platform</label>
@@ -588,7 +588,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                       />
                     ) : (
                       <div className="relative">
-                        <input type="text" value={liveMockData.platform} onChange={e => setLiveMockData(p => ({ ...p, platform: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Custom Platform" autoFocus />
+                        <input type="search" value={liveMockData.platform} onChange={e => setLiveMockData(p => ({ ...p, platform: e.target.value }))} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 pr-8 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:outline-none text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Custom Platform" autoFocus />
                         <button type="button" onClick={() => setIsCustomPlatform(false)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:hover:text-slate-200"><X className="w-4 h-4"/></button>
                       </div>
                     )}
@@ -633,7 +633,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
               <div className="space-y-4">
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Exam / Event Name</label>
-                   <input type="text" autoComplete="off" spellCheck="false" value={countdownTitle} onChange={e => setCountdownTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. IBPS PO Prelims" />
+                   <input type="search" autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="x-dummy" spellCheck="false" value={countdownTitle} onChange={e => setCountdownTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. IBPS PO Prelims" />
                  </div>
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date & Time</label>
@@ -641,17 +641,25 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                  </div>
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Short Note (Optional)</label>
-                   <input type="text" autoComplete="off" spellCheck="false" value={countdownNote} onChange={e => setCountdownNote(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Admit cards out soon!" />
+                   <input type="search" autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="x-dummy" spellCheck="false" value={countdownNote} onChange={e => setCountdownNote(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Admit cards out soon!" />
                  </div>
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Theme Color</label>
-                   <select value={countdownColor} onChange={e => setCountdownColor(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200">
-                     <option value="green">Green</option>
-                     <option value="light-green">Light Green</option>
-                     <option value="orange">Orange</option>
-                     <option value="light-red">Light Red</option>
-                     <option value="red">Red</option>
-                   </select>
+                   <CustomDropdown
+                     value={countdownColor === 'green' ? 'Green' : 
+                            countdownColor === 'light-green' ? 'Light Green' :
+                            countdownColor === 'orange' ? 'Orange' :
+                            countdownColor === 'light-red' ? 'Light Red' :
+                            countdownColor === 'red' ? 'Red' : 'Green'}
+                     options={['Green', 'Light Green', 'Orange', 'Light Red', 'Red']}
+                     placeholder="Select Theme Color"
+                     onChange={(val) => {
+                       const mapped = val === 'Light Green' ? 'light-green' :
+                                      val === 'Light Red' ? 'light-red' :
+                                      val.toLowerCase();
+                       setCountdownColor(mapped);
+                     }}
+                   />
                  </div>
                  <button onClick={saveCountdown} disabled={savingAnnouncement} className="w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 transition-colors">
                    <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Saving...' : 'Save Countdown'}
@@ -688,7 +696,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
               <div className="space-y-4">
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Title</label>
-                   <input type="text" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Server Maintenance" />
+                   <input type="search" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Server Maintenance" />
                  </div>
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
@@ -715,7 +723,7 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                        <li key={n.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl flex items-center justify-between">
                          <div>
                            <p className="font-medium text-slate-900 dark:text-slate-100">{n.title}</p>
-                           {n.description && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{n.description}</p>}
+                           {n.description && <p className="text-sm text-slate-500 dark:text-slate-400 whitespace-pre-wrap">{n.description}</p>}
                          </div>
                          <div className="flex gap-2 items-center">
                             <button onClick={() => handleEditNotice(n)} className="text-sm text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium">Edit</button>

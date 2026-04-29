@@ -417,7 +417,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     );
   };
 
-  if (mocks.length === 0) {
+  if (mocks.length === 0 && deletedMocks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-400 dark:text-slate-500">
@@ -429,10 +429,30 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     );
   }
 
+  if (mocks.length === 0 && deletedMocks.length > 0 && !showRecycleBin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center relative">
+        <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-400 dark:text-slate-500">
+          <Target className="w-10 h-10" />
+        </div>
+        <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">No mocks added yet</h2>
+        <p className="text-slate-500 dark:text-slate-400 max-w-md">Click the "Add Mock" button above to upload a scorecard image and start tracking your progress.</p>
+        
+        <button 
+           onClick={() => setShowRecycleBin(true)}
+           className="mt-8 flex items-center gap-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 px-4 py-2 rounded-xl transition-colors font-medium border border-rose-100 dark:border-rose-900/50"
+        >
+           <Trash2 className="w-4 h-4" /> Open Recycle Bin ({deletedMocks.length})
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Tabs */}
-      <div className="flex overflow-x-auto pb-4 gap-2 custom-scrollbar">
+      {mocks.length > 0 && (
+      <div className="flex overflow-x-auto mb-[6px] pb-[12px] gap-2 custom-scrollbar">
         <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-2xl items-center flex-nowrap w-max border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-md shadow-sm relative">
           {examTypes.map(type => (
             <button
@@ -456,6 +476,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
           ))}
         </div>
       </div>
+      )}
 
       {selectedExam !== 'Overview' && (availableRoles.length > 1 || availablePhases.length > 1 || availableScopes.length > 1) && (
         <div className="flex flex-col gap-4 mb-6 bg-slate-50/80 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-sm">
@@ -655,8 +676,8 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
                     <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Breakdown
                  </h3>
-                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50">
-                    <button onClick={() => setChartView('bar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Bar</button>
+                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50 mt-[-12px] mb-[-4px]">
+                    <button onClick={() => setChartView('bar')} className={`pl-[16px] pr-3 py-1 ml-[0px] mt-[-6px] mb-[-6px] text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Bar</button>
                     <button onClick={() => setChartView('radar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'radar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Radar</button>
                  </div>
               </div>
@@ -728,6 +749,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100">Smart Insights</h3>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Beta</span>
           </div>
+
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
              {(() => {
@@ -814,8 +836,11 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
              })()}
           </div>
 
-          <div className="flex justify-between items-center mt-12 mb-6">
-            <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2">
+        </>
+      )}
+
+      <div className="flex justify-between items-center mt-12 mb-6">
+        <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2">
               {showRecycleBin ? 'Recycle Bin' : 'History Log'}
               {showRecycleBin && deletedMocks.length > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400 text-xs font-bold uppercase tracking-wider">{deletedMocks.length}</span>
@@ -1146,8 +1171,6 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-100 dark:bg-amber-900/50 ring-1 ring-amber-500/20 dark:ring-amber-500/50"></div> 70-80%ile</div>
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-rose-100 dark:bg-rose-900/50 ring-1 ring-rose-500/20 dark:ring-rose-500/50"></div> &lt;70%ile</div>
           </div>
-        </>
-      )}
     </div>
   );
 }
