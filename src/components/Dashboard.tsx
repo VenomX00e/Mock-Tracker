@@ -694,16 +694,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                           <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                           
                           {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="quant.score" content={renderCustomBarLabel} />
                           </Bar>}
                           {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="reasoning.score" content={renderCustomBarLabel} />
                           </Bar>}
                           {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="english.score" content={renderCustomBarLabel} />
                           </Bar>}
                           {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="ga.score" content={renderCustomBarLabel} />
                           </Bar>}
                         </BarChart>
                       </ResponsiveContainer>

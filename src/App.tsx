@@ -199,8 +199,8 @@ export default function App() {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-base sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors">
-                MockTracker <span className="text-[10px] sm:text-xs font-normal text-slate-500 dark:text-slate-400 ml-1 hidden sm:inline">by Joy</span>
+              <h1 className="text-[21px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors">
+                MockTracker <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400 ml-1">by Joy</span>
               </h1>
             </div>
             
