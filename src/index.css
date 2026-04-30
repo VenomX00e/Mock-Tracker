@@ -1,6 +1,27 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  @keyframes shuttle {
+    0% { transform: translateX(-150%); }
+    100% { transform: translateX(250%); }
+  }
+  @keyframes subtle-float {
+    0% { transform: translate(0, 0); }
+    25% { transform: translate(3px, -2px); }
+    50% { transform: translate(0, -4px); }
+    75% { transform: translate(-3px, -2px); }
+    100% { transform: translate(0, 0); }
+  }
+  @keyframes notice-tag-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(0.96); }
+  }
+  --animate-shuttle: shuttle 5s ease-in-out infinite;
+  --animate-subtle-float: subtle-float 8s ease-in-out infinite;
+  --animate-notice-tag-pulse: notice-tag-pulse 2s ease-in-out infinite;
+}
+
 .recharts-tooltip-wrapper {
   z-index: 1000 !important;
 }

@@ -9,7 +9,7 @@ import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
 import { useUserProfile } from './hooks/useUserProfile';
 import { MockScore } from './types';
-import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key } from 'lucide-react';
+import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin } from 'lucide-react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from './services/firebase';
 import AddLiveMockDialog from './components/AddLiveMockDialog';
@@ -47,9 +47,38 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'community'>('dashboard');
   const [notices, setNotices] = useState<any[]>([]);
   const [countdowns, setCountdowns] = useState<any[]>([]);
+  const [pinnedCountdowns, setPinnedCountdowns] = useState<string[]>([]);
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]'));
   const [now, setNow] = useState(new Date().getTime());
+  
+  const isAdmin = user?.email === 'mrityunjoyk29@gmail.com';
+  
+  const togglePin = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    
+    let newPins = [...pinnedCountdowns];
+    if (newPins.includes(id)) {
+      newPins = newPins.filter(pid => pid !== id);
+    } else {
+      newPins.unshift(id); // Insert at the beginning
+      if (newPins.length > 3) {
+        newPins = newPins.slice(0, 3); // Max 3 pins
+      }
+    }
+    
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'system', 'config'), { 
+        pinnedCountdowns: newPins,
+        updatedAt: new Date().toISOString() 
+      }, { merge: true });
+      setPinnedCountdowns(newPins);
+    } catch (err) {
+      console.error("Error pinning countdown:", err);
+    }
+  };
 
   const dismissLiveMock = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -76,10 +105,13 @@ export default function App() {
           let activeNotices: any[] = [];
           let activeCountdowns: any[] = [];
           let mocks: any[] = [];
+          let pins: string[] = [];
           const now = new Date().getTime();
           snap.forEach(d => {
             const data = d.data();
-            if (data.type === 'notice') {
+            if (d.id === 'config') {
+              pins = data.pinnedCountdowns || [];
+            } else if (data.type === 'notice') {
                 if (data.date && new Date(data.date).getTime() < now) return;
                 activeNotices.push({ id: d.id, ...data });
             } else if (data.type === 'liveMock') {
@@ -94,6 +126,7 @@ export default function App() {
           activeCountdowns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
           
           setNotices(activeNotices);
+          setPinnedCountdowns(pins);
           setCountdowns(activeCountdowns);
           setLiveMocks(mocks);
         } catch (e) {
@@ -174,8 +207,6 @@ export default function App() {
     );
   }
 
-  const isAdmin = user?.email === 'mrityunjoyk29@gmail.com';
-
   const handleMuteUser = async (userId: string, isMuted: boolean) => {
     const { doc, setDoc } = await import('firebase/firestore');
     const { db } = await import('./services/firebase');
@@ -199,8 +230,8 @@ export default function App() {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                 <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-[21px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors">
-                MockTracker <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400 ml-1">by Joy</span>
+              <h1 className="text-lg sm:text-[21px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors" style={{ marginLeft: '-7px', paddingLeft: '0px', paddingRight: '5px' }}>
+                MockTracker <span className="hidden sm:inline-block text-[10px] font-normal text-slate-500 dark:text-slate-400 ml-1">by Joy</span>
               </h1>
             </div>
             
@@ -319,8 +350,15 @@ export default function App() {
           <>
             {/* Countdowns */}
             {activeTab === 'dashboard' && countdowns.length > 0 && (
-              <div className="mb-6 flex gap-3 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                {countdowns.map(c => {
+              <div className="flex gap-3 overflow-x-auto custom-scrollbar snap-x" style={{ marginBottom: '25px', marginTop: '0px', paddingBottom: '0px' }}>
+                {[...countdowns].sort((a, b) => {
+                  const aIdx = pinnedCountdowns.indexOf(a.id);
+                  const bIdx = pinnedCountdowns.indexOf(b.id);
+                  if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+                  if (aIdx !== -1) return -1;
+                  if (bIdx !== -1) return 1;
+                  return 0;
+                }).map(c => {
                   const { days, hours } = getCountdownFormat(c.date);
                   
                   const getThemeColors = (color: string) => {
@@ -345,14 +383,25 @@ export default function App() {
                   const remaining = targetTime - now;
                   const progress = Math.max(0, Math.min(100, 100 - (remaining / total) * 100));
 
+                  const daysShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                  const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                  const formattedDate = `${daysShort[targetDate.getDay()].toLowerCase()} ${targetDate.getDate().toString().padStart(2, '0')} ${monthsShort[targetDate.getMonth()]} ${targetDate.getFullYear().toString().slice(-2)}`;
+
+                  const isPinned = pinnedCountdowns.includes(c.id);
+
                   return (
-                    <div key={c.id} className={`flex-shrink-0 w-[155px] xs:w-[180px] md:w-[240px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start`}>
-                      <div className="mb-3 relative z-10">
-                         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate`} style={{ fontSize: '26px', fontFamily: '"Times New Roman", Times, serif', fontStyle: 'normal', textDecoration: 'none' }} title={c.title}>{c.title}</h3>
+                    <div key={c.id} className={`flex-shrink-0 w-[155px] xs:w-[180px] md:w-[240px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}>
+                      <div className="mb-3 relative z-10 flex justify-between items-start gap-2">
+                         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate flex-1 animate-subtle-float`} style={{ fontSize: '21px', lineHeight: '35px', fontFamily: '"Times New Roman", Times, serif', fontStyle: 'normal', textDecoration: 'none', paddingLeft: '0px', paddingTop: '3px', paddingBottom: '0px', marginLeft: '0px', marginRight: '-22px', marginTop: '-10px', textAlign: 'left' }} title={c.title}>{c.title}</h3>
+                         {isAdmin && (
+                           <button onClick={(e) => togglePin(c.id, e)} className={`p-1 mt-[-6px] mr-[-6px] rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex-shrink-0 ${isPinned ? theme.pop : 'text-slate-400 dark:text-slate-500'}`} title={isPinned ? "Unpin" : "Pin"}>
+                              <Pin className="w-4 h-4" style={{ marginLeft: '0px', marginRight: '-10px' }} />
+                           </button>
+                         )}
                       </div>
                       
-                      <div className="flex flex-col relative z-10">
-                        <div className="flex items-center gap-3 mb-3">
+                      <div className="flex flex-col relative z-10" style={{ paddingLeft: '0px', paddingTop: '0px', marginTop: '-14px' }}>
+                        <div className="flex items-center gap-3" style={{ paddingTop: '0px', marginTop: '14px', marginBottom: '5px' }}>
                           <span className={`text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider`}>IN</span>
                           <div className="flex items-baseline gap-2">
                             <div className="flex flex-col items-center">
@@ -368,14 +417,21 @@ export default function App() {
                         </div>
                         
                         {/* Progress bar as divider */}
-                        <div className={`h-1.5 w-full rounded-full overflow-hidden mb-2 ${theme.barBg}`}>
-                          <div className={`h-full rounded-full ${theme.bar} transition-all duration-1000 ease-out`} style={{ width: `${progress}%` }} />
+                        <div className={`h-6 w-full rounded-full overflow-hidden mb-2 relative flex items-center justify-center ${theme.barBg}`}>
+                          <div className={`absolute top-0 left-0 h-full rounded-full ${theme.bar} transition-all duration-1000 ease-out`} style={{ width: `${progress}%` }} />
+                          {/* Shuttle animation overlay */}
+                          <div className="absolute inset-0 w-full h-full pointer-events-none">
+                            <div className="w-full h-full bg-linear-to-r from-transparent via-white/60 to-transparent skew-x-[-20deg] animate-shuttle" />
+                          </div>
+                          <span className={`relative z-10 text-[11px] font-bold px-2 py-0.5 rounded tracking-wide text-white`}>
+                            {formattedDate}
+                          </span>
                         </div>
                       </div>
                       
-                      <div className="h-4">
+                      <div className="h-4" style={{ marginLeft: '0px', marginTop: '-5px', marginBottom: '-8px', paddingBottom: '0px', paddingRight: '0px' }}>
                         {c.note && (
-                          <p className={`text-xs font-semibold italic truncate`} style={{ color: '#ed3838' }} title={c.note}>{c.note}</p>
+                          <p className={`text-xs font-semibold italic truncate`} style={{ color: '#ed3838', paddingLeft: '5px', paddingTop: '1px', paddingBottom: '0px', marginTop: '0px', marginBottom: '0px' }} title={c.note}>{c.note}</p>
                         )}
                       </div>
                     </div>
@@ -386,14 +442,14 @@ export default function App() {
 
             {/* Notices */}
             {notices.map((n) => (
-              <div key={n.id} className="mb-[10px] p-[12px] rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
+              <div key={n.id} className="mb-5 mt-0 p-[12px] rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10">
                   <Megaphone className="w-32 h-32 text-amber-900 dark:text-amber-500" />
                 </div>
                 <div className="relative z-10 max-w-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400">Notice</span>
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 animate-notice-tag-pulse">Notice</span>
                       <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{n.title}</h2>
                     </div>
                     {n.description && (
@@ -421,7 +477,7 @@ export default function App() {
 
             {/* Live Mocks or Default Banner */}
             {activeTab === 'dashboard' && (liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
-               <div className="mb-[10px] pt-[12px] px-[12px] pb-[2px]">
+               <div className="mb-5 mt-0 pt-[12px] pb-[0px] pl-[0px] pr-[12px]" style={{ paddingBottom: '0px', paddingLeft: '0px' }}>
                  <div className="flex justify-between items-center mb-3">
                    <div className="flex items-center gap-2">
                      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>
@@ -474,7 +530,7 @@ export default function App() {
                </div>
              </div>
             ) : (
-              <div className="relative mb-[10px] pt-[12px] px-[12px] pb-[2px]">
+              <div className="relative mb-5 mt-0 pt-[12px] pb-[0px] pl-[0px] pr-[12px]" style={{ paddingBottom: '0px', paddingLeft: '0px' }}>
                  <div className="flex justify-between items-center mb-3">
                    <div className="flex items-center gap-2">
                      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>

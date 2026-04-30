@@ -326,10 +326,10 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
               <>
                 <div className="border-t border-slate-800 my-1.5" />
                 <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 mt-2">Sectional Scores</div>
-                {data.quant?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Quant</span><span className="font-mono text-slate-100 font-medium text-xs">{data.quant.score}</span></div> : null}
-                {data.reasoning?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Reasoning</span><span className="font-mono text-slate-100 font-medium text-xs">{data.reasoning.score}</span></div> : null}
-                {data.english?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">English</span><span className="font-mono text-slate-100 font-medium text-xs">{data.english.score}</span></div> : null}
-                {data.ga?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">GA</span><span className="font-mono text-slate-100 font-medium text-xs">{data.ga.score}</span></div> : null}
+                {data.quant?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Quant</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.quant.percentile || 0)}`}>{data.quant.percentile || '-'}%</span>{data.quant.score}</span></div> : null}
+                {data.reasoning?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Reasoning</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.reasoning.percentile || 0)}`}>{data.reasoning.percentile || '-'}%</span>{data.reasoning.score}</span></div> : null}
+                {data.english?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">English</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.english.percentile || 0)}`}>{data.english.percentile || '-'}%</span>{data.english.score}</span></div> : null}
+                {data.ga?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">GA</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.ga.percentile || 0)}`}>{data.ga.percentile || '-'}%</span>{data.ga.score}</span></div> : null}
               </>
             ) : null}
           </div>
@@ -637,10 +637,10 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart: Percentile Trend */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[300px] lg:col-span-2 relative">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[350px] lg:col-span-2 relative">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center mb-2 sm:mb-0">
-                  <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Percentile Trend
+                  <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Performance Trend
                 </h3>
                 <div className="flex flex-row overflow-x-auto custom-scrollbar gap-1.5 sm:gap-2 pb-1 sm:pb-0 w-full sm:w-auto">
                   {['overall', 'quant', 'reasoning', 'english', 'ga'].map(key => (
@@ -654,10 +654,10 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   ))}
                 </div>
               </div>
-              <div className="flex-1 w-full mt-4 overflow-x-auto custom-scrollbar touch-pan-x touch-pan-y">
-                <div style={{ height: '100%', minWidth: Math.max(chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope).length * 80, 200) }} ref={lineChartRefInner}>
-                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                    <LineChart style={{ touchAction: 'pan-x' }} data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+              <div className="flex-1 w-full mt-4 overflow-hidden">
+                <div className="h-full w-full" ref={lineChartRefInner}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
@@ -671,17 +671,27 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             </div>
             
             {/* Chart: Sectional Scores */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[300px] lg:col-span-2">
-              <div className="flex justify-between items-center mb-6">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[350px] lg:col-span-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Breakdown
+                    <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Sectional Breakdown
                  </h3>
-                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50 mt-[-12px] mb-[-4px]">
-                    <button onClick={() => setChartView('bar')} className={`pl-[16px] pr-3 py-1 ml-[0px] mt-[-6px] mb-[-6px] text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Bar</button>
-                    <button onClick={() => setChartView('radar')} className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'radar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Radar</button>
+                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50">
+                    <button 
+                      onClick={() => setChartView('bar')} 
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    >
+                      Bar
+                    </button>
+                    <button 
+                      onClick={() => setChartView('radar')} 
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'radar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    >
+                      Radar
+                    </button>
                  </div>
               </div>
-              <div className="flex-1 w-full relative h-[300px] flex flex-col">
+              <div className="flex-1 w-full relative flex flex-col overflow-hidden">
                 {chartView === 'bar' ? (
                 <>
                   <div className="w-full flex-1 overflow-x-auto custom-scrollbar touch-pan-x touch-pan-y">
@@ -694,12 +704,16 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                           <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                           
                           {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="quant.score" position="top" fill="#3b82f6" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
                           </Bar>}
                           {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="reasoning.score" position="top" fill="#8b5cf6" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
                           </Bar>}
                           {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="english.score" position="top" fill="#f59e0b" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
                           </Bar>}
                           {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]}>
+                            <LabelList dataKey="ga.score" position="top" fill="#10b981" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
                           </Bar>}
                         </BarChart>
                       </ResponsiveContainer>
@@ -724,11 +738,22 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                       ...(chartData.hasGA ? [{ subject: 'GA', value: Number(stats?.avgGaPercentile || 0).toFixed(1), fullMark: 100, color: '#10b981' }] : [])
                     ];
                     return (
-                      <RadarChart cx="50%" cy="50%" outerRadius="75%" margin={{ top: 20, right: 20, bottom: 20, left: 20 }} data={radarData}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="65%" margin={{ top: 20, right: 30, bottom: 20, left: 30 }} data={radarData}>
                         <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                        <PolarAngleAxis dataKey="subject" tick={(props: any) => { const { payload, x, y, textAnchor } = props; const colorMap: any = { 'Quant': '#3b82f6', 'Reasoning': '#8b5cf6', 'English': '#f59e0b', 'GA': '#10b981' }; return <text x={x} y={y} dy={y < 150 ? -6 : 16} fill={colorMap[payload.value] || '#64748b'} fontSize={13} fontWeight={600} textAnchor={textAnchor}>{payload.value}</text>; }} />
+                        <PolarAngleAxis dataKey="subject" tick={(props: any) => { 
+                          const { payload, x, y, textAnchor } = props; 
+                          const colorMap: any = { 'Quant': '#3b82f6', 'Reasoning': '#8b5cf6', 'English': '#f59e0b', 'GA': '#10b981' }; 
+                          // Apply vertical offset based on position to avoid chart overlap
+                          const dy = y < 150 ? -14 : 24;
+                          return <text x={x} y={y} dy={dy} fill={colorMap[payload.value] || '#64748b'} fontSize={13} fontWeight={600} textAnchor={textAnchor}>{payload.value}</text>; 
+                        }} />
                         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={6} />
-                        <Radar name="Percentile" dataKey="value" stroke="#ec4899" strokeWidth={2} fill="#ec4899" fillOpacity={0.3} dot={{ r: 3, fill: '#ec4899' }} activeDot={{ r: 5 }} label={(props: any) => { const { x, y, value, index } = props; return <text x={x} y={y} dy={y < 150 ? -16 : 24} fill={radarData[index]?.color || "#ec4899"} fontSize={12} fontWeight={700} textAnchor="middle">{value}%</text>; }} />
+                        <Radar name="Percentile" dataKey="value" stroke="#ec4899" strokeWidth={2} fill="#ec4899" fillOpacity={0.3} dot={{ r: 3, fill: '#ec4899' }} activeDot={{ r: 5 }} label={(props: any) => { 
+                          const { x, y, value, index } = props; 
+                          // Push percentage labels slightly away from the center to avoid overlap with radar lines and subject labels
+                          const dyVal = y < 150 ? 12 : -8;
+                          return <text x={x} y={y} dy={dyVal} fill={radarData[index]?.color || "#ec4899"} fontSize={11} fontWeight={700} textAnchor="middle">{value}%</text>; 
+                        }} />
                         <RechartsTooltip content={<CustomTooltip chartRefBox={radarChartRefInner} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                       </RadarChart>
                     );
