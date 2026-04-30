@@ -637,7 +637,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart: Percentile Trend */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[350px] lg:col-span-2 relative">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[325px] lg:col-span-2 relative mt-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center mb-2 sm:mb-0">
                   <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Performance Trend
@@ -671,7 +671,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             </div>
             
             {/* Chart: Sectional Scores */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[350px] lg:col-span-2">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[325px] lg:col-span-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
                     <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Sectional Breakdown
