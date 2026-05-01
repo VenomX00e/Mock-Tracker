@@ -10,13 +10,15 @@ import { parseMockAnnouncementImage } from '../services/geminiService';
 interface AdminDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'users' | 'liveMock' | 'notice' | 'countdown';
+  editNoticeData?: any;
 }
 
 import { useAuth } from '../services/AuthContext';
 
-export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
+export default function AdminDialog({ isOpen, onClose, initialTab = 'users', editNoticeData = null }: AdminDialogProps) {
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown'>(initialTab);
   const [bannedUsers, setBannedUsers] = useState<UserProfile[]>([]);
   const [mutedUsers, setMutedUsers] = useState<UserProfile[]>([]);
   const [allAppUsers, setAllAppUsers] = useState<UserProfile[]>([]);
@@ -29,6 +31,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   const [noticeDescription, setNoticeDescription] = useState('');
   const [noticeLink, setNoticeLink] = useState('');
   const [noticeDate, setNoticeDate] = useState('');
+  const [noticeUrgency, setNoticeUrgency] = useState('');
+  const [noticeTags, setNoticeTags] = useState('');
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
 
   // Countdown inputs
@@ -56,6 +60,19 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
   });
 
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+    if (editNoticeData && initialTab === 'notice') {
+      setEditingNoticeId(editNoticeData.id);
+      setNoticeTitle(editNoticeData.title || '');
+      setNoticeDescription(editNoticeData.description || '');
+      setNoticeLink(editNoticeData.link || '');
+      setNoticeDate(editNoticeData.date || '');
+      setNoticeUrgency(editNoticeData.urgency || '');
+      setNoticeTags(Array.isArray(editNoticeData.tags) ? editNoticeData.tags.join(', ') : (editNoticeData.tags || ''));
+    }
+  }, [initialTab, editNoticeData, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -123,6 +140,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
         description: noticeDescription,
         link: noticeLink,
         date: noticeDate,
+        urgency: noticeUrgency,
+        tags: noticeTags.split(',').map(t => t.trim()).filter(Boolean),
         updatedAt: new Date().toISOString()
       }, { merge: !!editingNoticeId });
       alert(editingNoticeId ? "Notice updated successfully" : "Notice saved successfully");
@@ -131,6 +150,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
       setNoticeDescription('');
       setNoticeLink('');
       setNoticeDate('');
+      setNoticeUrgency('');
+      setNoticeTags('');
       fetchAnnouncement();
     } catch (error) {
       console.error("Error saving notice", error);
@@ -145,6 +166,8 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
     setNoticeDescription(n.description || '');
     setNoticeLink(n.link || '');
     setNoticeDate(n.date || '');
+    setNoticeUrgency(n.urgency || 'info');
+    setNoticeTags(Array.isArray(n.tags) ? n.tags.join(', ') : '');
   };
 
   const saveLiveMock = async () => {
@@ -699,8 +722,28 @@ export default function AdminDialog({ isOpen, onClose }: AdminDialogProps) {
                    <input type="search" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Server Maintenance" />
                  </div>
                  <div>
-                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-                   <textarea rows={4} value={noticeDescription} onChange={e => setNoticeDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Type notice details here..." />
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description (Markdown supported)</label>
+                   <textarea rows={4} value={noticeDescription} onChange={e => setNoticeDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="Type notice details here... Use **bold**, *italic*, [links](https://...), and #hashtags within text." />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div>
+                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Urgency (Optional)</label>
+                     <CustomDropdown 
+                        value={noticeUrgency === 'info' ? 'Info (Blue)' : noticeUrgency === 'warning' ? 'Warning (Yellow)' : noticeUrgency === 'error' ? 'Critical/Error (Red)' : 'None (Default)'}
+                        options={['None (Default)', 'Info (Blue)', 'Warning (Yellow)', 'Critical/Error (Red)']}
+                        onChange={(val) => {
+                          if (val === 'Info (Blue)') setNoticeUrgency('info');
+                          else if (val === 'Warning (Yellow)') setNoticeUrgency('warning');
+                          else if (val === 'Critical/Error (Red)') setNoticeUrgency('error');
+                          else setNoticeUrgency('');
+                        }}
+                        placeholder="Select Urgency"
+                      />
+                    </div>
+                   <div>
+                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Global Tags (comma separated)</label>
+                     <input type="text" value={noticeTags} onChange={e => setNoticeTags(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. maintenance, update" />
+                   </div>
                  </div>
                  <div>
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Action Link (Optional)</label>

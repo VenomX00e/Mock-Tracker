@@ -3,7 +3,8 @@ import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDo
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
 import { UserProfile, MockScore } from '../types';
-import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore, Send, MessageSquare, Pencil, X } from 'lucide-react';
+import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore, Send, MessageSquare, Pencil, X, Reply } from 'lucide-react';
+import { motion } from 'motion/react';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 
@@ -31,6 +32,7 @@ export default function CommunityHub({
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<any>(null);
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
@@ -187,14 +189,25 @@ export default function CommunityHub({
         return;
       }
 
-      await addDoc(collection(db, 'community_chat'), {
+      const payload: any = {
         userId: user.uid,
         userName: user.displayName || 'Anonymous',
         userPhoto: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'A'}`,
         text: newMessage.trim(),
         createdAt: Date.now()
-      });
+      };
+
+      if (replyingTo) {
+        payload.replyTo = {
+          id: replyingTo.id,
+          text: replyingTo.text,
+          userName: replyingTo.userId === user.uid ? 'You' : (userMap[replyingTo.userId]?.displayName || replyingTo.userName)
+        };
+      }
+
+      await addDoc(collection(db, 'community_chat'), payload);
       setNewMessage('');
+      setReplyingTo(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -314,7 +327,7 @@ export default function CommunityHub({
           if (!grouped[dateStr]) grouped[dateStr] = {};
           if (!grouped[dateStr][m.mockName]) grouped[dateStr][m.mockName] = [];
           
-          const profile = userMap[m.userId!] || {};
+          const profile = userMap[m.userId!] || {} as Partial<UserProfile>;
           const key = m.userId + '_' + dateStr;
           
           grouped[dateStr][m.mockName].push({
@@ -493,8 +506,10 @@ export default function CommunityHub({
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgReasoningPercentile)}`}>{user.avgReasoningPercentile}%</span></td>
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgEnglishPercentile)}`}>{user.avgEnglishPercentile}%</span></td>
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-300">{user.totalTests}</td>
-                    <td className={`p-4 text-center font-medium flex items-center justify-center gap-1 ${isToday ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                      <Flame className={`w-4 h-4 ${isToday ? '' : 'text-slate-300 dark:text-slate-600'}`} /> {displayStreak}
+                    <td className="p-4 text-center">
+                      <div className={`flex items-center justify-center gap-1 font-medium ${isToday ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                        <Flame className={`w-4 h-4 ${isToday ? '' : 'text-slate-300 dark:text-slate-600'}`} /> {displayStreak}
+                      </div>
                     </td>
                   </tr>
                 )})}
@@ -751,26 +766,50 @@ export default function CommunityHub({
             <div className="h-full flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">Say hi to everyone!</div>
           ) : (
             chatMessages.map(msg => {
-              const uProfile = userMap[msg.userId] || {};
+              const uProfile = userMap[msg.userId] || {} as Partial<UserProfile>;
               const displayName = msg.userId === user?.uid ? 'You' : (uProfile.displayName || msg.userName);
               const photoURL = uProfile.photoURL || msg.userPhoto;
               return (
-                <div 
+                <motion.div 
                   key={msg.id} 
+                  id={`msg-${msg.id}`}
                   className={`flex gap-3 max-w-[85%] ${msg.userId === user?.uid ? 'ml-auto flex-row-reverse' : ''}`}
                   onClick={() => setActiveMsgId(activeMsgId === msg.id ? null : msg.id)}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.1}
+                  onDragEnd={(e, info) => {
+                     if (Math.abs(info.offset.x) > 40) {
+                         setReplyingTo(msg); 
+                         setActiveMsgId(null);
+                         document.getElementById('chatMsg')?.focus();
+                     }
+                  }}
                 >
-                  <img src={photoURL} alt="" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover" />
+                  <img src={photoURL} alt="" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover pointer-events-none" />
                   <div className={`flex flex-col gap-1 ${msg.userId === user?.uid ? 'items-end' : 'items-start'}`}>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{displayName}</span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(msg.createdAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <div className={`relative px-4 py-2 text-sm rounded-2xl group ${msg.userId === user?.uid ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-slate-600 shadow-sm rounded-tl-sm'}`}>
+                      {msg.replyTo && (
+                        <div 
+                          className={`mb-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer relative overflow-hidden ${msg.userId === user?.uid ? 'bg-indigo-700/40 text-indigo-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+                          onClick={(e) => {
+                             e.stopPropagation();
+                             const el = document.getElementById(`msg-${msg.replyTo.id}`);
+                             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }}
+                        >
+                          <div className={`absolute left-0 top-0 bottom-0 w-1 ${msg.userId === user?.uid ? 'bg-indigo-400' : 'bg-slate-300 dark:bg-slate-500'}`}></div>
+                          <div className="font-semibold">{msg.replyTo.userName}</div>
+                          <div className="truncate opacity-90">{msg.replyTo.text}</div>
+                        </div>
+                      )}
                       {msg.text}
                       {msg.isEdited && <span className="text-[10px] opacity-70 ml-2">(edited)</span>}
-                      {(msg.userId === user?.uid || isAdmin) && (
-                        <div className={`absolute top-1/2 -translate-y-1/2 transition-opacity flex items-center gap-1.5 z-10 ${activeMsgId === msg.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'} ${msg.userId === user?.uid ? '-left-[4.5rem]' : '-right-[4.5rem]'}`}>
+                      <div className={`absolute top-1/2 -translate-y-1/2 transition-opacity flex items-center gap-1.5 z-10 ${activeMsgId === msg.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'} ${msg.userId === user?.uid ? '-left-[4.5rem]' : '-right-[4.5rem]'}`}>
                          {msg.userId === user?.uid && (
                             <button 
                               onClick={(e) => { 
@@ -778,6 +817,7 @@ export default function CommunityHub({
                                 setEditingMessageId(msg.id); 
                                 setNewMessage(msg.text); 
                                 setActiveMsgId(null);
+                                setReplyingTo(null);
                               }} 
                               className={`p-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full shadow-sm hover:scale-110`} 
                               title="Edit message"
@@ -785,6 +825,7 @@ export default function CommunityHub({
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                          )}
+                         {(msg.userId === user?.uid || isAdmin) && (
                          <button 
                            onClick={(e) => { 
                               e.stopPropagation(); 
@@ -796,11 +837,11 @@ export default function CommunityHub({
                          >
                            <Trash2 className="w-3.5 h-3.5" />
                          </button>
+                         )}
                       </div>
-                    )}
-                  </div>
+                    </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })
           )}
@@ -812,7 +853,24 @@ export default function CommunityHub({
                {chatError}
              </div>
           )}
-          <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex gap-2">
+          {replyingTo && (
+            <div className="absolute bottom-full mb-0 w-full left-0 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 p-2.5 px-4 flex justify-between items-center z-10 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-indigo-500">
+              <div className="flex flex-col text-xs pr-4 overflow-hidden">
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                  Replying to {replyingTo.userId === user?.uid ? 'You' : (userMap[replyingTo.userId]?.displayName || replyingTo.userName)}
+                </span>
+                <span className="text-slate-600 dark:text-slate-300 truncate mt-0.5">{replyingTo.text}</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setReplyingTo(null)} 
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex gap-2 ${replyingTo ? 'pt-2' : ''}`}>
             {editingMessageId && (
                <button type="button" onClick={() => { setEditingMessageId(null); setNewMessage(''); }} className="p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                  <X className="w-5 h-5" />
@@ -864,7 +922,7 @@ export default function CommunityHub({
                ) : (
                   <div className="space-y-3">
                      {deletedMocks.map(m => {
-                        const user = userMap[m.userId!] || {};
+                        const user = userMap[m.userId!] || {} as Partial<UserProfile>;
                         return (
                           <div key={m.id} className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center p-4 border border-red-100 dark:border-red-900/30 rounded-xl bg-red-50/50 dark:bg-red-900/10">
                             <div>

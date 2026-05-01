@@ -26,6 +26,12 @@ export interface UserProfile {
   role?: string;
 }
 
+export interface ReflectionTask {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface MockScore {
   id: string;
   userId?: string;
@@ -49,4 +55,10 @@ export interface MockScore {
   ga?: SectionalScore;
   note?: string;
   tags?: string[];
+  difficulty?: string;
+  nervousness?: string;
+  focus?: string;
+  energy?: string;
+  timeState?: string;
+  tasks?: ReflectionTask[];
 }

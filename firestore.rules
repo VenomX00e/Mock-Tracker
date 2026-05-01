@@ -35,7 +35,7 @@ service cloud.firestore {
 
     function isValidMockScore(data) {
       return data.keys().hasAll(['id', 'userId', 'examType', 'mockName', 'date', 'createdAt'])
-        && data.keys().size() >= 6 && data.keys().size() <= 31
+        && data.keys().size() >= 6 && data.keys().size() <= 40
         && data.id is string && data.id.size() <= 128 && data.id.size() > 0
         && (!data.keys().hasAny(['userName']) || (data.userName is string && data.userName.size() <= 100))
         && data.examType is string && data.examType.size() <= 100
@@ -59,6 +59,12 @@ service cloud.firestore {
         && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp || data.updatedAt == null)
         && (!data.keys().hasAny(['note']) || data.note is string || data.note == null)
         && (!data.keys().hasAny(['tags']) || data.tags is list || data.tags == null)
+        && (!data.keys().hasAny(['difficulty']) || data.difficulty is string || data.difficulty == null)
+        && (!data.keys().hasAny(['nervousness']) || data.nervousness is string || data.nervousness == null)
+        && (!data.keys().hasAny(['focus']) || data.focus is string || data.focus == null)
+        && (!data.keys().hasAny(['energy']) || data.energy is string || data.energy == null)
+        && (!data.keys().hasAny(['timeState']) || data.timeState is string || data.timeState == null)
+        && (!data.keys().hasAny(['tasks']) || data.tasks is list || data.tasks == null)
         && (!data.keys().hasAny(['isDeleted']) || data.isDeleted is bool);
     }
 
@@ -85,12 +91,13 @@ service cloud.firestore {
 
     function isValidChatMessage(data) {
       return data.keys().hasAll(['userId', 'userName', 'userPhoto', 'text', 'createdAt'])
-        && data.keys().size() == 5
+        && data.keys().size() >= 5 && data.keys().size() <= 6
         && data.userId is string && data.userId == request.auth.uid
         && data.userName is string && data.userName.size() <= 100
         && data.userPhoto is string && data.userPhoto.size() <= 500
         && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
-        && data.createdAt is number;
+        && data.createdAt is number
+        && (!data.keys().hasAny(['replyTo']) || (data.replyTo is map && data.replyTo.keys().hasAll(['id', 'text', 'userName'])));
     }
 
     match /system/{docId} {
@@ -141,7 +148,7 @@ service cloud.firestore {
         && request.auth.uid == userId
         && isValidId(mockId)
         && isValidMockScore(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'updatedAt', 'streakAtTime', 'note', 'tags', 'isDeleted'])
+        && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'updatedAt', 'streakAtTime', 'note', 'tags', 'difficulty', 'nervousness', 'focus', 'energy', 'timeState', 'tasks', 'isDeleted'])
         && incoming().id == existing().id
         && incoming().userId == existing().userId) || isAdminUser();
         

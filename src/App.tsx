@@ -9,10 +9,13 @@ import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
 import { useUserProfile } from './hooks/useUserProfile';
 import { MockScore } from './types';
-import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin } from 'lucide-react';
+import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin, Pencil, Bold, Italic, Link as LinkIcon, Save, X as XIcon, Undo, Redo } from 'lucide-react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from './services/firebase';
 import AddLiveMockDialog from './components/AddLiveMockDialog';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 
 import { PublicProfileDialog } from './components/PublicProfileDialog';
 
@@ -50,9 +53,87 @@ export default function App() {
   const [pinnedCountdowns, setPinnedCountdowns] = useState<string[]>([]);
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]'));
+  const [adminTab, setAdminTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown'>('users');
+  const [adminEditNotice, setAdminEditNotice] = useState<any>(null);
+  
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineNoticeTitle, setInlineNoticeTitle] = useState('');
+  const [inlineNoticeDesc, setInlineNoticeDesc] = useState('');
+  const [descHistory, setDescHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
   const [now, setNow] = useState(new Date().getTime());
   
   const isAdmin = user?.email === 'mrityunjoyk29@gmail.com';
+
+  const saveInlineNotice = async (id: string) => {
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'system', id), {
+        title: inlineNoticeTitle,
+        description: inlineNoticeDesc
+      });
+      setNotices(notices.map(n => n.id === id ? { ...n, title: inlineNoticeTitle, description: inlineNoticeDesc } : n));
+      setInlineEditingId(null);
+      setDescHistory([]);
+      setHistoryIndex(-1);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save notice inline.');
+    }
+  };
+
+  const applyInlineFormat = (before: string, after: string = '') => {
+    if (!textareaRef.current) return;
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const len = textarea.value.length;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+    const newText = text.substring(0, start) + before + selectedText + after + text.substring(end, len);
+    
+    setInlineNoticeDesc(newText);
+    
+    const newHistory = descHistory.slice(0, historyIndex + 1);
+    newHistory.push(newText);
+    setDescHistory(newHistory.slice(-50));
+    setHistoryIndex(Math.min(newHistory.length - 1, 49));
+    
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
+    }, 0);
+  };
+  
+  const handleDescChange = (val: string) => {
+      setInlineNoticeDesc(val);
+      const lastVal = descHistory[historyIndex];
+      // Push history if significant change or words are completed
+      if (!lastVal || Math.abs(val.length - lastVal.length) > 1 || val.endsWith(' ') || val.endsWith('\n')) {
+          const newHistory = descHistory.slice(0, historyIndex + 1);
+          newHistory.push(val);
+          setDescHistory(newHistory.slice(-50));
+          setHistoryIndex(Math.min(newHistory.length - 1, 49));
+      }
+  };
+  
+  const undo = () => {
+      if (inlineNoticeDesc !== descHistory[historyIndex] && historyIndex >= 0) {
+          setInlineNoticeDesc(descHistory[historyIndex]);
+      } else if (historyIndex > 0) {
+          setHistoryIndex(historyIndex - 1);
+          setInlineNoticeDesc(descHistory[historyIndex - 1]);
+      }
+  };
+
+  const redo = () => {
+      if (historyIndex < descHistory.length - 1) {
+          setHistoryIndex(historyIndex + 1);
+          setInlineNoticeDesc(descHistory[historyIndex + 1]);
+      }
+  };
   
   const togglePin = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -160,10 +241,10 @@ export default function App() {
     setIsAddModalOpen(true);
   };
 
-  const handleUpdateReflection = async (id: string, note: string, tags: string[]) => {
+  const handleUpdateReflection = async (id: string, updates: Partial<MockScore>) => {
     const mockToUpdate = mocks.find(m => m.id === id);
     if (!mockToUpdate) return;
-    await updateMock({ ...mockToUpdate, note, tags });
+    await updateMock({ ...mockToUpdate, ...updates });
   };
 
   const handleDeleteMock = (id: string) => {
@@ -295,7 +376,11 @@ export default function App() {
 
                   {isAdmin && (
                     <button
-                      onClick={() => setIsAdminModalOpen(true)}
+                      onClick={() => {
+                        setAdminTab('users');
+                        setAdminEditNotice(null);
+                        setIsAdminModalOpen(true);
+                       }}
                       className="p-1.5 md:p-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border border-transparent rounded-lg transition-colors"
                       title="Admin Dashboard"
                     >
@@ -441,39 +526,158 @@ export default function App() {
             )}
 
             {/* Notices */}
-            {notices.map((n) => (
-              <div key={n.id} className="mb-5 mt-0 p-[12px] rounded-2xl bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border border-amber-100 dark:border-amber-900/30 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10">
-                  <Megaphone className="w-32 h-32 text-amber-900 dark:text-amber-500" />
+            {notices.map((n) => {
+              const u = n.urgency || 'info'; // default to info if no urgency
+              const configs: Record<string, any> = {
+                warning: {
+                  bg: 'from-amber-50 via-yellow-50 to-amber-50 dark:from-amber-900/10 dark:via-yellow-900/10 dark:to-amber-900/10 border-amber-100 dark:border-amber-900/30',
+                  icon: 'text-amber-900 dark:text-amber-500',
+                  pill: 'bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400',
+                  button: 'text-amber-900 bg-amber-200 hover:bg-amber-300'
+                },
+                info: {
+                  bg: 'from-blue-50 via-indigo-50 to-blue-50 dark:from-blue-900/10 dark:via-indigo-900/10 dark:to-blue-900/10 border-blue-100 dark:border-blue-900/30',
+                  icon: 'text-blue-900 dark:text-blue-500',
+                  pill: 'bg-blue-200 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400',
+                  button: 'text-blue-900 bg-blue-200 hover:bg-blue-300'
+                },
+                error: {
+                  bg: 'from-red-50 via-rose-50 to-red-50 dark:from-red-900/10 dark:via-rose-900/10 dark:to-red-900/10 border-red-100 dark:border-red-900/30',
+                  icon: 'text-red-900 dark:text-red-500',
+                  pill: 'bg-red-200 dark:bg-red-500/20 text-red-800 dark:text-red-400',
+                  button: 'text-red-900 bg-red-200 hover:bg-red-300'
+                }
+              };
+              
+              const c = configs[u] || configs.info;
+              
+              let textWithLinks = n.description ? n.description.replace(/(^|\s)(#[a-zA-Z0-9_]+)/g, '$1[$2]($2)') : '';
+              textWithLinks = textWithLinks
+                  .replace(/<red>([\s\S]*?)<\/red>/gi, '<span class="text-red-500 font-semibold">$1</span>')
+                  .replace(/<blue>([\s\S]*?)<\/blue>/gi, '<span class="text-blue-500 font-semibold">$1</span>')
+                  .replace(/<green>([\s\S]*?)<\/green>/gi, '<span class="text-emerald-500 font-semibold">$1</span>')
+                  .replace(/<amber>([\s\S]*?)<\/amber>/gi, '<span class="text-amber-500 font-semibold">$1</span>');
+
+              return (
+              <div key={n.id} className={`mb-5 mt-0 p-[12px] rounded-2xl bg-gradient-to-r ${c.bg} border shadow-sm relative overflow-hidden`}>
+                <div className={`absolute top-0 right-0 p-6 opacity-5 dark:opacity-10`}>
+                  <Megaphone className={`w-32 h-32 ${c.icon}`} />
                 </div>
-                <div className="relative z-10 max-w-3xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-amber-200 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 animate-notice-tag-pulse">Notice</span>
+                {inlineEditingId === n.id ? (
+                   <div className="relative z-20 w-full flex flex-col gap-3 bg-white/80 dark:bg-slate-900/80 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-sm backdrop-blur-sm">
+                     <div className="flex items-center justify-between">
+                       <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Inline Editing</h3>
+                       <div className="flex gap-2">
+                         <button onClick={() => saveInlineNotice(n.id)} className="p-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md shadow-sm transition-colors" title="Save changes">
+                           <Save className="w-4 h-4" />
+                         </button>
+                         <button onClick={() => setInlineEditingId(null)} className="p-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-md transition-colors" title="Cancel">
+                           <XIcon className="w-4 h-4" />
+                         </button>
+                       </div>
+                     </div>
+                     <input
+                       type="text"
+                       value={inlineNoticeTitle}
+                       onChange={e => setInlineNoticeTitle(e.target.value)}
+                       className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-bold text-slate-900 dark:text-slate-100"
+                       placeholder="Notice Title"
+                     />
+                     <textarea
+                       ref={textareaRef}
+                       value={inlineNoticeDesc}
+                       onChange={e => handleDescChange(e.target.value)}
+                       rows={4}
+                       className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-slate-100"
+                       placeholder="Notice description (Markdown)..."
+                     />
+                     <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                       <button onClick={undo} disabled={historyIndex <= 0 && inlineNoticeDesc === descHistory[historyIndex]} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-50" title="Undo"><Undo className="w-4 h-4" /></button>
+                       <button onClick={redo} disabled={historyIndex >= descHistory.length - 1} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 disabled:opacity-50" title="Redo"><Redo className="w-4 h-4" /></button>
+                       <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                       <button onClick={() => applyInlineFormat('**', '**')} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200" title="Bold"><Bold className="w-4 h-4" /></button>
+                       <button onClick={() => applyInlineFormat('*', '*')} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200" title="Italic"><Italic className="w-4 h-4" /></button>
+                       <button onClick={() => applyInlineFormat('[', '](https://)')} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200" title="Link"><LinkIcon className="w-4 h-4" /></button>
+                       <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                       <button onClick={() => applyInlineFormat('<red>', '</red>')} className="px-2 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded border border-red-200 dark:border-red-900/50">Red</button>
+                       <button onClick={() => applyInlineFormat('<blue>', '</blue>')} className="px-2 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 rounded border border-blue-200 dark:border-blue-900/50">Blue</button>
+                       <button onClick={() => applyInlineFormat('<green>', '</green>')} className="px-2 py-1 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 rounded border border-emerald-200 dark:border-emerald-900/50">Green</button>
+                       <button onClick={() => applyInlineFormat('<amber>', '</amber>')} className="px-2 py-1 text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 rounded border border-amber-200 dark:border-amber-900/50">Amber</button>
+                     </div>
+                   </div>
+                ) : (
+                <div className="relative z-10 max-w-3xl flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  <div className="flex-1 w-full">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5 pr-8">
+                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider animate-notice-tag-pulse ${c.pill}`}>{n.urgency ? `Notice: ${n.urgency}` : 'Notice'}</span>
                       <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{n.title}</h2>
+                      {n.tags && n.tags.length > 0 && n.tags.map((tag: string, i: number) => (
+                        <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300">
+                          #{tag.replace(/^#/, '')}
+                        </span>
+                      ))}
                     </div>
                     {n.description && (
-                      <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-                        {n.description}
-                      </p>
+                      <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap markdown-body mt-2">
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw as any]}
+                          components={{
+                            a: ({node, ...props}) => {
+                               if (props.href?.startsWith('#')) {
+                                   return <span className={`font-semibold ${c.icon}`}>{props.children}</span>
+                               }
+                               return <a {...props} className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium" target="_blank" rel="noopener noreferrer" />
+                            },
+                            ul: ({node, ...props}) => <ul {...props} className="list-disc pl-5 my-2" />,
+                            ol: ({node, ...props}) => <ol {...props} className="list-decimal pl-5 my-2" />,
+                            p: ({node, ...props}) => <p {...props} className="mb-2 last:mb-0" />,
+                            strong: ({node, ...props}) => <strong {...props} className="font-bold text-slate-900 dark:text-white" />
+                          }}
+                        >{textWithLinks}</Markdown>
+                      </div>
                     )}
                   </div>
                   {n.link && (
-                    <div className="flex-shrink-0">
+                    <div className="flex-shrink-0 mt-2 md:mt-0">
                       <a
                         href={n.link}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium text-amber-900 transition-all bg-amber-200 rounded-xl hover:bg-amber-300 hover:shadow-md"
+                        className={`inline-flex items-center justify-center px-5 py-2.5 text-sm font-medium transition-all rounded-xl hover:shadow-md ${c.button}`}
                       >
                         View Details
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </a>
                     </div>
                   )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setInlineEditingId(n.id);
+                        setInlineNoticeTitle(n.title || '');
+                        setInlineNoticeDesc(n.description || '');
+                        setDescHistory([n.description || '']);
+                        setHistoryIndex(0);
+                      }}
+                      className="absolute top-2 right-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg transition-colors shadow-sm z-30 border border-slate-200 dark:border-slate-700"
+                      style={{ 
+                        marginTop: '-16px', 
+                        marginRight: '-254px', 
+                        paddingLeft: '8px',
+                        paddingTop: '4px',
+                        paddingBottom: '4px',
+                        paddingRight: '6px'
+                      }}
+                      title="Edit Notice Inline"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
+                )}
               </div>
-            ))}
+            )})}
 
             {/* Live Mocks or Default Banner */}
             {activeTab === 'dashboard' && (liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
@@ -491,7 +695,7 @@ export default function App() {
                  </div>
                  <div className="mb-8 flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
                    {liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).map(liveMock => (
-                     <div key={liveMock.id} className="min-w-[280px] md:min-w-[320px] flex-shrink-0 p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-100 dark:border-indigo-800/30 shadow-sm relative overflow-hidden snap-start">
+                     <div key={liveMock.id} className="min-w-[220px] md:min-w-[260px] flex-shrink-0 p-4 rounded-2xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 border border-indigo-100 dark:border-indigo-800/30 shadow-sm relative overflow-hidden snap-start">
                        
                        <button onClick={(e) => dismissLiveMock(liveMock.id, e)} className="absolute top-2 right-2 p-1.5 bg-white/50 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800 rounded-full text-indigo-400 dark:text-indigo-500 hover:text-rose-500 transition-colors z-20" title="Hide Live Mock">
                          <X className="w-3 h-3" />
@@ -638,6 +842,8 @@ export default function App() {
         <AdminDialog 
           isOpen={isAdminModalOpen}
           onClose={() => setIsAdminModalOpen(false)}
+          initialTab={adminTab}
+          editNoticeData={adminEditNotice}
         />
       )}
 

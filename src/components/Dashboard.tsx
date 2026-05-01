@@ -1,13 +1,14 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
-import { MockScore, UserProfile } from '../types';
+import { MockScore, UserProfile, ReflectionTask } from '../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Legend, ReferenceLine, LabelList,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download } from 'lucide-react';
+import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download, CheckSquare, X, Check } from 'lucide-react';
+import { CustomDropdown } from './CustomDropdown';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -22,8 +23,116 @@ interface DashboardProps {
   onEditMock?: (mock: MockScore) => void;
   onRestoreMock?: (id: string) => void;
   onPermanentlyDeleteMock?: (id: string) => void;
-  onUpdateReflection?: (id: string, note: string, tags: string[]) => Promise<void>;
+  onUpdateReflection?: (id: string, updates: Partial<MockScore>) => Promise<void>;
 }
+
+const PortalContent = ({ chartRefBox, coordinate, content, screenX, screenY, isRight, isBottom }: any) => {
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const el = tooltipRef.current;
+    if (!el || !chartRefBox.current || !coordinate) return;
+    
+    let animationFrameId: number;
+    
+    const updatePosition = () => {
+       if (chartRefBox.current && tooltipRef.current && coordinate) {
+          const r = chartRefBox.current.getBoundingClientRect();
+          const currentScreenX = r.left + coordinate.x;
+          const currentScreenY = r.top + coordinate.y;
+          
+          const rightHalf = currentScreenX > window.innerWidth / 2;
+          const bottomHalf = currentScreenY > window.innerHeight / 2;
+          
+          tooltipRef.current.style.left = `${currentScreenX}px`;
+          tooltipRef.current.style.top = `${currentScreenY}px`;
+          tooltipRef.current.style.transform = `translate(${rightHalf ? '-110%' : '10%'}, ${bottomHalf ? '-110%' : '10%'})`;
+       }
+       animationFrameId = requestAnimationFrame(updatePosition);
+    };
+    
+    animationFrameId = requestAnimationFrame(updatePosition);
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [chartRefBox, coordinate]);
+
+  return createPortal(
+    <div 
+      ref={tooltipRef}
+      className="fixed z-[100000] pointer-events-none transition-opacity duration-75 ease-out opacity-100"
+      style={{ 
+        left: screenX, 
+        top: screenY,
+        transform: `translate(${isRight ? '-110%' : '10%'}, ${isBottom ? '-110%' : '10%'})`
+      }}
+    >
+      {content}
+    </div>,
+    document.body
+  );
+};
+
+const CustomTooltip = ({ active, payload, coordinate, chartRefBox }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload as MockScore;
+    
+    const content = (
+      <div className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-[99990]">
+        <p className="font-semibold text-slate-100 mb-1.5">{data.mockName || 'Mock Test'}</p>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <span className="text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-md text-slate-300 font-medium">{data.examType}</span>
+          {data.examRole && <span className="text-[10px] bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded-md text-indigo-300 font-medium">{data.examRole}</span>}
+          {data.examPhase && <span className="text-[10px] bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-md text-amber-300 font-medium">{data.examPhase}</span>}
+          {data.examScope && <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded-md text-emerald-300 font-medium">{data.examScope}</span>}
+        </div>
+        <div className="space-y-1.5 border-t border-slate-800 pt-3 mt-3">
+          <div className="flex justify-between items-center gap-4">
+            <span className="text-slate-400 font-medium">Percentile</span>
+            <span className="font-mono font-bold text-emerald-400">{data.percentile || '-'}%</span>
+          </div>
+          <div className="flex justify-between items-center gap-4">
+            <span className="text-slate-400 font-medium">Overall Score</span>
+            <span className="font-mono font-bold text-blue-400">{data.score || '-'}</span>
+          </div>
+          {(data.quant?.score || data.reasoning?.score || data.english?.score || data.ga?.score) ? (
+            <>
+              <div className="border-t border-slate-800 my-1.5" />
+              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 mt-2">Sectional Scores</div>
+              {data.quant?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Quant</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.quant.percentile || 0)}`}>{data.quant.percentile || '-'}%</span>{data.quant.score}</span></div> : null}
+              {data.reasoning?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Reasoning</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.reasoning.percentile || 0)}`}>{data.reasoning.percentile || '-'}%</span>{data.reasoning.score}</span></div> : null}
+              {data.english?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">English</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.english.percentile || 0)}`}>{data.english.percentile || '-'}%</span>{data.english.score}</span></div> : null}
+              {data.ga?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">GA</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.ga.percentile || 0)}`}>{data.ga.percentile || '-'}%</span>{data.ga.score}</span></div> : null}
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+
+    if (chartRefBox && chartRefBox.current && coordinate && typeof document !== 'undefined') {
+      const rect = chartRefBox.current.getBoundingClientRect();
+      const screenX = rect.left + coordinate.x;
+      const screenY = rect.top + coordinate.y;
+      const isRight = screenX > window.innerWidth / 2;
+      const isBottom = screenY > window.innerHeight / 2;
+
+      return <PortalContent chartRefBox={chartRefBox} coordinate={coordinate} content={content} screenX={screenX} screenY={screenY} isRight={isRight} isBottom={isBottom} />;
+    }
+
+    return content;
+  }
+  return null;
+};
+
+const renderCustomBarLabel = (props: any) => {
+  const { x, y, width, value } = props;
+  if (value === null || value === undefined || value === '') return null;
+  const scoreY = Math.max(y - 8, 16);
+  return (
+    <text x={x + width / 2} y={scoreY} className="fill-slate-700 dark:fill-slate-200" fontSize="11" fontWeight="bold" textAnchor="middle">{value}</text>
+  );
+};
 
 export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteMock, onEditMock, onRestoreMock, onPermanentlyDeleteMock, onUpdateReflection }: DashboardProps) {
   const [selectedExam, setSelectedExam] = useState<string>('Overview');
@@ -36,6 +145,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   const [editingReflectionId, setEditingReflectionId] = useState<string | null>(null);
   const [localNote, setLocalNote] = useState('');
   const [localTags, setLocalTags] = useState('');
+  const [localDifficulty, setLocalDifficulty] = useState('');
+  const [localNervousness, setLocalNervousness] = useState('');
+  const [localFocus, setLocalFocus] = useState('');
+  const [localEnergy, setLocalEnergy] = useState('');
+  const [localTimeState, setLocalTimeState] = useState('');
+  const [localTasks, setLocalTasks] = useState<ReflectionTask[]>([]);
   const [isSavingReflection, setIsSavingReflection] = useState(false);
 
   const lineChartRefInner = useRef<HTMLDivElement>(null);
@@ -47,6 +162,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
   const [chartView, setChartView] = useState<'bar' | 'radar'>('bar');
   const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
+  const [expandedActionMocks, setExpandedActionMocks] = useState<Record<string, boolean>>({});
 
   const handleExportExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -112,6 +230,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     setEditingReflectionId(mock.id);
     setLocalNote(mock.note || '');
     setLocalTags(mock.tags?.join(', ') || '');
+    setLocalDifficulty(mock.difficulty || '');
+    setLocalNervousness(mock.nervousness || '');
+    setLocalFocus(mock.focus || '');
+    setLocalEnergy(mock.energy || '');
+    setLocalTimeState(mock.timeState || '');
+    setLocalTasks(mock.tasks ? JSON.parse(JSON.stringify(mock.tasks)) : []);
   };
 
   const handleReflectionSave = async (mockId: string) => {
@@ -119,7 +243,16 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     setIsSavingReflection(true);
     try {
       const tagsArray = localTags.split(',').map(t => t.trim()).filter(Boolean);
-      await onUpdateReflection(mockId, localNote, tagsArray);
+      await onUpdateReflection(mockId, {
+        note: localNote,
+        tags: tagsArray,
+        difficulty: localDifficulty,
+        nervousness: localNervousness,
+        focus: localFocus,
+        energy: localEnergy,
+        timeState: localTimeState,
+        tasks: localTasks
+      });
       setEditingReflectionId(null);
     } catch (e) {
       console.error(e);
@@ -299,123 +432,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     return { hasQuant, hasReasoning, hasEnglish, hasGA };
   }, [displayedMocks]);
 
-  const CustomTooltip = ({ active, payload, label, coordinate, chartRefBox }: any) => {
-    // chartRefBox is the ref we will pass down as a custom prop from RechartsTooltip
-    if (active && payload && payload.length) {
-      const data = payload[0].payload as MockScore;
-      
-      const content = (
-        <div className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-[99990]">
-          <p className="font-semibold text-slate-100 mb-1.5">{data.mockName || 'Mock Test'}</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            <span className="text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-md text-slate-300 font-medium">{data.examType}</span>
-            {data.examRole && <span className="text-[10px] bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded-md text-indigo-300 font-medium">{data.examRole}</span>}
-            {data.examPhase && <span className="text-[10px] bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-md text-amber-300 font-medium">{data.examPhase}</span>}
-            {data.examScope && <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded-md text-emerald-300 font-medium">{data.examScope}</span>}
-          </div>
-          <div className="space-y-1.5 border-t border-slate-800 pt-3 mt-3">
-            <div className="flex justify-between items-center gap-4">
-              <span className="text-slate-400 font-medium">Percentile</span>
-              <span className="font-mono font-bold text-emerald-400">{data.percentile || '-'}%</span>
-            </div>
-            <div className="flex justify-between items-center gap-4">
-              <span className="text-slate-400 font-medium">Overall Score</span>
-              <span className="font-mono font-bold text-blue-400">{data.score || '-'}</span>
-            </div>
-            {(data.quant?.score || data.reasoning?.score || data.english?.score || data.ga?.score) ? (
-              <>
-                <div className="border-t border-slate-800 my-1.5" />
-                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 mt-2">Sectional Scores</div>
-                {data.quant?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Quant</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.quant.percentile || 0)}`}>{data.quant.percentile || '-'}%</span>{data.quant.score}</span></div> : null}
-                {data.reasoning?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Reasoning</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.reasoning.percentile || 0)}`}>{data.reasoning.percentile || '-'}%</span>{data.reasoning.score}</span></div> : null}
-                {data.english?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">English</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.english.percentile || 0)}`}>{data.english.percentile || '-'}%</span>{data.english.score}</span></div> : null}
-                {data.ga?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">GA</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.ga.percentile || 0)}`}>{data.ga.percentile || '-'}%</span>{data.ga.score}</span></div> : null}
-              </>
-            ) : null}
-          </div>
-        </div>
-      );
-
-      if (chartRefBox && chartRefBox.current && coordinate && typeof document !== 'undefined') {
-        const rect = chartRefBox.current.getBoundingClientRect();
-        const screenX = rect.left + coordinate.x;
-        const screenY = rect.top + coordinate.y;
-
-        const isRight = screenX > window.innerWidth / 2;
-        const isBottom = screenY > window.innerHeight / 2;
-
-        const PortalContent = () => {
-          const tooltipRef = useRef<HTMLDivElement>(null);
-          
-          useEffect(() => {
-            const el = tooltipRef.current;
-            if (!el || !chartRefBox.current || !coordinate) return;
-            
-            let animationFrameId: number;
-            
-            const updatePosition = () => {
-               if (chartRefBox.current && tooltipRef.current && coordinate) {
-                  const r = chartRefBox.current.getBoundingClientRect();
-                  const currentScreenX = r.left + coordinate.x;
-                  const currentScreenY = r.top + coordinate.y;
-                  
-                  const rightHalf = currentScreenX > window.innerWidth / 2;
-                  const bottomHalf = currentScreenY > window.innerHeight / 2;
-                  
-                  tooltipRef.current.style.left = `${currentScreenX}px`;
-                  tooltipRef.current.style.top = `${currentScreenY}px`;
-                  tooltipRef.current.style.transform = `translate(${rightHalf ? '-110%' : '10%'}, ${bottomHalf ? '-110%' : '10%'})`;
-               }
-               animationFrameId = requestAnimationFrame(updatePosition);
-            };
-            
-            // Start loop
-            animationFrameId = requestAnimationFrame(updatePosition);
-            
-            return () => {
-              cancelAnimationFrame(animationFrameId);
-            };
-          }, []);
-
-          return createPortal(
-            <div 
-              ref={tooltipRef}
-              className="fixed z-[100000] pointer-events-none transition-opacity duration-75 ease-out opacity-100"
-              style={{ 
-                left: screenX, 
-                top: screenY,
-                transform: `translate(${isRight ? '-110%' : '10%'}, ${isBottom ? '-110%' : '10%'})`
-              }}
-            >
-              {content}
-            </div>,
-            document.body
-          );
-        };
-        
-        return <PortalContent />;
-      }
-
-      return content;
-    }
-    return null;
-  };
-
   const chartDataReversed = useMemo(() => {
     return [...chronologicalMocks].reverse();
   }, [chronologicalMocks]);
-
-  const renderCustomBarLabel = (props: any) => {
-    const { x, y, width, value } = props;
-    if (value === null || value === undefined || value === '') return null;
-    
-    // Position y needs to make sure text doesn't flow off the svg container top. 
-    const scoreY = Math.max(y - 8, 16);
-
-    return (
-      <text x={x + width / 2} y={scoreY} className="fill-slate-700 dark:fill-slate-200" fontSize="11" fontWeight="bold" textAnchor="middle">{value}</text>
-    );
-  };
 
   if (mocks.length === 0 && deletedMocks.length === 0) {
     return (
@@ -447,6 +466,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
       </div>
     );
   }
+
+  const totalTasksCount = mocks.reduce((acc, mock) => acc + (mock.tasks?.length || 0), 0);
+  const pendingTasksCount = mocks.reduce((acc, mock) => acc + (mock.tasks?.filter(t => !t.completed).length || 0), 0);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -654,9 +676,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   ))}
                 </div>
               </div>
-              <div className="flex-1 w-full mt-4 overflow-hidden">
-                <div className="h-full w-full" ref={lineChartRefInner}>
-                  <ResponsiveContainer width="100%" height="100%">
+              <div className="flex-1 w-full mt-4 overflow-hidden relative" style={{ minHeight: 250 }}>
+                <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
+                  <ResponsiveContainer width="99%" height="100%">
                     <LineChart data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
@@ -696,7 +718,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                 <>
                   <div className="w-full flex-1 overflow-x-auto custom-scrollbar touch-pan-x touch-pan-y">
                     <div style={{ height: '100%', minWidth: Math.max(chartDataReversed.length * 120, 300) }} ref={barChartRefInner}>
-                      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                      <ResponsiveContainer width="99%" height={300}>
                         <BarChart style={{ touchAction: 'pan-x' }} data={chartDataReversed} margin={{ top: 30, right: 20, left: -20, bottom: 5 }} barCategoryGap="25%" barGap={2}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                           <XAxis dataKey="id" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const m = chartDataReversed.find(item => item.id === val); return m && m.mockName.length > 20 ? m.mockName.substring(0,20)+'...' : m?.mockName || val; }} />
@@ -728,8 +750,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   </div>
                 </>
                 ) : (
-                <div className="w-full h-full" ref={radarChartRefInner}>
-                <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                <div className="w-full h-full relative" style={{ minHeight: 250 }}>
+                <div className="absolute inset-0 w-full h-full" ref={radarChartRefInner}>
+                <ResponsiveContainer width="99%" height="100%">
                   {(() => {
                     const radarData = [
                       ...(chartData.hasQuant ? [{ subject: 'Quant', value: Number(stats?.avgQuantPercentile || 0).toFixed(1), fullMark: 100, color: '#3b82f6' }] : []),
@@ -759,6 +782,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                     );
                   })()}
                 </ResponsiveContainer>
+                </div>
                 </div>
                 )}
               </div>
@@ -860,30 +884,48 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
         </>
       )}
 
-      <div className="flex justify-between items-center mt-12 mb-6">
-        <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              {showRecycleBin ? 'Recycle Bin' : 'History Log'}
-              {showRecycleBin && deletedMocks.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400 text-xs font-bold uppercase tracking-wider">{deletedMocks.length}</span>
-              )}
-            </h3>
-            <div className="flex gap-2">
-              <button
-                onClick={handleExportExcel}
-                className="p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/50"
-                title="Download History as Excel"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setShowRecycleBin(!showRecycleBin)}
-                className={`p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
-                title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center mt-12 mb-6 gap-3 sm:gap-4">
+        <div className="flex items-center gap-4">
+          <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2 mr-2">
+            {showRecycleBin ? 'Recycle Bin' : 'History Log'}
+            {showRecycleBin && deletedMocks.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-400 text-xs font-bold uppercase tracking-wider">{deletedMocks.length}</span>
+            )}
+          </h3>
+
+          <button
+            onClick={() => setShowTasksModal(true)}
+            className="px-3 py-1.5 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900/60 relative shadow-sm"
+            title="View Action Items"
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            Tasks
+            {totalTasksCount > 0 && (
+              <div className={`absolute -top-2 -right-2 flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold border-2 border-white dark:border-slate-900 text-white shadow-sm px-1 ${pendingTasksCount === 0 ? 'bg-emerald-500' : pendingTasksCount >= 10 ? 'bg-rose-500' : 'bg-indigo-500'}`}>
+                {pendingTasksCount === 0 ? <Check className="w-2.5 h-2.5" strokeWidth={3} /> : pendingTasksCount}
+              </div>
+            )}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+          <button
+            onClick={handleExportExcel}
+            className="p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/50"
+            title="Download History as Excel"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => setShowRecycleBin(!showRecycleBin)}
+            className={`p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+            title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
           <div className="space-y-8">
             {(() => {
@@ -946,7 +988,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 align-middle">
                       <div className="flex flex-col max-w-[140px] sm:max-w-none">
-                         <span className="whitespace-nowrap truncate">{mock.mockName}</span>
+                         <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 -mb-1">
+                           <span className="whitespace-nowrap shrink-0 max-w-[120px] sm:max-w-[250px] truncate">{mock.mockName}</span>
+                         </div>
                          <div className="flex gap-1.5 mt-1 overflow-x-auto scrollbar-hide flex-nowrap md:flex-wrap pb-1">
                            {mock.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">{getPlatformShort(mock.platform)}</span>}
                            {mock.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-medium whitespace-nowrap">{mock.examPhase}</span>}
@@ -1048,14 +1092,67 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                       </td>
                     )}
                   </tr>
-                  {(activeRowId === mock.id && (mock.note || (mock.tags && mock.tags.length > 0) || editingReflectionId === mock.id)) && (
+                    {(activeRowId === mock.id && (mock.note || (mock.tags && mock.tags.length > 0) || mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState || editingReflectionId === mock.id)) && (
                      <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
-                        <td colSpan={onDeleteMock || onEditMock ? 10 : 9} className="px-6 py-4">
-                          <div className="flex flex-col gap-2 relative">
-                             <div className="absolute left-[-24px] top-0 bottom-0 w-1 bg-indigo-200 dark:bg-indigo-800 rounded-full"></div>
-                             
-                             {editingReflectionId === mock.id ? (
+                        <td colSpan={onDeleteMock || onEditMock ? 10 : 9} className="p-0">
+                          <div className="sticky left-0 w-[calc(100vw-1.5rem)] max-w-full sm:w-auto sm:max-w-none px-4 sm:px-6 py-4">
+                            <div className="flex flex-col gap-2 relative">
+                               <div className="absolute left-[2px] sm:left-[-24px] top-0 bottom-0 w-1 bg-indigo-200 dark:bg-indigo-800 rounded-full"></div>
+                               
+                               {editingReflectionId === mock.id ? (
                                <div className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+                                    <div className="w-full">
+                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Difficulty</label>
+                                      <CustomDropdown 
+                                        value={localDifficulty} 
+                                        onChange={setLocalDifficulty} 
+                                        options={['Easy', 'Ok Ok', 'Hard']}
+                                        placeholder="(Optional)"
+                                        allowClear 
+                                      />
+                                    </div>
+                                    <div className="w-full">
+                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Nervousness</label>
+                                      <CustomDropdown 
+                                        value={localNervousness} 
+                                        onChange={setLocalNervousness} 
+                                        options={['Low', 'Manageable', 'High', 'Panicked']}
+                                        placeholder="(Optional)"
+                                        allowClear 
+                                      />
+                                    </div>
+                                    <div className="w-full">
+                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Focus</label>
+                                      <CustomDropdown 
+                                        value={localFocus} 
+                                        onChange={setLocalFocus} 
+                                        options={['Distracted', 'Normal', 'Full focused']}
+                                        placeholder="(Optional)"
+                                        allowClear 
+                                      />
+                                    </div>
+                                    <div className="w-full">
+                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Energy Level</label>
+                                      <CustomDropdown 
+                                        value={localEnergy} 
+                                        onChange={setLocalEnergy} 
+                                        options={['Rested', 'Bit tired', 'Exhausted']}
+                                        placeholder="(Optional)"
+                                        allowClear 
+                                      />
+                                    </div>
+                                    <div className="w-full">
+                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Time</label>
+                                      <CustomDropdown 
+                                        value={localTimeState} 
+                                        onChange={setLocalTimeState} 
+                                        options={['Finished early', 'Perfect pacing', 'Rushed at the end', 'Ran out of time']}
+                                        placeholder="(Optional)"
+                                        allowClear 
+                                      />
+                                    </div>
+                                  </div>
                                   <div>
                                     <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tags (comma separated)</label>
                                     <input 
@@ -1075,6 +1172,52 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                       className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200 min-h-[80px] resize-y custom-scrollbar"
                                     />
                                   </div>
+
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">Action Items / To-Do</label>
+                                      <button 
+                                        onClick={() => setLocalTasks([...localTasks, { id: Math.random().toString(36).substr(2, 9), text: '', completed: false }])}
+                                        className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 px-2 py-1 rounded transition-colors"
+                                      >
+                                        + Add Task
+                                      </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {localTasks.map((task, index) => (
+                                        <div key={task.id} className="flex items-center gap-2 bg-slate-50/50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                                          <input 
+                                            type="checkbox" 
+                                            checked={task.completed}
+                                            onChange={(e) => {
+                                              const newTasks = [...localTasks];
+                                              newTasks[index].completed = e.target.checked;
+                                              setLocalTasks(newTasks);
+                                            }}
+                                            className="w-4 h-4 text-indigo-600 cursor-pointer border-slate-300 rounded focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
+                                          />
+                                          <input 
+                                            type="text" 
+                                            value={task.text}
+                                            onChange={(e) => {
+                                              const newTasks = [...localTasks];
+                                              newTasks[index].text = e.target.value;
+                                              setLocalTasks(newTasks);
+                                            }}
+                                            placeholder="Task description..."
+                                            className={`flex-1 text-sm bg-transparent border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 dark:border-slate-700 p-1 rounded ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}
+                                          />
+                                          <button 
+                                            onClick={() => setLocalTasks(localTasks.filter(t => t.id !== task.id))}
+                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+
                                   <div className="flex justify-end gap-2 pt-1">
                                     <button 
                                       onClick={() => setEditingReflectionId(null)}
@@ -1092,9 +1235,47 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                </div>
                              ) : (
                                <>
-                                 {mock.tags && mock.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-2">
-                                       {mock.tags.map(t => <span key={t} className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-slate-700 dark:text-slate-300 text-[10px] rounded-md font-medium uppercase tracking-wider">#{t}</span>)}
+                                 {(mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState || (mock.tags && mock.tags.length > 0)) && (
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-1">
+                                      {(mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState) && (
+                                        <div className="flex items-center gap-1 sm:gap-2">
+                                          {mock.difficulty && (
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-purple-50 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded shadow-sm text-center sm:text-left">
+                                              <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-purple-700 dark:text-purple-300 font-bold opacity-90 leading-tight">Difficulty</span>
+                                              <span className="text-purple-900 dark:text-purple-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.difficulty}</span>
+                                            </div>
+                                          )}
+                                          {mock.nervousness && (
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-amber-50 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded shadow-sm text-center sm:text-left">
+                                              <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-amber-700 dark:text-amber-300 font-bold opacity-90 leading-tight">Nervous</span>
+                                              <span className="text-amber-900 dark:text-amber-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.nervousness}</span>
+                                            </div>
+                                          )}
+                                          {mock.focus && (
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-blue-50 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 rounded shadow-sm text-center sm:text-left">
+                                              <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-blue-700 dark:text-blue-300 font-bold opacity-90 leading-tight">Focus</span>
+                                              <span className="text-blue-900 dark:text-blue-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.focus}</span>
+                                            </div>
+                                          )}
+                                          {mock.energy && (
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 rounded shadow-sm text-center sm:text-left">
+                                              <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-emerald-700 dark:text-emerald-300 font-bold opacity-90 leading-tight">Energy</span>
+                                              <span className="text-emerald-900 dark:text-emerald-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.energy}</span>
+                                            </div>
+                                          )}
+                                          {mock.timeState && (
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-orange-50 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 rounded shadow-sm text-center sm:text-left">
+                                              <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-orange-700 dark:text-orange-300 font-bold opacity-90 leading-tight">Time</span>
+                                              <span className="text-orange-900 dark:text-orange-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.timeState}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      {mock.tags && mock.tags.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                          {mock.tags.map((t: string) => <span key={t} className="shrink-0 px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-slate-700 dark:text-slate-300 text-[8px] sm:text-[10px] rounded font-medium uppercase tracking-wider flex items-center">#{t}</span>)}
+                                        </div>
+                                      )}
                                     </div>
                                  )}
                                  {mock.note && (
@@ -1102,9 +1283,36 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                        {mock.note}
                                     </p>
                                  )}
+                                 {mock.tasks && mock.tasks.length > 0 && (
+                                    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Action Items</span>
+                                        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">
+                                          {mock.tasks.filter(t => t.completed).length}/{mock.tasks.length} Completed
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1.5 pt-1">
+                                        {mock.tasks.map(task => (
+                                          <div key={task.id} className="flex items-start gap-2">
+                                              <input 
+                                                type="checkbox" 
+                                                checked={task.completed} 
+                                                readOnly 
+                                                className="mt-0.5 w-3.5 h-3.5 text-indigo-600 rounded-sm border-slate-300 focus:ring-0 dark:border-slate-600 dark:bg-slate-800 mb-auto"
+                                                style={{ opacity: task.completed ? 0.7 : 1 }}
+                                              />
+                                              <span className={`text-sm ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                {task.text}
+                                              </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                 )}
                                </>
                              )}
                           </div>
+                         </div>
                         </td>
                      </tr>
                   )}
@@ -1192,6 +1400,201 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-100 dark:bg-amber-900/50 ring-1 ring-amber-500/20 dark:ring-amber-500/50"></div> 70-80%ile</div>
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-rose-100 dark:bg-rose-900/50 ring-1 ring-rose-500/20 dark:ring-rose-500/50"></div> &lt;70%ile</div>
           </div>
+
+          {/* Action Items Modal */}
+          {showTasksModal && createPortal(
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-50 dark:bg-slate-950 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="bg-white dark:bg-slate-900 w-full h-full flex flex-col overflow-hidden"
+              >
+                <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 sm:p-2.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                      <CheckSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-800 dark:text-white">Action Items</h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Your pending tasks</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-4">
+                    <button
+                      onClick={() => setShowCompletedTasks(!showCompletedTasks)}
+                      className={`font-medium px-3 py-1.5 rounded-lg transition-colors text-[10px] sm:text-sm select-none flex items-center gap-2 ${
+                        showCompletedTasks 
+                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/70' 
+                        : 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      Completed
+                    </button>
+                    <button
+                      onClick={() => setShowTasksModal(false)}
+                      className="p-1.5 sm:p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg sm:rounded-xl transition-all hover:scale-105"
+                      title="Close window"
+                    >
+                      <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 bg-slate-50/30 dark:bg-slate-950/20 custom-scrollbar relative z-0">
+                  {(() => {
+                    const mocksWithTasks = mocks.filter(m => m.tasks && m.tasks.length > 0 && (showCompletedTasks || m.tasks.some(t => !t.completed)));
+                    if (mocksWithTasks.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                          <motion.div 
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="w-24 h-24 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mb-6 border-4 border-white dark:border-slate-900 shadow-xl"
+                          >
+                            <CheckSquare className="w-10 h-10 text-emerald-500 dark:text-emerald-400" />
+                          </motion.div>
+                          <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">All Caught Up!</h3>
+                          <p className="text-slate-500 dark:text-slate-400 text-base max-w-sm">
+                            You don't have any pending action items. Great job staying on top of your mock reflections.
+                          </p>
+                        </div>
+                      );
+                    }
+                    
+                    // Group by date
+                    const groupedByDate: Record<string, typeof mocksWithTasks> = {};
+                    mocksWithTasks.forEach(mock => {
+                      const dateStr = parseLocalDate(mock.date)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) || 'Unknown Date';
+                      if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
+                      groupedByDate[dateStr].push(mock);
+                    });
+
+                    // Sort dates (we'll just use the first mock's natural date string to sort the keys)
+                    const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+                       const dA = new Date(groupedByDate[a][0].date).getTime();
+                       const dB = new Date(groupedByDate[b][0].date).getTime();
+                       return dB - dA;
+                    });
+                    
+                    return sortedDates.map(dateLabel => (
+                      <div key={dateLabel} className="mb-6 last:mb-2">
+                        <div className="flex items-center gap-4 mb-3 py-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 tracking-wider uppercase flex items-center gap-2">
+
+                            <CalendarDays className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+                            {dateLabel}
+                          </h3>
+                          <div className="flex-1 border-b border-slate-200 dark:border-slate-800"></div>
+                        </div>
+                        <div className="space-y-4">
+                          {groupedByDate[dateLabel].sort((a, b) => new Date(b.createdAt||0).getTime() - new Date(a.createdAt||0).getTime()).map(mock => {
+                            const tasksToShow = mock.tasks?.filter(t => showCompletedTasks || !t.completed) || [];
+                            if (tasksToShow.length === 0) return null;
+                            
+                            const isExpanded = expandedActionMocks[mock.id];
+                            
+                            return (
+                              <div key={mock.id} className="bg-white dark:bg-slate-800 sm:rounded-2xl border-y sm:border-x border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-md transition-all -mx-4 sm:mx-0">
+                                <div 
+                                  className="px-4 py-2.5 sm:py-3 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/80 flex flex-col gap-2 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors group"
+                                  onClick={() => setExpandedActionMocks(prev => ({ ...prev, [mock.id]: !prev[mock.id] }))}
+                                >
+                                  <div className="flex items-start sm:items-center justify-between">
+                                    <div className="flex items-start sm:items-center gap-2 flex-1 min-w-0 overflow-hidden sm:flex-wrap pt-0 pb-[2px]">
+                                      <h4 className="font-bold text-slate-800 dark:text-slate-100 truncate max-w-[220px] sm:max-w-none text-lg leading-[24px]">
+                                        {mock.mockName}
+                                      </h4>
+                                      
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 shrink-0">
+                                        <div className="flex items-center gap-1">
+                                          <span className="font-semibold text-slate-700 dark:text-slate-200 bg-slate-200/60 dark:bg-slate-700 px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded text-[6px] sm:text-[10px] leading-none uppercase tracking-wide">{mock.examType}</span>
+                                          {mock.examRole && <span className="font-semibold text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 leading-none tracking-wide">{mock.examRole}</span>}
+                                        </div>
+                                        {(mock.examPhase || mock.examScope) && (
+                                          <div className="flex items-center gap-1">
+                                            {mock.examPhase && <span className="font-semibold text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 leading-none tracking-wide">{mock.examPhase}</span>}
+                                            {mock.examScope && <span className="font-semibold text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 leading-none tracking-wide">{mock.examScope}</span>}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {isExpanded && mock.tags && mock.tags.length > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap border-l border-slate-200 dark:border-slate-700 pl-1.5 ml-0.5 sm:border-none sm:pl-0 sm:ml-0">
+                                          {mock.tags.map((t: string) => (
+                                            <span key={t} className="px-1 sm:px-1.5 py-[2px] sm:py-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 text-[6px] sm:text-[10px] rounded font-bold uppercase tracking-wider flex items-center shrink-0 leading-none">#{t}</span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {isExpanded && <span className="font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-[8px] sm:text-[10px] px-1.5 py-0.5 rounded-md shadow-sm shrink-0 ml-2">{getPlatformShort(mock.platform)}</span>}
+                                  </div>
+                                  {isExpanded && (mock.difficulty || mock.focus || mock.timeState || mock.energy || mock.nervousness) && (
+                                    <div className="flex flex-nowrap items-center justify-start gap-1 sm:gap-2 w-full -mt-2 overflow-x-auto scrollbar-hide pb-[2px] leading-6">
+                                      {mock.difficulty && (
+                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-purple-50 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
+                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-purple-600 dark:text-purple-400 font-bold opacity-90 leading-none">Diff:</span>
+                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-purple-900 dark:text-purple-100 leading-none">{mock.difficulty}</span>
+                                        </div>
+                                      )}
+                                      {mock.nervousness && (
+                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-amber-50 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
+                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400 font-bold opacity-90 leading-none">Nervous:</span>
+                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-100 leading-none">{mock.nervousness}</span>
+                                        </div>
+                                      )}
+                                      {mock.focus && (
+                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
+                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400 font-bold opacity-90 leading-none">Focus:</span>
+                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-100 leading-none">{mock.focus}</span>
+                                        </div>
+                                      )}
+                                      {mock.energy && (
+                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
+                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400 font-bold opacity-90 leading-none">Energy:</span>
+                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-100 leading-none">{mock.energy}</span>
+                                        </div>
+                                      )}
+                                      {mock.timeState && (
+                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-orange-50 dark:bg-orange-900/40 border border-orange-200 dark:border-orange-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
+                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-orange-600 dark:text-orange-400 font-bold opacity-90 leading-none">Time:</span>
+                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-orange-900 dark:text-orange-100 leading-none">{mock.timeState}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="px-4 py-2.5 sm:p-4 -mt-1.5 sm:mt-0 space-y-2 bg-white dark:bg-slate-800">
+                                  {tasksToShow.map((task) => (
+                                    <div key={task.id} className="flex items-start gap-2">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={task.completed} 
+                                        onChange={async () => {
+                                          if (onUpdateReflection) {
+                                            const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, completed: !task.completed } : t) || [];
+                                            await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                          }
+                                        }}
+                                        className="mt-0.5 w-3.5 h-3.5 text-indigo-600 rounded-sm border-slate-300 focus:ring-0 dark:border-slate-600 dark:bg-slate-800 mb-auto cursor-pointer"
+                                        style={{ opacity: task.completed ? 0.7 : 1 }}
+                                      />
+                                      <span className={`text-sm ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                                        {task.text}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </motion.div>
+            </div>
+          , document.body)}
     </div>
   );
 }

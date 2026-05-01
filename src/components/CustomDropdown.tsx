@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-export function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean }) {
+export function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required, allowClear }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean, allowClear?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -23,7 +23,18 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
         className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm font-medium ${!value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'} flex justify-between items-center`}
       >
         <span>{value || placeholder}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <div className="flex flex-row items-center gap-1">
+          {allowClear && value && (
+             <span 
+               onClick={(e) => { e.stopPropagation(); onChange(''); }}
+               className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+               title="Clear selection"
+             >
+               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+             </span>
+          )}
+          <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
       </button>
       
       {isOpen && (
