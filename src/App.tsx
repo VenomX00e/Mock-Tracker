@@ -651,30 +651,22 @@ export default function App() {
                       </a>
                     </div>
                   )}
-                  {isAdmin && (
-                    <button
-                      onClick={() => {
-                        setInlineEditingId(n.id);
-                        setInlineNoticeTitle(n.title || '');
-                        setInlineNoticeDesc(n.description || '');
-                        setDescHistory([n.description || '']);
-                        setHistoryIndex(0);
-                      }}
-                      className="absolute top-2 right-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg transition-colors shadow-sm z-30 border border-slate-200 dark:border-slate-700"
-                      style={{ 
-                        marginTop: '-16px', 
-                        marginRight: '-254px', 
-                        paddingLeft: '8px',
-                        paddingTop: '4px',
-                        paddingBottom: '4px',
-                        paddingRight: '6px'
-                      }}
-                      title="Edit Notice Inline"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                 </div>
+                )}
+                {isAdmin && inlineEditingId !== n.id && (
+                  <button
+                    onClick={() => {
+                      setInlineEditingId(n.id);
+                      setInlineNoticeTitle(n.title || '');
+                      setInlineNoticeDesc(n.description || '');
+                      setDescHistory([n.description || '']);
+                      setHistoryIndex(0);
+                    }}
+                    className="absolute top-3 right-3 p-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm z-30 border border-slate-200 dark:border-slate-700 hover:scale-110 active:scale-95"
+                    title="Edit Notice Inline"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                 )}
               </div>
             )})}
