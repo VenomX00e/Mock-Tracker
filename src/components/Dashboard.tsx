@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { MockScore, UserProfile, ReflectionTask } from '../types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, ReferenceLine, LabelList,
+  BarChart, Bar, Legend, ReferenceLine, LabelList, Cell,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download, CheckSquare, X, Check } from 'lucide-react';
@@ -15,6 +15,8 @@ import { db } from '../services/firebase';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
+import { ReflectionEditor } from './ReflectionEditor';
+
 interface DashboardProps {
   mocks: MockScore[];
   deletedMocks?: MockScore[];
@@ -24,6 +26,7 @@ interface DashboardProps {
   onRestoreMock?: (id: string) => void;
   onPermanentlyDeleteMock?: (id: string) => void;
   onUpdateReflection?: (id: string, updates: Partial<MockScore>) => Promise<void>;
+  onUpdateProfileTasks?: (tasks: ReflectionTask[]) => Promise<void>;
 }
 
 const PortalContent = ({ chartRefBox, coordinate, content, screenX, screenY, isRight, isBottom }: any) => {
@@ -61,7 +64,7 @@ const PortalContent = ({ chartRefBox, coordinate, content, screenX, screenY, isR
   return createPortal(
     <div 
       ref={tooltipRef}
-      className="fixed z-[100000] pointer-events-none transition-opacity duration-75 ease-out opacity-100"
+      className="fixed z-40 pointer-events-none transition-opacity duration-75 ease-out opacity-100"
       style={{ 
         left: screenX, 
         top: screenY,
@@ -75,11 +78,45 @@ const PortalContent = ({ chartRefBox, coordinate, content, screenX, screenY, isR
 };
 
 const CustomTooltip = ({ active, payload, coordinate, chartRefBox }: any) => {
-  if (active && payload && payload.length) {
+  const [visible, setVisible] = useState(false);
+  
+  const payloadId = payload?.[0]?.payload?.id || payload?.[0]?.payload?.mockName;
+  const coordX = coordinate?.x;
+  const coordY = coordinate?.y;
+
+  useEffect(() => {
+    if (active) setVisible(true);
+    else setVisible(false);
+  }, [active, payloadId, coordX, coordY]);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setVisible(false);
+    };
+
+    if (visible && active) {
+      // Small timeout so the trigger click doesn't immediately close it
+      const timer = setTimeout(() => {
+        document.addEventListener('touchstart', handleOutsideClick);
+        document.addEventListener('mousedown', handleOutsideClick);
+      }, 50);
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener('touchstart', handleOutsideClick);
+        document.removeEventListener('mousedown', handleOutsideClick);
+      };
+    }
+  }, [visible, active]);
+
+  if (active && visible && payload && payload.length) {
     const data = payload[0].payload as MockScore;
     
     const content = (
-      <div className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-[99990]">
+      <div 
+        className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-40 pointer-events-auto"
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
         <p className="font-semibold text-slate-100 mb-1.5">{data.mockName || 'Mock Test'}</p>
         <div className="flex flex-wrap gap-1.5 mb-3">
           <span className="text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-md text-slate-300 font-medium">{data.examType}</span>
@@ -134,24 +171,15 @@ const renderCustomBarLabel = (props: any) => {
   );
 };
 
-export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteMock, onEditMock, onRestoreMock, onPermanentlyDeleteMock, onUpdateReflection }: DashboardProps) {
-  const [selectedExam, setSelectedExam] = useState<string>('Overview');
+export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteMock, onEditMock, onRestoreMock, onPermanentlyDeleteMock, onUpdateReflection, onUpdateProfileTasks }: DashboardProps) {
+  const [selectedExam, setSelectedExam] = useState<string>('All');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
   const [selectedScope, setSelectedScope] = useState<string>('All');
   const [activeTrendId, setActiveTrendId] = useState<string>('overall');
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
-  
+
   const [editingReflectionId, setEditingReflectionId] = useState<string | null>(null);
-  const [localNote, setLocalNote] = useState('');
-  const [localTags, setLocalTags] = useState('');
-  const [localDifficulty, setLocalDifficulty] = useState('');
-  const [localNervousness, setLocalNervousness] = useState('');
-  const [localFocus, setLocalFocus] = useState('');
-  const [localEnergy, setLocalEnergy] = useState('');
-  const [localTimeState, setLocalTimeState] = useState('');
-  const [localTasks, setLocalTasks] = useState<ReflectionTask[]>([]);
-  const [isSavingReflection, setIsSavingReflection] = useState(false);
 
   const lineChartRefInner = useRef<HTMLDivElement>(null);
   const barChartRefInner = useRef<HTMLDivElement>(null);
@@ -164,6 +192,15 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [showTasksModal, setShowTasksModal] = useState(false);
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [editingGlobalTaskId, setEditingGlobalTaskId] = useState<string | null>(null);
+  const [editGlobalTaskText, setEditGlobalTaskText] = useState('');
+  const [activeActionsTaskId, setActiveActionsTaskId] = useState<string | null>(null);
+  const [addingTaskToMockId, setAddingTaskToMockId] = useState<string | null>(null);
+  const [newMockTaskText, setNewMockTaskText] = useState('');
+  const [editingMockTaskId, setEditingMockTaskId] = useState<string | null>(null);
+  const [editMockTaskText, setEditMockTaskText] = useState('');
+  const [mockIdOfEditingTask, setMockIdOfEditingTask] = useState<string | null>(null);
   const [expandedActionMocks, setExpandedActionMocks] = useState<Record<string, boolean>>({});
 
   const handleExportExcel = async () => {
@@ -199,12 +236,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
         platform: mock.platform,
         score: mock.score,
         percentile: mock.percentile,
-        quant: mock.quant.score,
-        quant_percentile: mock.quant.percentile || '-',
-        reasoning: mock.reasoning.score,
-        reasoning_percentile: mock.reasoning.percentile || '-',
-        english: mock.english.score,
-        english_percentile: mock.english.percentile || '-',
+        quant: mock.quant?.score ?? '-',
+        quant_percentile: mock.quant?.percentile ?? '-',
+        reasoning: mock.reasoning?.score ?? '-',
+        reasoning_percentile: mock.reasoning?.percentile ?? '-',
+        english: mock.english?.score ?? '-',
+        english_percentile: mock.english?.percentile ?? '-',
         ga: mock.ga?.score ?? '-',
         ga_percentile: mock.ga?.percentile ?? '-',
         computer: mock.computer?.score ?? '-',
@@ -228,37 +265,6 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   const handleReflectionEditStart = (mock: MockScore) => {
     setActiveRowId(mock.id);
     setEditingReflectionId(mock.id);
-    setLocalNote(mock.note || '');
-    setLocalTags(mock.tags?.join(', ') || '');
-    setLocalDifficulty(mock.difficulty || '');
-    setLocalNervousness(mock.nervousness || '');
-    setLocalFocus(mock.focus || '');
-    setLocalEnergy(mock.energy || '');
-    setLocalTimeState(mock.timeState || '');
-    setLocalTasks(mock.tasks ? JSON.parse(JSON.stringify(mock.tasks)) : []);
-  };
-
-  const handleReflectionSave = async (mockId: string) => {
-    if (!onUpdateReflection) return;
-    setIsSavingReflection(true);
-    try {
-      const tagsArray = localTags.split(',').map(t => t.trim()).filter(Boolean);
-      await onUpdateReflection(mockId, {
-        note: localNote,
-        tags: tagsArray,
-        difficulty: localDifficulty,
-        nervousness: localNervousness,
-        focus: localFocus,
-        energy: localEnergy,
-        timeState: localTimeState,
-        tasks: localTasks
-      });
-      setEditingReflectionId(null);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSavingReflection(false);
-    }
   };
 
   const handleSort = (field: string) => {
@@ -282,7 +288,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   // get unique exam types
   const examTypes = useMemo(() => {
     const types = new Set(mocks.map(m => m.examType).filter(Boolean));
-    return ['Overview', ...Array.from(types).sort()];
+    return ['All', ...Array.from(types).sort()];
   }, [mocks]);
 
   const [leaderboardRank, setLeaderboardRank] = useState<number | null>(null);
@@ -312,8 +318,20 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     setSelectedScope('All');
   }, [selectedExam]);
 
+  const allGlobalPhases = useMemo(() => {
+    const phases = Array.from(new Set(mocks.map(m => m.examPhase).filter(Boolean)));
+    phases.sort((a, b) => {
+      if (a === 'Prelims') return -1;
+      if (b === 'Prelims') return 1;
+      if (a === 'Mains') return -1;
+      if (b === 'Mains') return 1;
+      return mocks.findIndex(m => m.examPhase === a) - mocks.findIndex(m => m.examPhase === b);
+    });
+    return ['All', ...phases];
+  }, [mocks]);
+
   const [goalPercentileStr, setGoalPercentileStr] = useState<string>(() => localStorage.getItem('goalPercentile') || '95');
-  const [statsCountRange, setStatsCountRange] = useState<number | 'all'>(10);
+  const [statsCountRange, setStatsCountRange] = useState<number | 'all'>('all');
   const [showPcntOptions, setShowPcntOptions] = useState(false);
   const [showAccOptions, setShowAccOptions] = useState(false);
 
@@ -326,7 +344,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   // filter
   const displayedMocks = useMemo(() => {
     let filtered = mocks;
-    if (selectedExam !== 'Overview') {
+    if (selectedExam !== 'All') {
       filtered = mocks.filter(m => m.examType === selectedExam);
     }
     if (selectedRole !== 'All') {
@@ -344,14 +362,14 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
   // Derive unique roles and scopes for the current selection
   const availableRoles = useMemo(() => {
-    if (selectedExam === 'Overview') return [];
+    if (selectedExam === 'All') return [];
     const baseSelected = mocks.filter(m => m.examType === selectedExam);
     const roles = new Set(baseSelected.map(m => m.examRole).filter(Boolean));
     return roles.size > 0 ? ['All', ...Array.from(roles).sort()] : [];
   }, [mocks, selectedExam]);
 
   const availablePhases = useMemo(() => {
-    if (selectedExam === 'Overview') return [];
+    if (selectedExam === 'All') return [];
     let baseSelected = mocks.filter(m => m.examType === selectedExam);
     if (selectedRole !== 'All') {
       baseSelected = baseSelected.filter(m => m.examRole === selectedRole);
@@ -361,7 +379,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   }, [mocks, selectedExam, selectedRole]);
 
   const availableScopes = useMemo(() => {
-    if (selectedExam === 'Overview') return [];
+    if (selectedExam === 'All') return [];
     let baseSelected = mocks.filter(m => m.examType === selectedExam);
     if (selectedRole !== 'All') {
       baseSelected = baseSelected.filter(m => m.examRole === selectedRole);
@@ -433,8 +451,68 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   }, [displayedMocks]);
 
   const chartDataReversed = useMemo(() => {
-    return [...chronologicalMocks].reverse();
+    return [...chronologicalMocks].reverse().map(m => {
+      const scores = [
+        m.quant?.score || 0,
+        m.reasoning?.score || 0,
+        m.english?.score || 0,
+        m.ga?.score || 0
+      ];
+      const maxSectionScore = Math.max(...scores, 0);
+      return { ...m, maxSectionScore };
+    });
   }, [chronologicalMocks]);
+
+  const flattenedData = useMemo(() => {
+    const data: any[] = [];
+    let index = 0;
+    chartDataReversed.forEach((mock) => {
+      const bars: any[] = [];
+      if (chartData.hasQuant && mock.quant?.score) bars.push({ ...mock, cellSub: 'Quant', cellScore: mock.quant.score, fill: '#3b82f6' });
+      if (chartData.hasReasoning && mock.reasoning?.score) bars.push({ ...mock, cellSub: 'Reasoning', cellScore: mock.reasoning.score, fill: '#8b5cf6' });
+      if (chartData.hasEnglish && mock.english?.score) bars.push({ ...mock, cellSub: 'English', cellScore: mock.english.score, fill: '#f59e0b' });
+      if (chartData.hasGA && mock.ga?.score) bars.push({ ...mock, cellSub: 'GA', cellScore: mock.ga.score, fill: '#10b981' });
+      
+      const n = bars.length;
+      if (n === 0) return;
+      
+      const centerIdx = Math.floor((n - 1) / 2);
+      
+      bars.forEach((b, i) => {
+        data.push({ 
+           ...b, 
+           flatIndex: index++, 
+           isCenter: i === centerIdx,
+           barCount: n
+        });
+      });
+      
+      data.push({ ...mock, isGap: true, flatIndex: index++ });
+      data.push({ ...mock, isGap: true, flatIndex: index++ });
+    });
+    while (data.length > 0 && data[data.length - 1].isGap) {
+      data.pop(); // remove trailing gap
+    }
+    return data;
+  }, [chartDataReversed, chartData]);
+
+  const renderCustomTick = (props: any) => {
+    const { x, y, payload } = props;
+    const item = flattenedData[payload.value];
+    if (!item || item.isGap || !item.isCenter) return null;
+    
+    const words = item.mockName.split(' '); 
+    const name = words.length <= 3 ? item.mockName : words.slice(-3).join(' ');
+    
+    // Shift slightly to the right if even number of bars to be perfectly centered
+    const dx = item.barCount % 2 === 0 ? 15 : 0; 
+
+    return (
+      <text x={x} y={y} dy={10} dx={dx} textAnchor="middle" fill="#64748b" fontSize={11}>
+        {name}
+      </text>
+    );
+  };
 
   if (mocks.length === 0 && deletedMocks.length === 0) {
     return (
@@ -500,7 +578,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
       </div>
       )}
 
-      {selectedExam !== 'Overview' && (availableRoles.length > 1 || availablePhases.length > 1 || availableScopes.length > 1) && (
+      {selectedExam !== 'All' && (availableRoles.length > 1 || availablePhases.length > 1 || availableScopes.length > 1) && (
         <div className="flex flex-col gap-4 mb-6 bg-slate-50/80 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-sm">
           {availableRoles.length > 1 && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -659,11 +737,23 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart: Percentile Trend */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[325px] lg:col-span-2 relative mt-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2">
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center mb-2 sm:mb-0">
-                  <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Performance Trend
-                </h3>
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col min-h-[325px] sm:h-[325px] lg:col-span-2 relative mt-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-4">
+                <div className="flex items-center gap-4">
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
+                    <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Performance Trend
+                  </h3>
+                  <div className="w-24 sm:w-28 mt-1 sm:mt-0">
+                    <CustomDropdown
+                      value={selectedPhase}
+                      options={selectedExam === 'All' ? allGlobalPhases : (availablePhases.length > 0 ? availablePhases.map(p => typeof p === 'string' ? p : p) : allGlobalPhases)}
+                      onChange={(val) => setSelectedPhase(val)}
+                      placeholder="Phase"
+                      buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700/50 border-transparent rounded-lg"
+                      optionClassName="px-3 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
                 <div className="flex flex-row overflow-x-auto custom-scrollbar gap-1.5 sm:gap-2 pb-1 sm:pb-0 w-full sm:w-auto">
                   {['overall', 'quant', 'reasoning', 'english', 'ga'].map(key => (
                     <button 
@@ -676,16 +766,40 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   ))}
                 </div>
               </div>
-              <div className="flex-1 w-full mt-4 overflow-hidden relative" style={{ minHeight: 250 }}>
+              <div className="flex-1 w-full mt-4 overflow-hidden relative min-h-[200px] sm:min-h-[250px]">
                 <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
                   <ResponsiveContainer width="99%" height="100%">
-                    <LineChart data={chronologicalMocks.filter(m => m.examScope === 'Full' || !m.examScope)} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <LineChart data={chronologicalMocks.filter(m => {
+                        if (activeTrendId === 'overall') return m.examScope === 'Full' || !m.examScope;
+                        
+                        if (m.examScope === 'Sectional') {
+                            const nameLower = (m.mockName || '').toLowerCase();
+                            const isQuantName = nameLower.includes('quant') || nameLower.includes('math');
+                            const isEngName = nameLower.includes('english') || nameLower.includes('eng');
+                            const isReasName = nameLower.includes('reasoning') || nameLower.includes('lr') || nameLower.includes('logic');
+                            const isGaName = nameLower.includes('ga') || nameLower.includes('general') || nameLower.includes('gk') || nameLower.includes('awareness');
+
+                            if (activeTrendId === 'quant' && (isEngName || isReasName || isGaName) && !isQuantName) return false;
+                            if (activeTrendId === 'english' && (isQuantName || isReasName || isGaName) && !isEngName) return false;
+                            if (activeTrendId === 'reasoning' && (isQuantName || isEngName || isGaName) && !isReasName) return false;
+                            if (activeTrendId === 'ga' && (isQuantName || isEngName || isReasName) && !isGaName) return false;
+                        }
+
+                        const val = m[activeTrendId as keyof typeof m] as any;
+                        // Include if we have percentile OR score (so sectionals without percentiles still appear and can be plotted if modified)
+                        return val != null && ((val.percentile != null && val.percentile !== '') || (val.score != null && val.score !== ''));
+                      })} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
                     <RechartsTooltip content={<CustomTooltip chartRefBox={lineChartRefInner} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                     <ReferenceLine y={90} stroke="#10b981" strokeDasharray="3 3" opacity={0.5} />
-                    <Line connectNulls={true} type="monotone" dataKey={activeTrendId === 'overall' ? 'percentile' : `${activeTrendId}.percentile`} name={activeTrendId === 'overall' ? 'Percentile' : `${activeTrendId} %ile`} stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
+                    <Line connectNulls={true} type="monotone" dataKey={(m: any) => {
+                        if (activeTrendId === 'overall') return m.percentile || m.score;
+                        const v = m[activeTrendId];
+                        if (!v) return null;
+                        return v.percentile || v.score;
+                    }} name={activeTrendId === 'overall' ? 'Percentile/Score' : `${activeTrendId} %ile/Score`} stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -693,12 +807,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             </div>
             
             {/* Chart: Sectional Scores */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col h-[325px] lg:col-span-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                    <Target className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Sectional Breakdown
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col min-h-[325px] sm:h-[325px] lg:col-span-2">
+              <div className="flex flex-row items-center justify-between gap-2 sm:gap-4 mb-6">
+                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center text-sm sm:text-base whitespace-nowrap">
+                    <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-slate-400 dark:text-slate-500" /> Sectional Breakdown
                  </h3>
-                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50">
+                 <div className="flex border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 bg-slate-50 dark:bg-slate-900/50 flex-shrink-0">
                     <button 
                       onClick={() => setChartView('bar')} 
                       className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${chartView === 'bar' ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
@@ -716,27 +830,30 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
               <div className="flex-1 w-full relative flex flex-col overflow-hidden">
                 {chartView === 'bar' ? (
                 <>
-                  <div className="w-full flex-1 overflow-x-auto custom-scrollbar touch-pan-x touch-pan-y">
-                    <div style={{ height: '100%', minWidth: Math.max(chartDataReversed.length * 120, 300) }} ref={barChartRefInner}>
-                      <ResponsiveContainer width="99%" height={300}>
-                        <BarChart style={{ touchAction: 'pan-x' }} data={chartDataReversed} margin={{ top: 30, right: 20, left: -20, bottom: 5 }} barCategoryGap="25%" barGap={2}>
+                  <div className="w-full flex-1 overflow-x-auto overflow-y-hidden touch-pan-x touch-pan-y [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <div style={{ height: '100%', minWidth: Math.max(flattenedData.length * 28, 400) }} ref={barChartRefInner}>
+                      <ResponsiveContainer width="99%" height="100%">
+                        <BarChart style={{ touchAction: 'pan-x' }} data={flattenedData} margin={{ top: 30, right: 20, left: -20, bottom: 5 }} barCategoryGap="0%">
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
-                          <XAxis dataKey="id" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} tickFormatter={(val) => { const m = chartDataReversed.find(item => item.id === val); return m && m.mockName.length > 20 ? m.mockName.substring(0,20)+'...' : m?.mockName || val; }} />
+                          <XAxis dataKey="flatIndex" axisLine={false} tickLine={false} interval={0} height={30} tick={renderCustomTick} />
                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                           <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                           
-                          {chartData.hasQuant && <Bar dataKey="quant.score" name="Quant" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="quant.score" position="top" fill="#3b82f6" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
-                          </Bar>}
-                          {chartData.hasReasoning && <Bar dataKey="reasoning.score" name="Reasoning" fill="#8b5cf6" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="reasoning.score" position="top" fill="#8b5cf6" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
-                          </Bar>}
-                          {chartData.hasEnglish && <Bar dataKey="english.score" name="English" fill="#f59e0b" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="english.score" position="top" fill="#f59e0b" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
-                          </Bar>}
-                          {chartData.hasGA && <Bar dataKey="ga.score" name="GA" fill="#10b981" radius={[4, 4, 0, 0]}>
-                            <LabelList dataKey="ga.score" position="top" fill="#10b981" fontSize={10} fontWeight={700} formatter={(val: any) => val > 0 ? val : ''} offset={5} />
-                          </Bar>}
+                          <Bar dataKey="cellScore" barSize={26} radius={[4, 4, 0, 0]}>
+                            {flattenedData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.isGap ? 'transparent' : entry.fill} />
+                            ))}
+                            <LabelList dataKey="cellScore" position="top" content={(props: any) => {
+                               const { x, y, width, value, payload } = props;
+                               if (x == null || y == null || width == null || !value) return null;
+                               const fill = payload?.fill || '#64748b';
+                               return (
+                                 <text x={x + width / 2} y={y - 5} fill={fill} fontSize={10} fontWeight={700} textAnchor="middle">
+                                   {value > 0 ? value : ''}
+                                 </text>
+                               );
+                            }} />
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -750,7 +867,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   </div>
                 </>
                 ) : (
-                <div className="w-full h-full relative" style={{ minHeight: 250 }}>
+                <div className="w-full h-full relative min-h-[200px] sm:min-h-[250px]">
                 <div className="absolute inset-0 w-full h-full" ref={radarChartRefInner}>
                 <ResponsiveContainer width="99%" height="100%">
                   {(() => {
@@ -917,13 +1034,15 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
             <Download className="w-4 h-4" />
           </button>
           
-          <button
-            onClick={() => setShowRecycleBin(!showRecycleBin)}
-            className={`p-2 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
-            title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {deletedMocks.length > 0 && (
+            <button
+              onClick={() => setShowRecycleBin(!showRecycleBin)}
+              className={`p-2 border rounded-lg transition-colors flex items-center justify-center text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+              title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1100,140 +1219,15 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                <div className="absolute left-[2px] sm:left-[-24px] top-0 bottom-0 w-1 bg-indigo-200 dark:bg-indigo-800 rounded-full"></div>
                                
                                {editingReflectionId === mock.id ? (
-                               <div className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-                                    <div className="w-full">
-                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Difficulty</label>
-                                      <CustomDropdown 
-                                        value={localDifficulty} 
-                                        onChange={setLocalDifficulty} 
-                                        options={['Easy', 'Ok Ok', 'Hard']}
-                                        placeholder="(Optional)"
-                                        allowClear 
-                                      />
-                                    </div>
-                                    <div className="w-full">
-                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Nervousness</label>
-                                      <CustomDropdown 
-                                        value={localNervousness} 
-                                        onChange={setLocalNervousness} 
-                                        options={['Low', 'Manageable', 'High', 'Panicked']}
-                                        placeholder="(Optional)"
-                                        allowClear 
-                                      />
-                                    </div>
-                                    <div className="w-full">
-                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Focus</label>
-                                      <CustomDropdown 
-                                        value={localFocus} 
-                                        onChange={setLocalFocus} 
-                                        options={['Distracted', 'Normal', 'Full focused']}
-                                        placeholder="(Optional)"
-                                        allowClear 
-                                      />
-                                    </div>
-                                    <div className="w-full">
-                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Energy Level</label>
-                                      <CustomDropdown 
-                                        value={localEnergy} 
-                                        onChange={setLocalEnergy} 
-                                        options={['Rested', 'Bit tired', 'Exhausted']}
-                                        placeholder="(Optional)"
-                                        allowClear 
-                                      />
-                                    </div>
-                                    <div className="w-full">
-                                      <label className="block text-[9px] sm:text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Time</label>
-                                      <CustomDropdown 
-                                        value={localTimeState} 
-                                        onChange={setLocalTimeState} 
-                                        options={['Finished early', 'Perfect pacing', 'Rushed at the end', 'Ran out of time']}
-                                        placeholder="(Optional)"
-                                        allowClear 
-                                      />
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tags (comma separated)</label>
-                                    <input 
-                                      type="text" 
-                                      value={localTags} 
-                                      onChange={e => setLocalTags(e.target.value)} 
-                                      placeholder="e.g. Tough Quant, Bad English"
-                                      className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Reflection / Notes</label>
-                                    <textarea 
-                                      value={localNote} 
-                                      onChange={e => setLocalNote(e.target.value)} 
-                                      placeholder="What went well? What went wrong?"
-                                      className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200 min-h-[80px] resize-y custom-scrollbar"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">Action Items / To-Do</label>
-                                      <button 
-                                        onClick={() => setLocalTasks([...localTasks, { id: Math.random().toString(36).substr(2, 9), text: '', completed: false }])}
-                                        className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 px-2 py-1 rounded transition-colors"
-                                      >
-                                        + Add Task
-                                      </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                      {localTasks.map((task, index) => (
-                                        <div key={task.id} className="flex items-center gap-2 bg-slate-50/50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700/50">
-                                          <input 
-                                            type="checkbox" 
-                                            checked={task.completed}
-                                            onChange={(e) => {
-                                              const newTasks = [...localTasks];
-                                              newTasks[index].completed = e.target.checked;
-                                              setLocalTasks(newTasks);
-                                            }}
-                                            className="w-4 h-4 text-indigo-600 cursor-pointer border-slate-300 rounded focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
-                                          />
-                                          <input 
-                                            type="text" 
-                                            value={task.text}
-                                            onChange={(e) => {
-                                              const newTasks = [...localTasks];
-                                              newTasks[index].text = e.target.value;
-                                              setLocalTasks(newTasks);
-                                            }}
-                                            placeholder="Task description..."
-                                            className={`flex-1 text-sm bg-transparent border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 dark:border-slate-700 p-1 rounded ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}
-                                          />
-                                          <button 
-                                            onClick={() => setLocalTasks(localTasks.filter(t => t.id !== task.id))}
-                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                                          >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex justify-end gap-2 pt-1">
-                                    <button 
-                                      onClick={() => setEditingReflectionId(null)}
-                                      className="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                                    >Cancel</button>
-                                    <button 
-                                      onClick={() => handleReflectionSave(mock.id)}
-                                      disabled={isSavingReflection}
-                                      className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-70 flex items-center"
-                                    >
-                                      {isSavingReflection ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" /> : null}
-                                      Save Reflection
-                                    </button>
-                                  </div>
-                               </div>
-                             ) : (
+                                 <ReflectionEditor 
+                                    mock={mock}
+                                    onSave={async (id, data) => {
+                                      if (onUpdateReflection) await onUpdateReflection(id, data);
+                                      setEditingReflectionId(null);
+                                    }}
+                                    onCancel={() => setEditingReflectionId(null)}
+                                 />
+                               ) : (
                                <>
                                  {(mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState || (mock.tags && mock.tags.length > 0)) && (
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-1">
@@ -1443,25 +1437,100 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                 <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 bg-slate-50/30 dark:bg-slate-950/20 custom-scrollbar relative z-0">
                   {(() => {
                     const mocksWithTasks = mocks.filter(m => m.tasks && m.tasks.length > 0 && (showCompletedTasks || m.tasks.some(t => !t.completed)));
-                    if (mocksWithTasks.length === 0) {
-                      return (
-                        <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                          <motion.div 
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            className="w-24 h-24 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mb-6 border-4 border-white dark:border-slate-900 shadow-xl"
-                          >
-                            <CheckSquare className="w-10 h-10 text-emerald-500 dark:text-emerald-400" />
-                          </motion.div>
-                          <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3">All Caught Up!</h3>
-                          <p className="text-slate-500 dark:text-slate-400 text-base max-w-sm">
-                            You don't have any pending action items. Great job staying on top of your mock reflections.
-                          </p>
-                        </div>
-                      );
-                    }
+                    const globalTasks = (profile?.tasks || []).filter(t => showCompletedTasks || !t.completed);
                     
-                    // Group by date
+                    const handleAddGlobalTask = () => {
+                        if (!newTaskText.trim() || !onUpdateProfileTasks || !profile) return;
+                        const newTasks = [...(profile.tasks || []), { id: Math.random().toString(36).substr(2, 9), text: newTaskText.trim(), completed: false }];
+                        onUpdateProfileTasks(newTasks);
+                        setNewTaskText('');
+                    };
+                    const handleToggleGlobalTask = (taskId: string, completed: boolean) => {
+                        if (!onUpdateProfileTasks || !profile) return;
+                        const newTasks = (profile.tasks || []).map(t => t.id === taskId ? { ...t, completed } : t);
+                        onUpdateProfileTasks(newTasks);
+                    };
+                    const handleDeleteGlobalTask = (taskId: string) => {
+                        if (!onUpdateProfileTasks || !profile) return;
+                        const newTasks = (profile.tasks || []).filter(t => t.id !== taskId);
+                        onUpdateProfileTasks(newTasks);
+                    };
+                    const handleSaveGlobalTaskEdit = () => {
+                        if (!onUpdateProfileTasks || !profile || !editingGlobalTaskId) return;
+                        if (!editGlobalTaskText.trim()) { handleDeleteGlobalTask(editingGlobalTaskId); setEditingGlobalTaskId(null); return; }
+                        const newTasks = (profile.tasks || []).map(t => t.id === editingGlobalTaskId ? { ...t, text: editGlobalTaskText.trim() } : t);
+                        onUpdateProfileTasks(newTasks);
+                        setEditingGlobalTaskId(null);
+                    };
+
+                    const caughtUp = mocksWithTasks.length === 0 && globalTasks.length === 0;
+
+                    return (
+                      <div className="space-y-6 flex flex-col h-full">
+                        {/* Global Tasks section */}
+                        <div className="flex flex-col gap-4 mb-4">
+                           <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow">
+                             <input 
+                               type="text" 
+                               value={newTaskText} 
+                               onChange={e => setNewTaskText(e.target.value)} 
+                               onKeyDown={e => e.key === 'Enter' && handleAddGlobalTask()}
+                               placeholder="Add a new general task..."
+                               className="flex-1 px-4 py-3 bg-transparent focus:outline-none text-slate-800 dark:text-slate-200 text-sm placeholder:text-slate-400"
+                             />
+                             <button onClick={handleAddGlobalTask} disabled={!newTaskText.trim()} className="px-5 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Add</button>
+                           </div>
+                           
+                           {globalTasks.length > 0 && (
+                             <div className="space-y-2">
+                                {globalTasks.map(task => (
+                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer">
+                                      <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-5 h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
+                                        {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
+                                      </button>
+                                      <div className="flex-1 min-w-0">
+                                         {editingGlobalTaskId === task.id ? (
+                                           <div className="flex flex-col gap-3 w-full" onClick={(e) => e.stopPropagation()}>
+                                              <input autoFocus type="text" value={editGlobalTaskText} onChange={e => setEditGlobalTaskText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveGlobalTaskEdit()} className="w-full bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                                              <div className="flex gap-2">
+                                                 <button onClick={(e) => { e.stopPropagation(); handleSaveGlobalTaskEdit(); }} className="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Save</button>
+                                                 <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(null); }} className="text-xs font-medium px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
+                                              </div>
+                                           </div>
+                                         ) : (
+                                           <div className="flex items-start justify-between gap-3">
+                                              <span className={`text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
+                                              <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                                 <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setEditGlobalTaskText(task.text); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                              </div>
+                                           </div>
+                                         )}
+                                      </div>
+                                   </div>
+                                ))}
+                             </div>
+                           )}
+                        </div>
+
+                        {caughtUp ? (
+                          <div className="flex flex-col items-center justify-center py-10 flex-1 text-center">
+                            <motion.div 
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              className="w-20 h-20 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mb-4 border-4 border-white dark:border-slate-900 shadow-xl"
+                            >
+                              <CheckSquare className="w-8 h-8 text-emerald-500 dark:text-emerald-400" />
+                            </motion.div>
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">All Caught Up!</h3>
+                            <p className="text-slate-500 dark:text-slate-400 text-base max-w-sm">
+                              You don't have any pending action items. Great job staying on top of your mock reflections.
+                            </p>
+                          </div>
+                        ) : (
+                          <div>
+                            {(() => {
+                              // Group by date
                     const groupedByDate: Record<string, typeof mocksWithTasks> = {};
                     mocksWithTasks.forEach(mock => {
                       const dateStr = parseLocalDate(mock.date)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) || 'Unknown Date';
@@ -1526,7 +1595,14 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                         </div>
                                       )}
                                     </div>
-                                    {isExpanded && <span className="font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-[8px] sm:text-[10px] px-1.5 py-0.5 rounded-md shadow-sm shrink-0 ml-2">{getPlatformShort(mock.platform)}</span>}
+                                    {isExpanded && <span className="font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-[8px] sm:text-[10px] px-1.5 py-0.5 rounded-md shadow-sm shrink-0 ml-2 hidden sm:inline-block">{getPlatformShort(mock.platform)}</span>}
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); setAddingTaskToMockId(addingTaskToMockId === mock.id ? null : mock.id); setNewMockTaskText(''); if (!isExpanded) setExpandedActionMocks(prev => ({ ...prev, [mock.id]: true })); }}
+                                      className="p-1 sm:p-1.5 ml-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-md transition-colors"
+                                      title="Add Task for this Mock"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    </button>
                                   </div>
                                   {isExpanded && (mock.difficulty || mock.focus || mock.timeState || mock.energy || mock.nervousness) && (
                                     <div className="flex flex-nowrap items-center justify-start gap-1 sm:gap-2 w-full -mt-2 overflow-x-auto scrollbar-hide pb-[2px] leading-6">
@@ -1565,11 +1641,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                 </div>
                                 <div className="px-4 py-2.5 sm:p-4 -mt-1.5 sm:mt-0 space-y-2 bg-white dark:bg-slate-800">
                                   {tasksToShow.map((task) => (
-                                    <div key={task.id} className="flex items-start gap-2">
+                                    <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="flex items-start gap-2 group cursor-pointer p-1 -ml-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                                       <input 
                                         type="checkbox" 
                                         checked={task.completed} 
-                                        onChange={async () => {
+                                        onChange={async (e) => {
+                                          e.stopPropagation();
                                           if (onUpdateReflection) {
                                             const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, completed: !task.completed } : t) || [];
                                             await onUpdateReflection(mock.id, { tasks: updatedTasks });
@@ -1578,11 +1655,77 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                         className="mt-0.5 w-3.5 h-3.5 text-indigo-600 rounded-sm border-slate-300 focus:ring-0 dark:border-slate-600 dark:bg-slate-800 mb-auto cursor-pointer"
                                         style={{ opacity: task.completed ? 0.7 : 1 }}
                                       />
-                                      <span className={`text-sm ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                                        {task.text}
-                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        {editingMockTaskId === task.id && mockIdOfEditingTask === mock.id ? (
+                                           <div className="flex flex-col gap-2 w-full" onClick={e => e.stopPropagation()}>
+                                              <input autoFocus type="text" value={editMockTaskText} onChange={e => setEditMockTaskText(e.target.value)} onKeyDown={async e => {
+                                                if (e.key === 'Enter') {
+                                                  if (!editMockTaskText.trim()) {
+                                                      const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || [];
+                                                      if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                                  } else {
+                                                      const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, text: editMockTaskText.trim() } : t) || [];
+                                                      if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                                  }
+                                                  setEditingMockTaskId(null);
+                                                  setMockIdOfEditingTask(null);
+                                                }
+                                              }} className="w-full bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                                              <div className="flex gap-2">
+                                                 <button onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (!editMockTaskText.trim()) {
+                                                        const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || [];
+                                                        if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                                    } else {
+                                                        const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, text: editMockTaskText.trim() } : t) || [];
+                                                        if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                                    }
+                                                    setEditingMockTaskId(null);
+                                                    setMockIdOfEditingTask(null);
+                                                 }} className="text-xs font-medium px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">Save</button>
+                                                 <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(null); setMockIdOfEditingTask(null); }} className="text-xs font-medium px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
+                                              </div>
+                                           </div>
+                                        ) : (
+                                           <div className="flex items-start justify-between gap-2">
+                                              <span className={`text-sm select-none ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                {task.text}
+                                              </span>
+                                              <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                                 <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(task.id); setEditMockTaskText(task.text); setMockIdOfEditingTask(mock.id); setActiveActionsTaskId(null); }} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                 <button onClick={async (e) => { e.stopPropagation(); if (onUpdateReflection) { const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || []; await onUpdateReflection(mock.id, { tasks: updatedTasks }); setActiveActionsTaskId(null); } }} className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                              </div>
+                                           </div>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
+                                  {addingTaskToMockId === mock.id && (
+                                    <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                                      <input autoFocus type="text" value={newMockTaskText} onChange={e => setNewMockTaskText(e.target.value)} onKeyDown={async e => {
+                                        if (e.key === 'Enter') {
+                                          if (newMockTaskText.trim()) {
+                                              const newTasks = [...(mock.tasks||[]), { id: Math.random().toString(36).substr(2, 9), text: newMockTaskText.trim(), completed: false }];
+                                              if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: newTasks });
+                                              setNewMockTaskText('');
+                                          } else {
+                                              setAddingTaskToMockId(null);
+                                          }
+                                        }
+                                      }} placeholder="New task text..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                                      <div className="flex gap-2">
+                                        <button disabled={!newMockTaskText.trim()} onClick={async () => {
+                                          if (newMockTaskText.trim()) {
+                                              const newTasks = [...(mock.tasks||[]), { id: Math.random().toString(36).substr(2, 9), text: newMockTaskText.trim(), completed: false }];
+                                              if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: newTasks });
+                                              setNewMockTaskText('');
+                                          }
+                                        }} className="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors disabled:opacity-50">Add</button>
+                                        <button onClick={() => setAddingTaskToMockId(null)} className="text-xs font-medium px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Done</button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1591,10 +1734,14 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                       </div>
                     ));
                   })()}
-                </div>
-              </motion.div>
-            </div>
-          , document.body)}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      </motion.div>
+    </div>, document.body)}
     </div>
   );
 }

@@ -91,20 +91,37 @@ service cloud.firestore {
 
     function isValidChatMessage(data) {
       return data.keys().hasAll(['userId', 'userName', 'userPhoto', 'text', 'createdAt'])
-        && data.keys().size() >= 5 && data.keys().size() <= 6
+        && data.keys().size() >= 5 && data.keys().size() <= 9
         && data.userId is string && data.userId == request.auth.uid
         && data.userName is string && data.userName.size() <= 100
         && data.userPhoto is string && data.userPhoto.size() <= 500
-        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.text is string && data.text.size() <= 2000
         && data.createdAt is number
-        && (!data.keys().hasAny(['replyTo']) || (data.replyTo is map && data.replyTo.keys().hasAll(['id', 'text', 'userName'])));
+        && (!data.keys().hasAny(['replyTo']) || (data.replyTo is map && data.replyTo.keys().hasAll(['id', 'text', 'userName'])))
+        && (!data.keys().hasAny(['reactions']) || data.reactions is map)
+        && (!data.keys().hasAny(['poll']) || data.poll is map)
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is number);
     }
 
     match /system/{docId} {
       allow read: if isSignedIn();
       allow create: if isAdminUser() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
-      allow update: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock');
+      allow update: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock') || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
       allow delete: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid);
+    }
+
+    match /challenges/{challengeId} {
+      allow read: if isSignedIn();
+      allow create: if isAdminUser() || (isSignedIn() && incoming().keys().hasAll(['creatorId']) && incoming().creatorId == request.auth.uid);
+      allow update: if isAdminUser() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid && (!incoming().keys().hasAny(['creatorId']) || incoming().creatorId == existing().creatorId));
+      allow delete: if isAdminUser() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid);
+      
+      match /participants/{userId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.auth.uid == userId;
+        allow update: if (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks'])) || isAdminUser();
+        allow delete: if isAdminUser() || (isSignedIn() && request.auth.uid == userId);
+      }
     }
 
     match /test/{docId} {
@@ -115,7 +132,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidChatMessage(incoming());
-      allow update: if isAdminUser() || (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isEdited', 'updatedAt']) && incoming().text is string && incoming().text.size() > 0 && incoming().text.size() <= 2000);
+      allow update: if isAdminUser() 
+        || (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isEdited', 'updatedAt']) && incoming().text is string && incoming().text.size() <= 2000)
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']))
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['poll']))
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'poll']));
       allow delete: if isAdminUser() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 

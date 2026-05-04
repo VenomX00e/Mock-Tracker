@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { cn } from '../lib/utils';
 
-export function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required, allowClear }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean, allowClear?: boolean }) {
+export function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required, allowClear, className = '', buttonClassName = 'px-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl', optionClassName = 'px-3 py-2.5 text-sm' }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean, allowClear?: boolean, className?: string, buttonClassName?: string, optionClassName?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -16,11 +17,11 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
   }, []);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={`relative ${className}`} ref={ref}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm font-medium ${!value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'} flex justify-between items-center`}
+        className={cn(`w-full text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all font-medium flex justify-between items-center`, !value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200', buttonClassName)}
       >
         <span>{value || placeholder}</span>
         <div className="flex flex-row items-center gap-1">
@@ -45,7 +46,7 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
                 key={opt}
                 type="button"
                 onClick={() => { onChange(opt); setIsOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all ${value === opt ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-semibold' : 'text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                className={`w-full text-left ${optionClassName} rounded-xl transition-all ${value === opt ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-semibold' : 'text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
               >
                 {opt}
               </button>
@@ -56,7 +57,7 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
                 <button
                   type="button"
                   onClick={() => { onChange("Other"); setIsOpen(false); }}
-                  className="w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                  className={`w-full text-left ${optionClassName} rounded-xl transition-all text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-50 dark:hover:bg-slate-700/50`}
                 >
                   Other...
                 </button>

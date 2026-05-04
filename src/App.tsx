@@ -5,12 +5,14 @@ import AddMockDialog from './components/AddMockDialog';
 import ProfileDialog from './components/ProfileDialog';
 import CommunityHub from './components/CommunityHub';
 import AdminDialog from './components/AdminDialog';
+import ChallengeRequestsDialog from './components/ChallengeRequestsDialog';
+import HiddenChallengesDialog from './components/HiddenChallengesDialog';
 import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
 import { useUserProfile } from './hooks/useUserProfile';
 import { MockScore } from './types';
-import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin, Pencil, Bold, Italic, Link as LinkIcon, Save, X as XIcon, Undo, Redo } from 'lucide-react';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin, Pencil, Bold, Italic, Link as LinkIcon, Save, X as XIcon, Undo, Redo, Flame, Trash, Bell, EyeOff } from 'lucide-react';
+import { collection, query, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import AddLiveMockDialog from './components/AddLiveMockDialog';
 import Markdown from 'react-markdown';
@@ -18,6 +20,9 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 
 import { PublicProfileDialog } from './components/PublicProfileDialog';
+import { ChallengeCard } from './components/ChallengeCard';
+import { CreateChallengeDialog } from './components/CreateChallengeDialog';
+import ChallengeRecycleBinDialog from './components/ChallengeRecycleBinDialog';
 
 export default function App() {
   const { user, loading, signInWithGoogle, logout } = useAuth();
@@ -30,8 +35,13 @@ export default function App() {
   
   // Admin & Announcement states
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
+  const [isChallengeRecycleBinOpen, setIsChallengeRecycleBinOpen] = useState(false);
+  const [isHiddenChallengesModalOpen, setIsHiddenChallengesModalOpen] = useState(false);
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [isAddLiveMockOpen, setIsAddLiveMockOpen] = useState(false);
+  const [isCreateChallengeOpen, setIsCreateChallengeOpen] = useState(false);
+  const [editingChallenge, setEditingChallenge] = useState<any>(null);
   const [apiKeyInput, setApiKeyInput] = useState(localStorage.getItem('geminiApiKey') || '');
 
   const [darkMode, setDarkMode] = useState(() => {
@@ -49,11 +59,16 @@ export default function App() {
   }, [darkMode]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'community'>('dashboard');
   const [notices, setNotices] = useState<any[]>([]);
+  const [challenges, setChallenges] = useState<any[]>([]);
+  const [deletedChallenges, setDeletedChallenges] = useState<any[]>([]);
   const [countdowns, setCountdowns] = useState<any[]>([]);
   const [pinnedCountdowns, setPinnedCountdowns] = useState<string[]>([]);
+  const [pinnedNotices, setPinnedNotices] = useState<string[]>([]);
+  const [pinnedChallenges, setPinnedChallenges] = useState<string[]>([]);
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]'));
-  const [adminTab, setAdminTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown'>('users');
+  const [dismissedChallenges, setDismissedChallenges] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedChallenges') || '[]'));
+  const [adminTab, setAdminTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge'>('users');
   const [adminEditNotice, setAdminEditNotice] = useState<any>(null);
   
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
@@ -70,11 +85,19 @@ export default function App() {
   const saveInlineNotice = async (id: string) => {
     try {
       const { doc, updateDoc } = await import('firebase/firestore');
-      await updateDoc(doc(db, 'system', id), {
+      const updateData: any = {
         title: inlineNoticeTitle,
-        description: inlineNoticeDesc
-      });
-      setNotices(notices.map(n => n.id === id ? { ...n, title: inlineNoticeTitle, description: inlineNoticeDesc } : n));
+        description: inlineNoticeDesc,
+        updatedAt: new Date().toISOString()
+      };
+      
+      if (!isAdmin && user) {
+        updateData.lastEditedBy = user.uid;
+        updateData.lastEditedByEmail = user.email;
+      }
+      
+      await updateDoc(doc(db, 'system', id), updateData);
+      setNotices(notices.map(n => n.id === id ? { ...n, title: inlineNoticeTitle, description: inlineNoticeDesc, ...updateData } : n));
       setInlineEditingId(null);
       setDescHistory([]);
       setHistoryIndex(-1);
@@ -83,6 +106,8 @@ export default function App() {
       alert('Failed to save notice inline.');
     }
   };
+
+  const [activeNoticeId, setActiveNoticeId] = useState<string | null>(null);
 
   const applyInlineFormat = (before: string, after: string = '') => {
     if (!textareaRef.current) return;
@@ -143,9 +168,9 @@ export default function App() {
     if (newPins.includes(id)) {
       newPins = newPins.filter(pid => pid !== id);
     } else {
-      newPins.unshift(id); // Insert at the beginning
+      newPins.push(id); // Insert at the end so first pinned stays at top
       if (newPins.length > 3) {
-        newPins = newPins.slice(0, 3); // Max 3 pins
+        newPins = newPins.slice(newPins.length - 3); // Max 3 pins, keep the lastest 3 or keep the oldest 3? Wait, slice(-3) keeps the NEWEST 3, meaning the oldest drops off.
       }
     }
     
@@ -158,6 +183,29 @@ export default function App() {
       setPinnedCountdowns(newPins);
     } catch (err) {
       console.error("Error pinning countdown:", err);
+    }
+  };
+
+  const togglePinNotice = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    
+    let newPins = [...pinnedNotices];
+    if (newPins.includes(id)) {
+      newPins = newPins.filter(pid => pid !== id);
+    } else {
+      newPins.push(id); // Insert at the end to keep first pinned at top
+    }
+    
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'system', 'config'), { 
+        pinnedNotices: newPins,
+        updatedAt: new Date().toISOString() 
+      }, { merge: true });
+      setPinnedNotices(newPins);
+    } catch (err) {
+      console.error("Error pinning notice:", err);
     }
   };
 
@@ -178,48 +226,139 @@ export default function App() {
     localStorage.removeItem('dismissedLiveMocks');
   };
 
+  const dismissChallenge = (id: string) => {
+    const updated = [...dismissedChallenges, id];
+    setDismissedChallenges(updated);
+    localStorage.setItem('dismissedChallenges', JSON.stringify(updated));
+  };
+
+  const unhideChallenge = (id: string) => {
+    const updated = dismissedChallenges.filter((cid) => cid !== id);
+    setDismissedChallenges(updated);
+    if (updated.length === 0) {
+      localStorage.removeItem('dismissedChallenges');
+    } else {
+      localStorage.setItem('dismissedChallenges', JSON.stringify(updated));
+    }
+  };
+
+  const restoreChallenges = () => {
+    setDismissedChallenges([]);
+    localStorage.removeItem('dismissedChallenges');
+  };
+
+  const fetchAnnouncement = async () => {
+    if (!user) return;
+    try {
+      const snap = await getDocs(query(collection(db, 'system')));
+      const chalSnap = await getDocs(query(collection(db, 'challenges')));
+      
+      let activeNotices: any[] = [];
+      let activeCountdowns: any[] = [];
+      let mocks: any[] = [];
+      let activeChallenges: any[] = [];
+      let delChallenges: any[] = [];
+      let pins: string[] = [];
+      let noticePins: string[] = [];
+      const nowTs = new Date().getTime();
+      snap.forEach(d => {
+        const data = d.data();
+        if (d.id === 'config') {
+          pins = data.pinnedCountdowns || [];
+          noticePins = data.pinnedNotices || [];
+          setPinnedChallenges(data.pinnedChallenges || []);
+        } else if (data.type === 'notice') {
+          if (data.date && new Date(data.date).getTime() < nowTs) return;
+          activeNotices.push({ id: d.id, ...data });
+        } else if (data.type === 'liveMock') {
+            if (data.date && new Date(data.date).getTime() < nowTs) return;
+            mocks.push({ id: d.id, ...data });
+        } else if (data.type === 'countdown') {
+            if (data.date && new Date(data.date).getTime() < nowTs) return;
+            activeCountdowns.push({ id: d.id, ...data });
+        }
+      });
+      
+      chalSnap.forEach(d => {
+        const data = d.data();
+        const isDeletedByCreator = data.deletedByCreator === true;
+        const isPermanentlyDeletedByCreator = data.permanentlyDeletedByCreator === true;
+        const isDeletedByAdmin = data.deletedByAdmin === true;
+        const isPermanentlyDeletedByAdmin = data.permanentlyDeletedByAdmin === true;
+
+        if (data.status === 'active' || data.status === undefined) {
+           if (data.creatorId === user?.uid) {
+              if (isPermanentlyDeletedByCreator) {
+                  return; // Don't show to creator anywhere
+              }
+              if (isDeletedByCreator) {
+                  delChallenges.push({ id: d.id, ...data });
+                  return;
+              }
+           } else {
+              if (isAdmin) {
+                 if (isPermanentlyDeletedByAdmin) {
+                     return;
+                 }
+                 if (isDeletedByAdmin) {
+                     delChallenges.push({ id: d.id, ...data });
+                     return;
+                 }
+              } else {
+                 if (isDeletedByAdmin || isPermanentlyDeletedByAdmin) {
+                     return;
+                 }
+              }
+
+              if (data.visibility === 'personal' && data.creatorId !== user?.uid) {
+                return;
+              }
+              if (data.visibility === 'global') {
+                if (data.approvalStatus === 'pending') {
+                  // Only creator and admin can see pending global challenges
+                  if (data.creatorId !== user?.uid && !isAdmin) {
+                    return;
+                  }
+                } else if (data.approvalStatus === 'rejected') {
+                  // Only creator sees rejected global challenges (vanishes from admin and public)
+                  if (data.creatorId !== user?.uid) {
+                    return;
+                  }
+                }
+              }
+           }
+           activeChallenges.push({ id: d.id, ...data });
+        } else if (data.status === 'deleted') {
+           if (data.creatorId === user?.uid && !isPermanentlyDeletedByCreator) {
+             delChallenges.push({ id: d.id, ...data });
+           } else if (isAdmin && data.creatorId !== user?.uid && !isPermanentlyDeletedByAdmin) {
+             delChallenges.push({ id: d.id, ...data });
+           }
+        }
+      });
+
+      activeCountdowns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      setNotices(activeNotices);
+      setChallenges(activeChallenges);
+      setDeletedChallenges(delChallenges);
+      setPinnedCountdowns(pins);
+      setPinnedNotices(noticePins);
+      setCountdowns(activeCountdowns);
+      setLiveMocks(mocks);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     if (user) {
-      const fetchAnnouncement = async () => {
-        try {
-          const snap = await getDocs(query(collection(db, 'system')));
-          let activeNotices: any[] = [];
-          let activeCountdowns: any[] = [];
-          let mocks: any[] = [];
-          let pins: string[] = [];
-          const now = new Date().getTime();
-          snap.forEach(d => {
-            const data = d.data();
-            if (d.id === 'config') {
-              pins = data.pinnedCountdowns || [];
-            } else if (data.type === 'notice') {
-                if (data.date && new Date(data.date).getTime() < now) return;
-                activeNotices.push({ id: d.id, ...data });
-            } else if (data.type === 'liveMock') {
-                if (data.date && new Date(data.date).getTime() < now) return;
-                mocks.push({ id: d.id, ...data });
-            } else if (data.type === 'countdown') {
-                if (data.date && new Date(data.date).getTime() < now) return;
-                activeCountdowns.push({ id: d.id, ...data });
-            }
-          });
-          
-          activeCountdowns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          
-          setNotices(activeNotices);
-          setPinnedCountdowns(pins);
-          setCountdowns(activeCountdowns);
-          setLiveMocks(mocks);
-        } catch (e) {
-          console.error(e);
-        }
-      };
-      // Fetch once and refresh every minute or when admin modal closes
       fetchAnnouncement();
+      // Refresh every minute or when admin/user modal closes
       const interval = setInterval(fetchAnnouncement, 60000);
       return () => clearInterval(interval);
     }
-  }, [user, isAdminModalOpen]);
+  }, [user, isAdminModalOpen, isCreateChallengeOpen, isRequestsModalOpen]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -263,6 +402,120 @@ export default function App() {
     setTimeout(() => setMockToEdit(undefined), 300);
   };
 
+  const handleEditChallenge = (challenge: any) => {
+    // If editing from requests modal, close the requests modal so form is visible
+    setIsRequestsModalOpen(false);
+    setEditingChallenge(challenge);
+    setIsCreateChallengeOpen(true);
+  };
+
+  const handleApproveChallenge = async (id: string) => {
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'challenges', id), { approvalStatus: 'approved' }, { merge: true });
+      await fetchAnnouncement();
+      alert("Challenge approved successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to approve challenge: " + error);
+    }
+  };
+
+  const handleRejectChallenge = async (id: string) => {
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'challenges', id), { approvalStatus: 'rejected' }, { merge: true });
+      await fetchAnnouncement();
+      alert("Challenge rejected successfully!");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to reject challenge: " + error);
+    }
+  };
+
+  const handleDeleteChallenge = async (challenge: any) => {
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      if (isAdmin && challenge.creatorId !== user?.uid) {
+          await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: true }, { merge: true });
+      } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
+          await setDoc(doc(db, 'challenges', challenge.id), { deletedByCreator: true }, { merge: true });
+      } else {
+          await setDoc(doc(db, 'challenges', challenge.id), { status: 'deleted' }, { merge: true });
+      }
+      await fetchAnnouncement();
+      console.log('Challenge deleted successfully');
+    } catch (e) {
+      console.error("Error deleting challenge", e);
+      alert("Failed to delete challenge.");
+    }
+  };
+
+  const handlePinChallenge = async (challenge: any) => {
+    if (!isAdmin) return;
+    
+    let newPins = [...pinnedChallenges];
+    if (newPins.includes(challenge.id)) {
+      newPins = newPins.filter(pid => pid !== challenge.id);
+    } else {
+      newPins.push(challenge.id);
+      if (newPins.length > 3) {
+        newPins = newPins.slice(newPins.length - 3);
+      }
+    }
+
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'system', 'config'), { 
+        pinnedChallenges: newPins,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      setPinnedChallenges(newPins);
+      await fetchAnnouncement();
+    } catch (e) {
+      console.error("Error pinning challenge", e);
+    }
+  };
+
+  const handleRestoreChallenge = async (challenge: any) => {
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      if (isAdmin && challenge.creatorId !== user?.uid) {
+          await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: false, permanentlyDeletedByAdmin: false }, { merge: true });
+      } else {
+          await setDoc(doc(db, 'challenges', challenge.id), { status: 'active', deletedByCreator: false, permanentlyDeletedByCreator: false }, { merge: true });
+      }
+      await fetchAnnouncement();
+      console.log('Challenge restored successfully');
+    } catch (e) {
+      console.error("Error restoring challenge", e);
+      alert("Failed to restore challenge.");
+    }
+  };
+
+  const handlePermanentlyDeleteChallenge = async (challenge: any) => {
+    try {
+      const { deleteDoc, doc, setDoc } = await import('firebase/firestore');
+      if (isAdmin && challenge.creatorId !== user?.uid) {
+          await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByAdmin: true }, { merge: true });
+      } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
+          await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByCreator: true }, { merge: true });
+      } else {
+          await deleteDoc(doc(db, 'challenges', challenge.id));
+      }
+      await fetchAnnouncement();
+      console.log('Challenge permanently deleted');
+    } catch (e) {
+      console.error("Error permanently deleting challenge", e);
+      alert("Failed to permanently delete challenge.");
+    }
+  };
+
+  const handleCloseCreateChallenge = () => {
+    setIsCreateChallengeOpen(false);
+    setTimeout(() => setEditingChallenge(null), 300);
+  };
+
   if (loading || (user && !profile)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -304,8 +557,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-[45px] pl-[0px] transition-colors duration-200">
-      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 transition-colors duration-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-50 transition-colors duration-200">
+        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setIsApiModalOpen(true)} title="Configure API Key">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -410,7 +663,7 @@ export default function App() {
       </header>
 
       {/* Main Layout */}
-      <main className="max-w-7xl mx-auto px-[15px] sm:px-6 lg:px-8 py-8 pt-[25px] w-full">
+      <main className="max-w-full mx-auto px-[15px] sm:px-6 lg:px-8 py-8 pt-[25px] w-full">
         {!user ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-2xl mx-auto px-4">
              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-8 text-blue-600 shadow-inner">
@@ -431,6 +684,10 @@ export default function App() {
               Sign In to Start Tracking
             </button>
           </div>
+        ) : mocksLoading ? (
+           <div className="flex flex-col items-center justify-center min-h-[60vh]">
+             <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+           </div>
         ) : (
           <>
             {/* Countdowns */}
@@ -475,30 +732,33 @@ export default function App() {
                   const isPinned = pinnedCountdowns.includes(c.id);
 
                   return (
-                    <div key={c.id} className={`flex-shrink-0 w-[155px] xs:w-[180px] md:w-[240px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}>
+                    <div key={c.id} className={`flex-shrink-0 w-[205px] sm:w-[225px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}>
                       <div className="mb-3 relative z-10 flex justify-between items-start gap-2">
-                         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate flex-1 animate-subtle-float`} style={{ fontSize: '21px', lineHeight: '35px', fontFamily: '"Times New Roman", Times, serif', fontStyle: 'normal', textDecoration: 'none', paddingLeft: '0px', paddingTop: '3px', paddingBottom: '0px', marginLeft: '0px', marginRight: '-22px', marginTop: '-10px', textAlign: 'left' }} title={c.title}>{c.title}</h3>
-                         {isAdmin && (
-                           <button onClick={(e) => togglePin(c.id, e)} className={`p-1 mt-[-6px] mr-[-6px] rounded hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex-shrink-0 ${isPinned ? theme.pop : 'text-slate-400 dark:text-slate-500'}`} title={isPinned ? "Unpin" : "Pin"}>
-                              <Pin className="w-4 h-4" style={{ marginLeft: '0px', marginRight: '-10px' }} />
-                           </button>
-                         )}
+                         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate flex-1 animate-subtle-float text-lg sm:text-[21px]`} style={{ lineHeight: '1.2', fontFamily: '"Times New Roman", Times, serif', marginTop: '-4px', paddingLeft: '0px', paddingRight: '0px', marginLeft: '-4px', marginRight: '-22px', textAlign: 'left' }} title={c.title}>{c.title}</h3>
                       </div>
                       
                       <div className="flex flex-col relative z-10" style={{ paddingLeft: '0px', paddingTop: '0px', marginTop: '-14px' }}>
-                        <div className="flex items-center gap-3" style={{ paddingTop: '0px', marginTop: '14px', marginBottom: '5px' }}>
-                          <span className={`text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider`}>IN</span>
-                          <div className="flex items-baseline gap-2">
-                            <div className="flex flex-col items-center">
-                              <span className={`text-2xl font-black ${theme.text} leading-none`}>{days}</span>
-                              <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Days</span>
-                            </div>
-                            <span className={`text-lg font-bold ${theme.label} opacity-50`}>:</span>
-                            <div className="flex flex-col items-center">
-                              <span className={`text-2xl font-black ${theme.text} leading-none`}>{hours}</span>
-                              <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Hrs</span>
+                        <div className="flex items-center justify-between" style={{ paddingTop: '0px', marginTop: '14px', marginBottom: '5px' }}>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider`}>IN</span>
+                            <div className="flex items-baseline gap-2">
+                              <div className="flex flex-col items-center">
+                                <span className={`text-2xl font-black ${theme.text} leading-none`}>{days}</span>
+                                <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Days</span>
+                              </div>
+                              <span className={`text-lg font-bold ${theme.label} opacity-50`}>:</span>
+                              <div className="flex flex-col items-center">
+                                <span className={`text-2xl font-black ${theme.text} leading-none`}>{hours}</span>
+                                <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Hrs</span>
+                              </div>
                             </div>
                           </div>
+                          
+                          {isAdmin && (
+                            <button onClick={(e) => togglePin(c.id, e)} className={`p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95 ${isPinned ? theme.pop : 'text-slate-400 dark:text-slate-500'}`} title={isPinned ? "Unpin" : "Pin"}>
+                               <Pin className="w-4 h-4" style={{ marginLeft: '0px', marginRight: '-18px', marginBottom: '6px' }} />
+                            </button>
+                          )}
                         </div>
                         
                         {/* Progress bar as divider */}
@@ -526,7 +786,14 @@ export default function App() {
             )}
 
             {/* Notices */}
-            {notices.map((n) => {
+            {[...notices].sort((a, b) => {
+              const aIdx = pinnedNotices.indexOf(a.id);
+              const bIdx = pinnedNotices.indexOf(b.id);
+              if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+              if (aIdx !== -1) return -1;
+              if (bIdx !== -1) return 1;
+              return (b.createdAt || 0) - (a.createdAt || 0);
+            }).filter(n => activeTab === 'dashboard' || pinnedNotices.includes(n.id)).map((n) => {
               const u = n.urgency || 'info'; // default to info if no urgency
               const configs: Record<string, any> = {
                 warning: {
@@ -559,8 +826,16 @@ export default function App() {
                   .replace(/<amber>([\s\S]*?)<\/amber>/gi, '<span class="text-amber-500 font-semibold">$1</span>');
 
               return (
-              <div key={n.id} className={`mb-5 mt-0 p-[12px] rounded-2xl bg-gradient-to-r ${c.bg} border shadow-sm relative overflow-hidden`}>
-                <div className={`absolute top-0 right-0 p-6 opacity-5 dark:opacity-10`}>
+              <div 
+                key={n.id} 
+                className={`mb-5 mt-0 p-[12px] rounded-2xl bg-gradient-to-r ${c.bg} border shadow-sm relative overflow-hidden ${(!isAdmin && n.editableBy === 'users') ? 'cursor-pointer' : ''}`}
+                onClick={() => {
+                  if (!isAdmin && n.editableBy === 'users') {
+                    setActiveNoticeId(prev => prev === n.id ? null : n.id);
+                  }
+                }}
+              >
+                <div className={`absolute top-0 right-0 p-6 opacity-5 dark:opacity-10 pointer-events-none`}>
                   <Megaphone className={`w-32 h-32 ${c.icon}`} />
                 </div>
                 {inlineEditingId === n.id ? (
@@ -606,19 +881,23 @@ export default function App() {
                      </div>
                    </div>
                 ) : (
-                <div className="relative z-10 max-w-3xl flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div className="relative z-10 w-full flex flex-col md:flex-row md:items-start justify-between gap-4">
                   <div className="flex-1 w-full">
-                    <div className="flex flex-wrap items-center gap-2 mb-1.5 pr-8">
-                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider animate-notice-tag-pulse ${c.pill}`}>{n.urgency ? `Notice: ${n.urgency}` : 'Notice'}</span>
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{n.title}</h2>
-                      {n.tags && n.tags.length > 0 && n.tags.map((tag: string, i: number) => (
-                        <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300">
-                          #{tag.replace(/^#/, '')}
-                        </span>
-                      ))}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 mb-2 pr-8">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className={`inline-flex items-center justify-center px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded text-[9px] sm:text-[10px] uppercase font-bold tracking-wider animate-notice-tag-pulse shrink-0 ${c.pill}`}>{n.urgency ? `Notice: ${n.urgency === 'error' ? 'Urgent' : n.urgency}` : 'Notice'}</span>
+                      </div>
+                      <h2 className="text-[17px] sm:text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{n.title}</h2>
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        {n.tags && n.tags.length > 0 && n.tags.map((tag: string, i: number) => (
+                          <span key={i} className="inline-flex items-center px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-md text-[10px] sm:text-xs font-medium bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 shrink-0">
+                            #{tag.replace(/^#/, '')}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                     {n.description && (
-                      <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap markdown-body mt-2">
+                      <div className="text-slate-700 dark:text-slate-300 text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap markdown-body mt-2">
                         <Markdown
                           remarkPlugins={[remarkGfm]}
                           rehypePlugins={[rehypeRaw as any]}
@@ -637,6 +916,11 @@ export default function App() {
                         >{textWithLinks}</Markdown>
                       </div>
                     )}
+                    {isAdmin && n.lastEditedByEmail && (
+                      <div className="mt-3 text-[11px] text-slate-400 dark:text-slate-500 font-medium italic">
+                        Last edited by: {n.lastEditedByEmail}
+                      </div>
+                    )}
                   </div>
                   {n.link && (
                     <div className="flex-shrink-0 mt-2 md:mt-0">
@@ -653,23 +937,132 @@ export default function App() {
                   )}
                 </div>
                 )}
-                {isAdmin && inlineEditingId !== n.id && (
-                  <button
-                    onClick={() => {
-                      setInlineEditingId(n.id);
-                      setInlineNoticeTitle(n.title || '');
-                      setInlineNoticeDesc(n.description || '');
-                      setDescHistory([n.description || '']);
-                      setHistoryIndex(0);
-                    }}
-                    className="absolute top-3 right-3 p-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm z-30 border border-slate-200 dark:border-slate-700 hover:scale-110 active:scale-95"
-                    title="Edit Notice Inline"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                {((isAdmin && inlineEditingId !== n.id) || (!isAdmin && n.editableBy === 'users' && activeNoticeId === n.id && inlineEditingId !== n.id)) && (
+                  <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => togglePinNotice(n.id, e)}
+                        className={`p-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all shadow-sm border border-slate-200 dark:border-slate-700 hover:scale-110 active:scale-95 ${pinnedNotices.includes(n.id) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400'}`}
+                        title={pinnedNotices.includes(n.id) ? "Unpin Notice" : "Pin Notice"}
+                      >
+                        <Pin className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInlineEditingId(n.id);
+                        setInlineNoticeTitle(n.title || '');
+                        setInlineNoticeDesc(n.description || '');
+                        setDescHistory([n.description || '']);
+                        setHistoryIndex(0);
+                      }}
+                      className="p-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm border border-slate-200 dark:border-slate-700 hover:scale-110 active:scale-95"
+                      title={isAdmin ? "Edit Notice Inline" : "Edit Notice"}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             )})}
+
+            {/* Challenges */}
+            {(challenges.length > 0 || user) && (
+              <div className="mb-6">
+                <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4 mt-6 flex-nowrap w-full">
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-1 sm:gap-2 min-w-0">
+                    <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 shrink-0" />
+                    <span className="truncate">Active Challenges</span>
+                  </h2>
+                  {user && (
+                    <button 
+                      onClick={() => setIsCreateChallengeOpen(true)}
+                      className="p-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors ml-1 sm:ml-2 shrink-0" 
+                      title="Create Challenge"
+                    >
+                      <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    </button>
+                  )}
+                  <div className="ml-auto flex items-center gap-1.5 sm:gap-3 shrink-0">
+                    {dismissedChallenges.length > 0 && (
+                      <button 
+                        onClick={() => setIsHiddenChallengesModalOpen(true)} 
+                        className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0 relative"
+                        title={`Hidden Challenges (${dismissedChallenges.length})`}
+                      >
+                        <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="absolute -top-1 -right-1 bg-slate-500 text-white text-[9px] sm:text-[10px] w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center rounded-full font-bold">
+                          {dismissedChallenges.length}
+                        </span>
+                      </button>
+                    )}
+                    {isAdmin && challenges.some(c => c.visibility === 'global' && c.approvalStatus === 'pending') && (
+                      <button
+                        onClick={() => setIsRequestsModalOpen(true)}
+                        className="p-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors shrink-0 relative"
+                        title={`Requests (${challenges.filter(c => c.visibility === 'global' && c.approvalStatus === 'pending').length})`}
+                      >
+                        <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="absolute -top-1 -right-1 bg-amber-600 text-white text-[9px] sm:text-[10px] w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center rounded-full font-bold">
+                          {challenges.filter(c => c.visibility === 'global' && c.approvalStatus === 'pending').length}
+                        </span>
+                      </button>
+                    )}
+                    {user && deletedChallenges.length > 0 && (
+                      <button
+                        onClick={() => setIsChallengeRecycleBinOpen(true)}
+                        className="p-1.5 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60 rounded-full transition-colors flex items-center justify-center relative shrink-0"
+                        title={`Recycle Bin (${deletedChallenges.length})`}
+                      >
+                        <Trash className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] sm:text-[10px] w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center rounded-full font-bold">
+                          {deletedChallenges.length}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {challenges.filter(c => {
+                  const isVisible = (c.creatorId === user?.uid || !(c.visibility === 'global' && (c.approvalStatus === 'pending' || c.approvalStatus === 'rejected'))) && !dismissedChallenges.includes(c.id);
+                  if (!isVisible) return false;
+                  if (activeTab === 'community') return pinnedChallenges.includes(c.id);
+                  return true;
+                }).length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {challenges
+                      .filter(c => {
+                         const isVisible = (c.creatorId === user?.uid || !(c.visibility === 'global' && (c.approvalStatus === 'pending' || c.approvalStatus === 'rejected'))) && !dismissedChallenges.includes(c.id);
+                         if (!isVisible) return false;
+                         if (activeTab === 'community') return pinnedChallenges.includes(c.id);
+                         return true;
+                      })
+                      .sort((a, b) => {
+                         const aP = pinnedChallenges.includes(a.id);
+                         const bP = pinnedChallenges.includes(b.id);
+                         if (aP && !bP) return -1;
+                         if (!aP && bP) return 1;
+                         return 0;
+                      })
+                      .map(challenge => (
+                      <ChallengeCard 
+                        key={challenge.id} 
+                        challenge={{ ...challenge, isPinned: pinnedChallenges.includes(challenge.id) }}
+                        onEdit={handleEditChallenge}
+                        onDelete={handleDeleteChallenge}
+                        onDismiss={dismissChallenge}
+                        onPin={handlePinChallenge}
+                        isAdmin={isAdmin}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                    <p className="text-sm">No active challenges available. Click the + button to create one!</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Live Mocks or Default Banner */}
             {activeTab === 'dashboard' && (liveMocks.filter(lm => !mocks.some(m => m.mockName === lm.mockName && m.examType === lm.examType) && !dismissedLiveMocks.includes(lm.id)).length > 0 ? (
@@ -738,35 +1131,10 @@ export default function App() {
                      <button onClick={restoreLiveMocks} className="text-xs text-slate-500 hover:text-indigo-600 transition-colors">Show hidden Live Mocks</button>
                    )}
                  </div>
-                 <div className="p-6 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white shadow-xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <DatabaseZap className="w-48 h-48" />
-                  </div>
-                <div className="relative z-10 max-w-2xl">
-                  <h2 className="text-2xl font-semibold mb-2">Track your progress to crack the exam</h2>
-                  <p className="text-indigo-200 text-sm leading-relaxed mb-6">
-                    Upload your mock test scorecard images. Our AI will automatically extract your scores and percentiles. 
-                    Analyze your performance across different exams and identify your weak sections.
-                  </p>
-                  <div className="flex items-center gap-4 text-sm font-medium text-indigo-100">
-                    <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm">
-                      <Target className="w-4 h-4" /> AI Data Extraction
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm">
-                      <LayoutDashboard className="w-4 h-4" /> Sectional Analytics
-                    </div>
-                  </div>
-                </div>
-              </div>
               </div>
             ))}
 
             <section className="w-full">
-              {mocksLoading ? (
-                 <div className="flex justify-center p-12">
-                   <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                 </div>
-              ) : (
                 <>
                   {activeTab === 'dashboard' ? (
                     <Dashboard 
@@ -778,16 +1146,26 @@ export default function App() {
                       onRestoreMock={restoreDeletedMock}
                       onPermanentlyDeleteMock={permanentlyDeleteMock}
                       onUpdateReflection={handleUpdateReflection}
+                      onUpdateProfileTasks={async (tasks) => {
+                        if (!profile) return;
+                        const { doc, setDoc } = await import('firebase/firestore');
+                        await setDoc(doc(db, 'users', profile.userId), { tasks }, { merge: true });
+                      }}
                     />
                   ) : (
                     <CommunityHub 
                        onCopyMock={handleCopyMock} 
                        onUserClick={(u) => setActivePublicProfile(u)}
                        isAdmin={isAdmin}
+                       pinnedChallenges={pinnedChallenges}
+                       challenges={challenges}
+                       onPinChallenge={handlePinChallenge}
+                       onEditChallenge={handleEditChallenge}
+                       onDeleteChallenge={handleDeleteChallenge}
+                       onDismissChallenge={dismissChallenge}
                     />
                   )}
                 </>
-              )}
             </section>
           </>
         )}
@@ -831,6 +1209,37 @@ export default function App() {
       )}
 
       {isAdmin && (
+        <ChallengeRequestsDialog
+          isOpen={isRequestsModalOpen}
+          onClose={() => setIsRequestsModalOpen(false)}
+          challenges={challenges}
+          onApprove={handleApproveChallenge}
+          onReject={handleRejectChallenge}
+          onEdit={handleEditChallenge}
+        />
+      )}
+
+      {user && (
+        <ChallengeRecycleBinDialog
+          isOpen={isChallengeRecycleBinOpen}
+          onClose={() => setIsChallengeRecycleBinOpen(false)}
+          deletedChallenges={deletedChallenges}
+          onRestore={handleRestoreChallenge}
+          onPermanentlyDelete={handlePermanentlyDeleteChallenge}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {user && (
+        <HiddenChallengesDialog
+          isOpen={isHiddenChallengesModalOpen}
+          onClose={() => setIsHiddenChallengesModalOpen(false)}
+          hiddenChallenges={challenges.filter(c => dismissedChallenges.includes(c.id))}
+          onRestore={unhideChallenge}
+        />
+      )}
+
+      {isAdmin && (
         <AdminDialog 
           isOpen={isAdminModalOpen}
           onClose={() => setIsAdminModalOpen(false)}
@@ -844,6 +1253,15 @@ export default function App() {
            isOpen={isAddLiveMockOpen}
            onClose={() => setIsAddLiveMockOpen(false)}
            onSuccess={() => setIsAddLiveMockOpen(false)}
+        />
+      )}
+
+      {user && (
+        <CreateChallengeDialog
+          isOpen={isCreateChallengeOpen}
+          onClose={handleCloseCreateChallenge}
+          uid={user.uid}
+          initialData={editingChallenge}
         />
       )}
 

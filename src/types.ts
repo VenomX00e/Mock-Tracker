@@ -24,6 +24,7 @@ export interface UserProfile {
   isMuted?: boolean;
   lastMockDate?: string;
   role?: string;
+  tasks?: ReflectionTask[];
 }
 
 export interface ReflectionTask {
@@ -53,6 +54,7 @@ export interface MockScore {
   reasoning?: SectionalScore;
   english?: SectionalScore;
   ga?: SectionalScore;
+  computer?: SectionalScore;
   note?: string;
   tags?: string[];
   difficulty?: string;
