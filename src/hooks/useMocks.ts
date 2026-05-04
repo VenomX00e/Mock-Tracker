@@ -9,21 +9,35 @@ function calculateStats(mocks: MockScore[]) {
   if (!mocks.length) return { avgPercentile: 0, avgAccuracy: 0, avgQuantPercentile: 0, avgReasoningPercentile: 0, avgEnglishPercentile: 0, totalTests: 0, streak: 0, lastMockDate: '' };
   
   const total = mocks.length;
-  let sumP = 0, sumQ = 0, sumR = 0, sumE = 0, sumG = 0;
-  let sumAcc = 0;
-  let hasG = false;
-  let accCount = 0;
+  let sumP = 0, pCount = 0;
+  let sumQ = 0, qCount = 0;
+  let sumR = 0, rCount = 0;
+  let sumE = 0, eCount = 0;
+  let sumG = 0, gCount = 0;
+  let sumAcc = 0, accCount = 0;
   
   mocks.forEach(m => {
-    sumP += m.percentile || 0;
-    sumQ += m.quant?.percentile || 0;
-    sumR += m.reasoning?.percentile || 0;
-    sumE += m.english?.percentile || 0;
-    if (m.ga?.percentile) {
-        sumG += m.ga.percentile;
-        hasG = true;
+    if ((!m.examScope || m.examScope === 'Full') && m.percentile != null && !isNaN(m.percentile) && m.percentile > 0) {
+      sumP += m.percentile;
+      pCount++;
     }
-    if (m.accuracy !== undefined && !isNaN(m.accuracy)) {
+    if (m.quant?.percentile != null && !isNaN(m.quant.percentile) && m.quant.percentile > 0) {
+      sumQ += m.quant.percentile;
+      qCount++;
+    }
+    if (m.reasoning?.percentile != null && !isNaN(m.reasoning.percentile) && m.reasoning.percentile > 0) {
+      sumR += m.reasoning.percentile;
+      rCount++;
+    }
+    if (m.english?.percentile != null && !isNaN(m.english.percentile) && m.english.percentile > 0) {
+      sumE += m.english.percentile;
+      eCount++;
+    }
+    if (m.ga?.percentile != null && !isNaN(m.ga.percentile) && m.ga.percentile > 0) {
+        sumG += m.ga.percentile;
+        gCount++;
+    }
+    if (m.accuracy !== undefined && m.accuracy !== null && !isNaN(m.accuracy)) {
         sumAcc += m.accuracy;
         accCount++;
     }
@@ -76,12 +90,12 @@ function calculateStats(mocks: MockScore[]) {
   }
 
   return {
-    avgPercentile: total > 0 ? Number((sumP / total).toFixed(2)) : 0,
+    avgPercentile: pCount > 0 ? Number((sumP / pCount).toFixed(2)) : 0,
     avgAccuracy: accCount > 0 ? Number((sumAcc / accCount).toFixed(2)) : 0,
-    avgQuantPercentile: total > 0 ? Number((sumQ / total).toFixed(2)) : 0,
-    avgReasoningPercentile: total > 0 ? Number((sumR / total).toFixed(2)) : 0,
-    avgEnglishPercentile: total > 0 ? Number((sumE / total).toFixed(2)) : 0,
-    avgGaPercentile: total > 0 && hasG ? Number((sumG / total).toFixed(2)) : 0,
+    avgQuantPercentile: qCount > 0 ? Number((sumQ / qCount).toFixed(2)) : 0,
+    avgReasoningPercentile: rCount > 0 ? Number((sumR / rCount).toFixed(2)) : 0,
+    avgEnglishPercentile: eCount > 0 ? Number((sumE / eCount).toFixed(2)) : 0,
+    avgGaPercentile: gCount > 0 ? Number((sumG / gCount).toFixed(2)) : 0,
     totalTests: total,
     streak,
     streakActive,

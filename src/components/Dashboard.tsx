@@ -360,6 +360,32 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     return [...filtered].sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
   }, [mocks, selectedExam, selectedRole, selectedPhase, selectedScope]);
 
+  const activeTrendFilteredMocks = useMemo(() => {
+    return displayedMocks.filter(m => {
+      if (activeTrendId === 'overall') return true;
+      
+      if (m.examScope === 'Sectional') {
+          const nameLower = (m.mockName || '').toLowerCase();
+          const isQuantName = nameLower.includes('quant') || nameLower.includes('math');
+          const isEngName = nameLower.includes('english') || nameLower.includes('eng');
+          const isReasName = nameLower.includes('reasoning') || nameLower.includes('lr') || nameLower.includes('logic');
+          const isGaName = nameLower.includes('ga') || nameLower.includes('general') || nameLower.includes('gk') || nameLower.includes('awareness');
+
+          if (activeTrendId === 'quant' && (isEngName || isReasName || isGaName) && !isQuantName) return false;
+          if (activeTrendId === 'english' && (isQuantName || isReasName || isGaName) && !isEngName) return false;
+          if (activeTrendId === 'reasoning' && (isQuantName || isEngName || isGaName) && !isReasName) return false;
+          if (activeTrendId === 'ga' && (isQuantName || isEngName || isReasName) && !isGaName) return false;
+      }
+
+      const val = m[activeTrendId as keyof typeof m] as any;
+      return val != null && ((val.percentile != null && val.percentile !== '') || (val.score != null && val.score !== ''));
+    });
+  }, [displayedMocks, activeTrendId]);
+
+  const activeTrendFilteredChronologicalMocks = useMemo(() => {
+    return [...activeTrendFilteredMocks].sort((a,b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
+  }, [activeTrendFilteredMocks]);
+
   // Derive unique roles and scopes for the current selection
   const availableRoles = useMemo(() => {
     if (selectedExam === 'All') return [];
@@ -408,7 +434,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     
     const avgScore = lastNFullMocks.length > 0 ? (lastNFullMocks.reduce((acc, m) => acc + m.score, 0) / lastNFullMocks.length).toFixed(1) : '-';
     
-    const percentileMocks = lastNFullMocks.filter(m => m.percentile != null && !isNaN(m.percentile));
+    const percentileMocks = lastNFullMocks.filter(m => m.percentile != null && !isNaN(m.percentile) && m.percentile > 0);
     const avgPercentile = percentileMocks.length > 0 ? (percentileMocks.reduce((acc, m) => acc + m.percentile, 0) / percentileMocks.length).toFixed(1) : '-';
 
     const accuracyMocks = lastNFullMocks.filter(m => m.accuracy != null && !isNaN(m.accuracy));
@@ -451,7 +477,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   }, [displayedMocks]);
 
   const chartDataReversed = useMemo(() => {
-    return [...chronologicalMocks].reverse().map(m => {
+    return [...activeTrendFilteredChronologicalMocks].reverse().map(m => {
       const scores = [
         m.quant?.score || 0,
         m.reasoning?.score || 0,
@@ -461,17 +487,17 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
       const maxSectionScore = Math.max(...scores, 0);
       return { ...m, maxSectionScore };
     });
-  }, [chronologicalMocks]);
+  }, [activeTrendFilteredChronologicalMocks]);
 
   const flattenedData = useMemo(() => {
     const data: any[] = [];
     let index = 0;
     chartDataReversed.forEach((mock) => {
       const bars: any[] = [];
-      if (chartData.hasQuant && mock.quant?.score) bars.push({ ...mock, cellSub: 'Quant', cellScore: mock.quant.score, fill: '#3b82f6' });
-      if (chartData.hasReasoning && mock.reasoning?.score) bars.push({ ...mock, cellSub: 'Reasoning', cellScore: mock.reasoning.score, fill: '#8b5cf6' });
-      if (chartData.hasEnglish && mock.english?.score) bars.push({ ...mock, cellSub: 'English', cellScore: mock.english.score, fill: '#f59e0b' });
-      if (chartData.hasGA && mock.ga?.score) bars.push({ ...mock, cellSub: 'GA', cellScore: mock.ga.score, fill: '#10b981' });
+      if ((activeTrendId === 'overall' || activeTrendId === 'quant') && chartData.hasQuant && mock.quant?.score) bars.push({ ...mock, cellSub: 'Quant', cellScore: mock.quant.score, fill: '#3b82f6' });
+      if ((activeTrendId === 'overall' || activeTrendId === 'reasoning') && chartData.hasReasoning && mock.reasoning?.score) bars.push({ ...mock, cellSub: 'Reasoning', cellScore: mock.reasoning.score, fill: '#8b5cf6' });
+      if ((activeTrendId === 'overall' || activeTrendId === 'english') && chartData.hasEnglish && mock.english?.score) bars.push({ ...mock, cellSub: 'English', cellScore: mock.english.score, fill: '#f59e0b' });
+      if ((activeTrendId === 'overall' || activeTrendId === 'ga') && chartData.hasGA && mock.ga?.score) bars.push({ ...mock, cellSub: 'GA', cellScore: mock.ga.score, fill: '#10b981' });
       
       const n = bars.length;
       if (n === 0) return;
@@ -769,26 +795,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
               <div className="flex-1 w-full mt-4 overflow-hidden relative min-h-[200px] sm:min-h-[250px]">
                 <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
                   <ResponsiveContainer width="99%" height="100%">
-                    <LineChart data={chronologicalMocks.filter(m => {
-                        if (activeTrendId === 'overall') return m.examScope === 'Full' || !m.examScope;
-                        
-                        if (m.examScope === 'Sectional') {
-                            const nameLower = (m.mockName || '').toLowerCase();
-                            const isQuantName = nameLower.includes('quant') || nameLower.includes('math');
-                            const isEngName = nameLower.includes('english') || nameLower.includes('eng');
-                            const isReasName = nameLower.includes('reasoning') || nameLower.includes('lr') || nameLower.includes('logic');
-                            const isGaName = nameLower.includes('ga') || nameLower.includes('general') || nameLower.includes('gk') || nameLower.includes('awareness');
-
-                            if (activeTrendId === 'quant' && (isEngName || isReasName || isGaName) && !isQuantName) return false;
-                            if (activeTrendId === 'english' && (isQuantName || isReasName || isGaName) && !isEngName) return false;
-                            if (activeTrendId === 'reasoning' && (isQuantName || isEngName || isGaName) && !isReasName) return false;
-                            if (activeTrendId === 'ga' && (isQuantName || isEngName || isReasName) && !isGaName) return false;
-                        }
-
-                        const val = m[activeTrendId as keyof typeof m] as any;
-                        // Include if we have percentile OR score (so sectionals without percentiles still appear and can be plotted if modified)
-                        return val != null && ((val.percentile != null && val.percentile !== '') || (val.score != null && val.score !== ''));
-                      })} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
+                    <LineChart data={activeTrendFilteredChronologicalMocks} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
@@ -1048,7 +1055,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
           <div className="space-y-8">
             {(() => {
-              const dataToRender = showRecycleBin ? deletedMocks : displayedMocks;
+              const dataToRender = showRecycleBin ? deletedMocks : activeTrendFilteredMocks;
               if (dataToRender.length === 0) {
                  return (
                     <div className="text-center py-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
