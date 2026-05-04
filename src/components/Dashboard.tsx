@@ -1180,7 +1180,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                     {(onDeleteMock || onEditMock || showRecycleBin) && (
                       <td className="pr-4 py-3 align-middle text-right w-[120px]">
                         <div className="flex items-center justify-end gap-3 text-right">
-                          <div className={`flex items-center gap-1 transition-all ${activeRowId === mock.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'}`}>
+                          <div className={`flex items-center gap-1 transition-all ${activeRowId === mock.id ? 'opacity-100 visible' : 'opacity-0 invisible md:group-hover:opacity-100 md:group-hover:visible'}`}>
                             {showRecycleBin ? (
                               <>
                                 {onRestoreMock && (
@@ -1507,7 +1507,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                          ) : (
                                            <div className="flex items-start justify-between gap-3">
                                               <span className={`text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
-                                              <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                              <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
                                                  <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setEditGlobalTaskText(task.text); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
                                                  <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                                               </div>
@@ -1699,7 +1699,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                               <span className={`text-sm select-none ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
                                                 {task.text}
                                               </span>
-                                              <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                              <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
                                                  <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(task.id); setEditMockTaskText(task.text); setMockIdOfEditingTask(mock.id); setActiveActionsTaskId(null); }} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
                                                  <button onClick={async (e) => { e.stopPropagation(); if (onUpdateReflection) { const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || []; await onUpdateReflection(mock.id, { tasks: updatedTasks }); setActiveActionsTaskId(null); } }} className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                                               </div>
