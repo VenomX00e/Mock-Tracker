@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { UserProfile } from '../types';
-import { Shield, UserX, UserCheck, MessageSquareOff, MessageSquare, AlertCircle, Save, X, Radio, FileText, Users, Calendar, Timer, Trash2 } from 'lucide-react';
+import { Shield, UserX, UserCheck, MessageSquareOff, MessageSquare, AlertCircle, Save, X, Radio, FileText, Users, Calendar, Timer, Trash2, Settings } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from '../lib/constants';
 import { parseMockAnnouncementImage } from '../services/geminiService';
@@ -10,7 +10,7 @@ import { parseMockAnnouncementImage } from '../services/geminiService';
 interface AdminDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge';
+  initialTab?: 'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings';
   editNoticeData?: any;
 }
 
@@ -18,7 +18,7 @@ import { useAuth } from '../services/AuthContext';
 
 export default function AdminDialog({ isOpen, onClose, initialTab = 'users', editNoticeData = null }: AdminDialogProps) {
   const { user: currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge'>(initialTab as any);
+  const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings'>(initialTab as any);
 
   // Challenge inputs
   const [challengeTitle, setChallengeTitle] = useState('');
@@ -100,7 +100,11 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
     try {
       const q = query(collection(db, 'users'));
       const snap = await getDocs(q);
-      const allUsers = snap.docs.map(d => d.data() as UserProfile);
+      const allUsers = snap.docs.map(d => d.data() as UserProfile).sort((a, b) => {
+        const t1 = a.lastActiveAt || 0;
+        const t2 = b.lastActiveAt || 0;
+        return t2 - t1;
+      });
       setBannedUsers(allUsers.filter(u => u.isBanned));
       setMutedUsers(allUsers.filter(u => u.isMuted && !u.isBanned));
       setAllAppUsers(allUsers.filter(u => !u.isBanned && !u.isMuted && u.totalTests > 0 && u.userId !== currentUser?.uid));
@@ -115,6 +119,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
   const [notices, setNotices] = useState<any[]>([]);
   const [countdowns, setCountdowns] = useState<any[]>([]);
   const [challenges, setChallenges] = useState<any[]>([]);
+  const [telegramLink, setTelegramLink] = useState('');
 
   const fetchAnnouncement = async () => {
     try {
@@ -127,7 +132,9 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
       
       snap.forEach(d => {
         const data = d.data();
-        if (data.type === 'notice') {
+        if (d.id === 'settings') {
+          setTelegramLink(data.telegramLink || '');
+        } else if (data.type === 'notice') {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === 'liveMock') {
           tempMocks.push({ id: d.id, ...data });
@@ -147,6 +154,18 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
     } catch (error) {
       console.error(error);
     }
+  };
+
+  const saveSettings = async () => {
+    setSavingAnnouncement(true);
+    try {
+      await setDoc(doc(db, 'system', 'settings'), { type: 'settings', telegramLink }, { merge: true });
+      alert("Settings saved successfully");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to save settings");
+    }
+    setSavingAnnouncement(false);
   };
 
   const saveNotice = async () => {
@@ -515,6 +534,12 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
             >
               <Timer className="w-4 h-4" /> Challenges
             </button>
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'settings' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
+            >
+              <Settings className="w-4 h-4" /> Settings
+            </button>
           </div>
         </div>
 
@@ -548,6 +573,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                               <div>
                                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -582,6 +608,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                               <div>
                                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
                               </div>
                             </div>
                             <button 
@@ -608,6 +635,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                               <div>
                                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
                               </div>
                             </div>
                             <button 
@@ -1051,6 +1079,25 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                    </ul>
                  </div>
                )}
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                 <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> System Settings</h3>
+               </div>
+              <div className="space-y-4">
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telegram Support Link</label>
+                   <input type="url" value={telegramLink} onChange={e => setTelegramLink(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400" placeholder="https://t.me/yourgroup" />
+                   <p className="mt-1 text-xs text-slate-500">This will be shown on the login screen and header for support.</p>
+                 </div>
+                 
+                 <button onClick={saveSettings} disabled={savingAnnouncement} className="mt-4 w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                   <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Saving...' : 'Save Settings'}
+                 </button>
+              </div>
             </div>
           )}
 

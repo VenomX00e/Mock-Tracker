@@ -104,7 +104,7 @@ service cloud.firestore {
     }
 
     match /system/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() || docId == 'settings';
       allow create: if isAdminUser() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
       allow update: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock') || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
       allow delete: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid);

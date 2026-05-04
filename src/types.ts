@@ -20,6 +20,7 @@ export interface UserProfile {
   streak: number;
   streakActive?: boolean;
   updatedAt?: any;
+  lastActiveAt?: any;
   isBanned?: boolean;
   isMuted?: boolean;
   lastMockDate?: string;

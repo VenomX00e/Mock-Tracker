@@ -11,7 +11,7 @@ import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
 import { useUserProfile } from './hooks/useUserProfile';
 import { MockScore } from './types';
-import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin, Pencil, Bold, Italic, Link as LinkIcon, Save, X as XIcon, Undo, Redo, Flame, Trash, Bell, EyeOff } from 'lucide-react';
+import { Plus, Target, LayoutDashboard, DatabaseZap, LogIn, Shield, Megaphone, ArrowRight, X, Sun, Moon, Users, Key, Pin, Pencil, Bold, Italic, Link as LinkIcon, Save, X as XIcon, Undo, Redo, Flame, Trash, Bell, EyeOff, BrainCircuit, LineChart, Trophy, Send, Timer, MessageSquare } from 'lucide-react';
 import { collection, query, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 import AddLiveMockDialog from './components/AddLiveMockDialog';
@@ -77,6 +77,23 @@ export default function App() {
   const [descHistory, setDescHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const [telegramLink, setTelegramLink] = useState<string>('');
+
+  useEffect(() => {
+    const fetchPublicSettings = async () => {
+      try {
+        const { getDoc, doc } = await import('firebase/firestore');
+        const snap = await getDoc(doc(db, 'system', 'settings'));
+        if (snap.exists()) {
+          setTelegramLink(snap.data().telegramLink || '');
+        }
+      } catch (e) {
+        console.error("Error fetching settings", e);
+      }
+    };
+    fetchPublicSettings();
+  }, []);
 
   const [now, setNow] = useState(new Date().getTime());
   
@@ -618,7 +635,7 @@ export default function App() {
                     <span className="hidden lg:inline">Add Mock</span>
                   </button>
 
-                  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-0.5 md:mx-1 hidden sm:block"></div>
+                  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 md:mx-2 hidden lg:block"></div>
 
                   <button 
                     onClick={() => setDarkMode(!darkMode)}
@@ -649,13 +666,24 @@ export default function App() {
                   </div>
                 </>
               ) : (
-                <button
-                  onClick={signInWithGoogle}
-                  className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-indigo-600 transition-all shadow-sm"
-                >
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Sign In with Google
-                </button>
+                <>
+                  <button
+                    onClick={signInWithGoogle}
+                    className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
+                  >
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In
+                  </button>
+
+                  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 md:mx-2 hidden sm:block"></div>
+
+                  <button 
+                    onClick={() => setDarkMode(!darkMode)}
+                    className="p-1.5 md:p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors flex"
+                  >
+                    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -665,24 +693,70 @@ export default function App() {
       {/* Main Layout */}
       <main className="max-w-full mx-auto px-[15px] sm:px-6 lg:px-8 py-8 pt-[25px] w-full">
         {!user ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-2xl mx-auto px-4">
-             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-8 text-blue-600 shadow-inner">
-              <DatabaseZap className="w-10 h-10" />
+          <div className="flex flex-col items-center justify-center min-h-[calc(100vh-140px)] text-center max-w-6xl mx-auto px-4 lg:overflow-hidden lg:-mt-4">
+             <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-6 text-blue-600 dark:text-blue-400 shadow-inner">
+              <DatabaseZap className="w-8 h-8" />
             </div>
-            <h2 className="text-4xl font-bold tracking-tight text-slate-900 mb-4">
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 mb-4">
               Track Your Mock Exams Intelligently
             </h2>
-            <p className="text-lg text-slate-500 mb-8 leading-relaxed">
+            <p className="text-base md:text-lg text-slate-500 dark:text-slate-400 mb-8 max-w-2xl leading-relaxed">
               Upload your mock test scorecard images. Our AI will automatically extract your scores and percentiles. 
               Safely store your historical data across all sessions and track your sectional weak points.
             </p>
-            <button
-              onClick={signInWithGoogle}
-              className="inline-flex items-center justify-center px-8 py-3.5 text-base font-medium text-white transition-all bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-200"
-            >
-              <LogIn className="w-5 h-5 mr-2" />
-              Sign In to Start Tracking
-            </button>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 text-left w-full">
+              <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
+                <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center mb-3 text-indigo-600 dark:text-indigo-400">
+                  <BrainCircuit className="w-5 h-5" />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1 text-sm md:text-base">AI Scorecard Extraction</h3>
+                <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Just upload a screenshot of your result. Our AI instantly parses and logs all scores.</p>
+              </div>
+              <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center mb-3 text-emerald-600 dark:text-emerald-400">
+                  <LineChart className="w-5 h-5" />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1 text-sm md:text-base">Deep Trend Analytics</h3>
+                <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Track your performance over time with beautiful charts and hit rates.</p>
+              </div>
+              <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
+                <div className="w-10 h-10 bg-rose-50 dark:bg-rose-900/30 rounded-lg flex items-center justify-center mb-3 text-rose-600 dark:text-rose-400">
+                  <Timer className="w-5 h-5" />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1 text-sm md:text-base">Challenges & Countdowns</h3>
+                <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Join daily task challenges to build streaks and track upcoming live exams visually.</p>
+              </div>
+              <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
+                <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/30 rounded-lg flex items-center justify-center mb-3 text-amber-600 dark:text-amber-400">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1 text-sm md:text-base">Community Chat</h3>
+                <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400">Engage with aspirants, view leaderboards, share insights, and prep together.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-4">
+              <button
+                onClick={signInWithGoogle}
+                className="inline-flex items-center justify-center px-8 py-3.5 text-base font-medium text-white transition-all bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-200"
+              >
+                <LogIn className="w-5 h-5 mr-2" />
+                Sign In to Start Tracking
+              </button>
+
+              {telegramLink && (
+                <a
+                  href={telegramLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg transition-colors mt-2"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Contact us
+                </a>
+              )}
+            </div>
           </div>
         ) : mocksLoading ? (
            <div className="flex flex-col items-center justify-center min-h-[60vh]">

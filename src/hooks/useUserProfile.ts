@@ -20,9 +20,26 @@ export function useUserProfile() {
     const unsubscribe = onSnapshot(docRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        let needsUpdate = false;
+        const updates: any = {};
+        
         if (!data.email && user.email) {
-           setDoc(docRef, { email: user.email }, { merge: true });
+           updates.email = user.email;
+           needsUpdate = true;
         }
+        
+        const now = Date.now();
+        const lastActive = data.lastActiveAt || 0;
+        // Update activity if it's been more than 5 minutes since last update
+        if (now - lastActive > 5 * 60 * 1000) {
+           updates.lastActiveAt = now;
+           needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+           setDoc(docRef, updates, { merge: true });
+        }
+        
         setProfile({ ...data } as UserProfile);
       } else {
         // Initialize profile

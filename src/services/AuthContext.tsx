@@ -30,10 +30,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing in with Google:", error);
+      if (error.code === 'auth/network-request-failed') {
+        alert("Network request failed during sign in. This is often caused by ad blockers (like Brave Shields), strict privacy settings, or disabled third-party cookies. Please try disabling them, or open the app in a new tab.");
+      } else {
+        alert(`Failed to sign in: ${error.message || 'Unknown error'}`);
+      }
       throw error;
     }
   };
