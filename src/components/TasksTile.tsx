@@ -2,19 +2,32 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckSquare, Check, Target } from 'lucide-react';
 
-function TaskProgressDisk({ 
+export function TaskProgressDisk({ 
   task, 
-  onUpdateParts 
+  onUpdateParts,
+  variant = 'floating'
 }: { 
   task: any, 
-  onUpdateParts: (completedParts: number | undefined, totalParts: number | undefined) => void 
+  onUpdateParts: (completedParts: number | undefined, totalParts: number | undefined) => void,
+  variant?: 'inline' | 'floating'
 }) {
   const hasTracker = task.totalParts !== undefined;
   const [isExpanded, setIsExpanded] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
   
   const [localCp, setLocalCp] = useState<string>(task.completedParts !== undefined ? String(task.completedParts) : "0");
   const [localTp, setLocalTp] = useState<string>(task.totalParts !== undefined ? String(task.totalParts) : "10");
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 640);
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const actualVariant = (variant === 'inline' && isMobile) ? 'floating' : variant;
 
   useEffect(() => {
     if (task.completedParts !== undefined) setLocalCp(String(task.completedParts));
@@ -23,7 +36,11 @@ function TaskProgressDisk({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        popoverRef.current && !popoverRef.current.contains(target) &&
+        (!contentRef.current || !contentRef.current.contains(target))
+      ) {
         setIsExpanded(false);
       }
     };
@@ -39,16 +56,46 @@ function TaskProgressDisk({
 
   useEffect(() => {
     if (isExpanded && popoverRef.current) {
-      const rect = popoverRef.current.getBoundingClientRect();
-      setPopoverCoords({
-        top: rect.bottom + 4,
-        left: Math.min(rect.left, window.innerWidth - 160),
-      });
+      const updateCoords = () => {
+        if (popoverRef.current) {
+          const rect = popoverRef.current.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) {
+            setPopoverCoords({ top: 0, left: 0 });
+            return;
+          }
+          setPopoverCoords({
+            top: Math.max(0, rect.bottom + 4),
+            left: Math.max(10, Math.min(rect.left - 50, window.innerWidth - 145)),
+          });
+        }
+      };
+      updateCoords();
+      window.addEventListener('resize', updateCoords);
+      window.addEventListener('scroll', updateCoords, true);
+      return () => {
+        window.removeEventListener('resize', updateCoords);
+        window.removeEventListener('scroll', updateCoords, true);
+      };
+    } else {
+      setPopoverCoords({ top: 0, left: 0 });
     }
   }, [isExpanded]);
 
   if (!hasTracker) {
-    return null;
+    return (
+      <button 
+        ref={popoverRef as any}
+        onClick={(e) => {
+          e.stopPropagation();
+          onUpdateParts(0, 10);
+          setIsExpanded(true);
+        }}
+        className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md transition-colors ml-1 opacity-0 group-hover:opacity-100 focus:opacity-100"
+        title="Track progress"
+      >
+        <Target className="w-4 h-4" />
+      </button>
+    );
   }
 
   const parsedCp = parseInt(localCp);
@@ -85,11 +132,15 @@ function TaskProgressDisk({
 
   const popoverContent = isExpanded ? (
     <div 
-      className="fixed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-[9999] p-1.5 flex gap-1 items-center min-w-max"
-      style={{ top: popoverCoords.top, left: popoverCoords.left }}
+      ref={contentRef}
+      className={actualVariant === 'floating' 
+        ? "fixed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-[9999] p-1.5 flex gap-1 items-center min-w-max transition-opacity duration-150"
+        : "flex items-center gap-1 mr-1 text-xs font-semibold text-slate-600 dark:text-slate-300"
+      }
+      style={actualVariant === 'floating' ? { top: popoverCoords.top, left: popoverCoords.left, opacity: popoverCoords.top === 0 ? 0 : 1, pointerEvents: popoverCoords.top === 0 ? 'none' : 'auto' } : {}}
       onClick={e => e.stopPropagation()}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 sm:gap-1">
         <input 
           type="number" 
           min="0"
@@ -103,10 +154,13 @@ function TaskProgressDisk({
               setIsExpanded(false);
             }
           }}
-          className="w-10 px-1 py-0.5 text-center bg-slate-50 dark:bg-slate-900 border-none rounded focus:ring-1 focus:ring-indigo-500 font-mono text-[11px] leading-none text-slate-700 dark:text-slate-300"
-          autoFocus
+          className={actualVariant === 'floating' 
+            ? "w-10 px-1 py-0.5 text-center bg-slate-50 dark:bg-slate-900 border-none rounded focus:ring-1 focus:ring-indigo-500 font-mono text-[11px] leading-none text-slate-700 dark:text-slate-300"
+            : "w-8 sm:w-10 px-0.5 sm:px-1 py-[1px] sm:py-0.5 text-center bg-transparent border-none rounded shadow-sm focus:ring-1 focus:ring-indigo-500 font-mono text-[10px] sm:text-xs leading-none text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800"
+          }
+          autoFocus={actualVariant === 'floating'}
         />
-        <span className="text-slate-400 text-xs">/</span>
+        <span className="text-slate-400 text-xs text-center hidden sm:block">/</span>
         <input 
           type="number" 
           min="1"
@@ -119,7 +173,10 @@ function TaskProgressDisk({
               setIsExpanded(false);
             }
           }}
-          className="w-10 px-1 py-0.5 text-center bg-slate-50 dark:bg-slate-900 border-none rounded focus:ring-1 focus:ring-indigo-500 font-mono text-[11px] leading-none text-slate-700 dark:text-slate-300"
+          className={actualVariant === 'floating'
+            ? "w-10 px-1 py-0.5 text-center bg-slate-50 dark:bg-slate-900 border-none rounded focus:ring-1 focus:ring-indigo-500 font-mono text-[11px] leading-none text-slate-700 dark:text-slate-300"
+            : "w-8 sm:w-10 px-0.5 sm:px-1 py-[1px] sm:py-0.5 text-center bg-transparent border-none rounded shadow-sm focus:ring-1 focus:ring-indigo-500 font-mono text-[10px] sm:text-xs leading-none text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800"
+          }
         />
       </div>
       <button 
@@ -127,7 +184,10 @@ function TaskProgressDisk({
           onUpdateParts(undefined, undefined);
           setIsExpanded(false);
         }}
-        className="text-slate-400 hover:text-rose-500 transition-colors ml-1 w-6 h-6 flex items-center justify-center rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 shrink-0 text-sm font-bold"
+        className={actualVariant === 'floating'
+          ? "text-slate-400 hover:text-rose-500 transition-colors ml-1 w-6 h-6 flex items-center justify-center rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 shrink-0 text-sm font-bold"
+          : "text-slate-400 hover:text-rose-500 transition-colors mx-1 w-5 h-5 flex items-center justify-center rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 shrink-0 text-sm font-bold"
+        }
         title="Remove tracking"
       >
         &times;
@@ -137,6 +197,8 @@ function TaskProgressDisk({
 
   return (
     <div className="relative inline-flex items-center shrink-0" ref={popoverRef}>
+      {isExpanded && (actualVariant === 'floating' ? createPortal(popoverContent, document.body) : popoverContent)}
+
       <div 
         className="cursor-pointer hover:opacity-80 transition-opacity p-0.5" 
         onClick={(e) => {
@@ -161,8 +223,6 @@ function TaskProgressDisk({
           />
         </svg>
       </div>
-
-      {isExpanded && createPortal(popoverContent, document.body)}
     </div>
   );
 }
@@ -184,7 +244,11 @@ export const TasksTile = ({ mocks, profileTasks = [], onUpdateReflection, onUpda
   if (profileTasks && profileTasks.length > 0) {
     profileTasks.forEach((t: any) => {
       if (!t.completed || recentlyCompleted.has(t.id)) {
-        displayTasks.push({ mockId: 'general', task: t, mockDate: 'General', mockName: 'General Tasks' });
+        let dateStr = new Date().toISOString().split('T')[0];
+        if (t.createdAt) {
+          dateStr = new Date(t.createdAt).toISOString().split('T')[0];
+        }
+        displayTasks.push({ mockId: 'general', task: t, mockDate: dateStr, mockName: 'General Tasks' });
       }
     });
   }
@@ -192,7 +256,7 @@ export const TasksTile = ({ mocks, profileTasks = [], onUpdateReflection, onUpda
   const pendingCount = displayTasks.filter(item => !item.task.completed).length;
 
   const formatDate = (dateStr: string) => {
-    if (dateStr === 'Unknown Date' || dateStr === 'General' || !dateStr) return dateStr;
+    if (dateStr === 'Unknown Date' || !dateStr) return dateStr;
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr;
@@ -210,6 +274,14 @@ export const TasksTile = ({ mocks, profileTasks = [], onUpdateReflection, onUpda
       groupedTasks.push(group);
     }
     group.tasks.push(item);
+  });
+
+  groupedTasks.sort((a, b) => {
+    if (a.date === 'Unknown Date') return 1;
+    if (b.date === 'Unknown Date') return -1;
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+    return dateB - dateA;
   });
 
   const handleToggleTask = async (mockId: string, taskId: string, completed: boolean) => {
@@ -257,9 +329,14 @@ export const TasksTile = ({ mocks, profileTasks = [], onUpdateReflection, onUpda
   const handleUpdateParts = async (mockId: string, taskId: string, completedParts: number | undefined, totalParts: number | undefined) => {
     if (mockId === 'general') {
       if (onUpdateProfileTasks && profileTasks) {
-        const updatedTasks = profileTasks.map((t: any) => 
-          t.id === taskId ? { ...t, completedParts, totalParts } : t
-        );
+        const updatedTasks = profileTasks.map((t: any) => {
+          if (t.id === taskId) {
+            const { completedParts: _cp, totalParts: _tp, ...rest } = t;
+            if (completedParts === undefined) return rest;
+            return { ...rest, completedParts, totalParts };
+          }
+          return t;
+        });
         await onUpdateProfileTasks(updatedTasks);
       }
       return;
@@ -268,15 +345,20 @@ export const TasksTile = ({ mocks, profileTasks = [], onUpdateReflection, onUpda
     const mockToUpdate = mocks.find(m => m.id === mockId);
     if (!mockToUpdate || !mockToUpdate.tasks) return;
     
-    const updatedTasks = mockToUpdate.tasks.map((t: any) => 
-      t.id === taskId ? { ...t, completedParts, totalParts } : t
-    );
+    const updatedTasks = mockToUpdate.tasks.map((t: any) => {
+      if (t.id === taskId) {
+        const { completedParts: _cp, totalParts: _tp, ...rest } = t;
+        if (completedParts === undefined) return rest;
+        return { ...rest, completedParts, totalParts };
+      }
+      return t;
+    });
     
     await onUpdateReflection(mockId, { tasks: updatedTasks });
   };
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50/80 to-white dark:from-slate-800/80 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md flex flex-col h-full">
+    <div className="bg-gradient-to-br from-indigo-50/80 to-white dark:from-slate-800/80 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-shadow hover:shadow-md flex flex-col h-full">
       <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
       
       <div 

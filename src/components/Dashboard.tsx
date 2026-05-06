@@ -17,6 +17,8 @@ import { saveAs } from 'file-saver';
 
 import { ReflectionEditor } from './ReflectionEditor';
 
+import { TaskProgressDisk } from './TasksTile';
+
 interface DashboardProps {
   mocks: MockScore[];
   deletedMocks?: MockScore[];
@@ -179,129 +181,14 @@ const renderCustomBarLabel = (props: any) => {
   );
 };
 
-function TaskProgressTracker({ 
-  task, 
-  onUpdateParts 
-}: { 
-  task: ReflectionTask, 
-  onUpdateParts: (completedParts: number | undefined, totalParts: number | undefined) => void 
-}) {
-  const hasTracker = task.totalParts !== undefined;
-  const [isExpanded, setIsExpanded] = useState(false);
-  
-  const [localCp, setLocalCp] = useState<string>(task.completedParts !== undefined ? String(task.completedParts) : "0");
-  const [localTp, setLocalTp] = useState<string>(task.totalParts !== undefined ? String(task.totalParts) : "10");
-
-  useEffect(() => {
-    if (task.completedParts !== undefined) setLocalCp(String(task.completedParts));
-    if (task.totalParts !== undefined) setLocalTp(String(task.totalParts));
-  }, [task.completedParts, task.totalParts]);
-
-  if (!hasTracker) {
-    return (
-      <button 
-        onClick={(e) => {
-          e.stopPropagation();
-          onUpdateParts(0, 10);
-          setIsExpanded(true);
-        }}
-        className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors ml-1"
-        title="Track progress"
-      >
-        <Target className="w-4 h-4" />
-      </button>
-    );
-  }
-
-  const parsedCp = parseInt(localCp);
-  const parsedTp = parseInt(localTp);
-  const cp = isNaN(parsedCp) ? (task.completedParts || 0) : parsedCp;
-  const tp = isNaN(parsedTp) ? (task.totalParts || 10) : parsedTp;
-  
-  const percentage = tp > 0 ? (cp / tp) : 0;
-  const offset = 50.26 - (percentage * 50.26);
-
-  const commitCp = () => {
-    let newCp = parseInt(localCp);
-    if (isNaN(newCp)) newCp = task.completedParts || 0;
-    const currentTp = task.totalParts || 10;
-    if (newCp < 0) newCp = 0;
-    if (newCp > currentTp) newCp = currentTp;
-    setLocalCp(String(newCp));
-    if (newCp !== task.completedParts) {
-      onUpdateParts(newCp, currentTp);
-    }
-  };
-
-  const commitTp = () => {
-    let newTp = parseInt(localTp);
-    if (isNaN(newTp)) newTp = task.totalParts || 10;
-    if (newTp < 1) newTp = 1;
-    let newCp = task.completedParts || 0;
-    if (newCp > newTp) newCp = newTp;
-    setLocalTp(String(newTp));
-    if (newTp !== task.totalParts || newCp !== task.completedParts) {
-      onUpdateParts(newCp, newTp);
-    }
-  };
-
+function InlineTaskEditor({ initialText, onSave, onCancel }: { initialText: string, onSave: (text: string) => void, onCancel: () => void }) {
+  const [text, setText] = useState(initialText);
   return (
-    <div className="flex items-center gap-2 ml-2 shrink-0 bg-slate-50 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700" onClick={e => e.stopPropagation()}>
-      {isExpanded && (
-        <div className="flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-300 px-1">
-          <button 
-            onClick={() => onUpdateParts(undefined, undefined)}
-            className="text-slate-400 hover:text-rose-500 transition-colors mr-1 w-5 h-5 flex items-center justify-center rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 shrink-0"
-            title="Remove tracking"
-          >
-            &times;
-          </button>
-          <div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1">
-            <input 
-              type="number" 
-              min="0"
-              max={Math.max(tp, 1)}
-              value={localCp} 
-              onChange={e => setLocalCp(e.target.value)}
-              onBlur={commitCp}
-              onKeyDown={e => e.key === 'Enter' && commitCp()}
-              className="w-8 sm:w-10 px-0.5 sm:px-1 py-[1px] sm:py-0.5 text-center bg-white dark:bg-slate-800 border-none rounded shadow-sm focus:ring-1 focus:ring-indigo-500 font-mono text-[10px] sm:text-xs leading-none"
-            />
-            <span className="text-slate-400 hidden sm:block">/</span>
-            <hr className="w-full border-t border-slate-300 dark:border-slate-600 sm:hidden my-[1px]" />
-            <input 
-              type="number" 
-              min="1"
-              value={localTp} 
-              onChange={e => setLocalTp(e.target.value)}
-              onBlur={commitTp}
-              onKeyDown={e => e.key === 'Enter' && commitTp()}
-              className="w-8 sm:w-10 px-0.5 sm:px-1 py-[1px] sm:py-0.5 text-center bg-white dark:bg-slate-800 border-none rounded shadow-sm focus:ring-1 focus:ring-indigo-500 font-mono text-[10px] sm:text-xs leading-none"
-            />
-          </div>
-        </div>
-      )}
-      
-      <div 
-        className="cursor-pointer hover:opacity-80 transition-opacity p-0.5" 
-        onClick={() => setIsExpanded(!isExpanded)}
-        title={isExpanded ? "Hide tracking inputs" : `${cp}/${tp} completed`}
-      >
-        <svg width="20" height="20" viewBox="0 0 20 20" className="rotate-[-90deg]">
-          <circle cx="10" cy="10" r="8" fill="none" className="stroke-slate-200 dark:stroke-slate-700" strokeWidth="3" />
-          <circle 
-            cx="10" 
-            cy="10" 
-            r="8" 
-            fill="none" 
-            className="stroke-indigo-500" 
-            strokeWidth="3" 
-            strokeDasharray="50.26" 
-            strokeDashoffset={offset} 
-            strokeLinecap="round" 
-            style={{ transition: 'stroke-dashoffset 0.3s ease' }}
-          />
-        </svg>
+    <div className="flex flex-col gap-3 w-full" onClick={(e) => e.stopPropagation()}>
+      <input autoFocus type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSave(text); else if (e.key === 'Escape') onCancel(); }} className="w-full bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+      <div className="flex gap-2">
+         <button onClick={(e) => { e.stopPropagation(); onSave(text); }} className="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Save</button>
+         <button onClick={(e) => { e.stopPropagation(); onCancel(); }} className="text-xs font-medium px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
       </div>
     </div>
   );
@@ -1450,7 +1337,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                       </div>
                                       <div className="space-y-1.5 pt-1">
                                         {mock.tasks.map(task => (
-                                          <div key={task.id} className="flex items-start gap-2">
+                                          <div key={task.id} className="flex items-start gap-2 group">
                                               <input 
                                                 type="checkbox" 
                                                 checked={task.completed} 
@@ -1461,8 +1348,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                               <span className={`flex-1 text-sm ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
                                                 {task.text}
                                               </span>
-                                              <TaskProgressTracker 
+                                              <TaskProgressDisk 
                                                 task={task} 
+                                                variant="inline"
                                                 onUpdateParts={async (cp, tp) => {
                                                   if (!onUpdateReflection) return;
                                                   const updatedTasks = mock.tasks?.map(t => {
@@ -1615,11 +1503,11 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                 <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 bg-slate-50/30 dark:bg-slate-950/20 custom-scrollbar relative z-0">
                   {(() => {
                     const mocksWithTasks = mocks.filter(m => m.tasks && m.tasks.length > 0 && (showCompletedTasks || m.tasks.some(t => !t.completed)));
-                    const globalTasks = (profile?.tasks || []).filter(t => showCompletedTasks || !t.completed);
+                    const globalTasks = (profile?.tasks || []).filter(t => showCompletedTasks || !t.completed).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
                     
                     const handleAddGlobalTask = () => {
                         if (!newTaskText.trim() || !onUpdateProfileTasks || !profile) return;
-                        const newTasks = [...(profile.tasks || []), { id: Math.random().toString(36).substr(2, 9), text: newTaskText.trim(), completed: false }];
+                        const newTasks = [...(profile.tasks || []), { id: Math.random().toString(36).substr(2, 9), text: newTaskText.trim(), completed: false, createdAt: new Date().toISOString() }];
                         onUpdateProfileTasks(newTasks);
                         setNewTaskText('');
                     };
@@ -1674,29 +1562,35 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                            {globalTasks.length > 0 && (
                              <div className="space-y-2">
                                 {globalTasks.map(task => (
-                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer">
+                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
                                       <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-5 h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
                                         {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
                                       </button>
                                       <div className="flex-1 min-w-0">
                                          {editingGlobalTaskId === task.id ? (
-                                           <div className="flex flex-col gap-3 w-full" onClick={(e) => e.stopPropagation()}>
-                                              <input autoFocus type="text" value={editGlobalTaskText} onChange={e => setEditGlobalTaskText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSaveGlobalTaskEdit()} className="w-full bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                                              <div className="flex gap-2">
-                                                 <button onClick={(e) => { e.stopPropagation(); handleSaveGlobalTaskEdit(); }} className="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Save</button>
-                                                 <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(null); }} className="text-xs font-medium px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
-                                              </div>
-                                           </div>
+                                           <InlineTaskEditor 
+                                             initialText={task.text}
+                                             onSave={(newText) => {
+                                               if (!newText.trim()) { handleDeleteGlobalTask(editingGlobalTaskId); setEditingGlobalTaskId(null); return; }
+                                               if (onUpdateProfileTasks && profile) {
+                                                 const newTasks = (profile.tasks || []).map(t => t.id === editingGlobalTaskId ? { ...t, text: newText.trim() } : t);
+                                                 onUpdateProfileTasks(newTasks);
+                                               }
+                                               setEditingGlobalTaskId(null);
+                                             }}
+                                             onCancel={() => setEditingGlobalTaskId(null)}
+                                           />
                                          ) : (
                                            <div className="flex items-start justify-between gap-3">
                                               <span className={`text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
                                               <div className="flex items-center">
                                                 <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-                                                   <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setEditGlobalTaskText(task.text); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                                   <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                                                 </div>
-                                                <TaskProgressTracker 
+                                                <TaskProgressDisk 
                                                   task={task} 
+                                                  variant="inline"
                                                   onUpdateParts={(cp, tp) => handleUpdateGlobalTaskParts(task.id, cp, tp)} 
                                                 />
                                               </div>
@@ -1759,7 +1653,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                             const isExpanded = expandedActionMocks[mock.id];
                             
                             return (
-                              <div key={mock.id} className="bg-white dark:bg-slate-800 sm:rounded-2xl border-y sm:border-x border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-md transition-all -mx-4 sm:mx-0">
+                              <div key={mock.id} className="bg-white dark:bg-slate-800 sm:rounded-2xl border-y sm:border-x border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-md transition-shadow -mx-4 sm:mx-0">
                                 <div 
                                   className="px-4 py-2.5 sm:py-3 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/80 flex flex-col gap-2 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors group"
                                   onClick={() => setExpandedActionMocks(prev => ({ ...prev, [mock.id]: !prev[mock.id] }))}
@@ -1853,36 +1747,24 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                       />
                                       <div className="flex-1 min-w-0">
                                         {editingMockTaskId === task.id && mockIdOfEditingTask === mock.id ? (
-                                           <div className="flex flex-col gap-2 w-full" onClick={e => e.stopPropagation()}>
-                                              <input autoFocus type="text" value={editMockTaskText} onChange={e => setEditMockTaskText(e.target.value)} onKeyDown={async e => {
-                                                if (e.key === 'Enter') {
-                                                  if (!editMockTaskText.trim()) {
-                                                      const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || [];
-                                                      if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                  } else {
-                                                      const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, text: editMockTaskText.trim() } : t) || [];
-                                                      if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                  }
-                                                  setEditingMockTaskId(null);
-                                                  setMockIdOfEditingTask(null);
+                                           <InlineTaskEditor 
+                                              initialText={task.text}
+                                              onSave={async (newText) => {
+                                                if (!newText.trim()) {
+                                                    const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || [];
+                                                    if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                                } else {
+                                                    const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, text: newText.trim() } : t) || [];
+                                                    if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
                                                 }
-                                              }} className="w-full bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                                              <div className="flex gap-2">
-                                                 <button onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    if (!editMockTaskText.trim()) {
-                                                        const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || [];
-                                                        if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                    } else {
-                                                        const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, text: editMockTaskText.trim() } : t) || [];
-                                                        if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                    }
-                                                    setEditingMockTaskId(null);
-                                                    setMockIdOfEditingTask(null);
-                                                 }} className="text-xs font-medium px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors">Save</button>
-                                                 <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(null); setMockIdOfEditingTask(null); }} className="text-xs font-medium px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
-                                              </div>
-                                           </div>
+                                                setEditingMockTaskId(null);
+                                                setMockIdOfEditingTask(null);
+                                              }}
+                                              onCancel={() => {
+                                                setEditingMockTaskId(null);
+                                                setMockIdOfEditingTask(null);
+                                              }}
+                                           />
                                         ) : (
                                            <div className="flex items-start justify-between gap-2">
                                               <span className={`text-sm select-none ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -1890,11 +1772,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                                               </span>
                                               <div className="flex items-center">
                                                 <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-                                                   <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(task.id); setEditMockTaskText(task.text); setMockIdOfEditingTask(mock.id); setActiveActionsTaskId(null); }} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                   <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(task.id); setMockIdOfEditingTask(mock.id); setActiveActionsTaskId(null); }} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
                                                    <button onClick={async (e) => { e.stopPropagation(); if (onUpdateReflection) { const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || []; await onUpdateReflection(mock.id, { tasks: updatedTasks }); setActiveActionsTaskId(null); } }} className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                                                 </div>
-                                                <TaskProgressTracker 
+                                                <TaskProgressDisk 
                                                   task={task} 
+                                                  variant="inline"
                                                   onUpdateParts={async (cp, tp) => {
                                                     if (!onUpdateReflection) return;
                                                     const updatedTasks = mock.tasks?.map(t => {
