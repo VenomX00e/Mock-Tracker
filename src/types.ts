@@ -23,8 +23,17 @@ export interface UserProfile {
   lastActiveAt?: any;
   isBanned?: boolean;
   isMuted?: boolean;
+  mutedAt?: number;
   lastMockDate?: string;
   role?: string;
+  permissions?: {
+    canManageUsers?: boolean;
+    canManageNotices?: boolean;
+    canManageChallenges?: boolean;
+    canManageLiveMocks?: boolean;
+    canManageCountdowns?: boolean;
+    canManageSettings?: boolean;
+  };
   tasks?: ReflectionTask[];
 }
 
@@ -34,6 +43,7 @@ export interface ReflectionTask {
   completed: boolean;
   completedParts?: number;
   totalParts?: number;
+  createdAt?: string;
 }
 
 export interface MockScore {

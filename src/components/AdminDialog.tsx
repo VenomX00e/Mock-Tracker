@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { UserProfile } from '../types';
@@ -9,15 +9,18 @@ import { parseMockAnnouncementImage } from '../services/geminiService';
 
 interface AdminDialogProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  isOwner?: boolean;
+  adminPermissions?: any;
   initialTab?: 'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings';
   editNoticeData?: any;
   editCountdownData?: any;
+  asPage?: boolean;
 }
 
 import { useAuth } from '../services/AuthContext';
 
-export default function AdminDialog({ isOpen, onClose, initialTab = 'users', editNoticeData = null, editCountdownData = null }: AdminDialogProps) {
+export default function AdminDialog({ isOpen, onClose, isOwner, adminPermissions, initialTab = 'users', editNoticeData = null, editCountdownData = null, asPage = false }: AdminDialogProps) {
   const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings'>(initialTab as any);
 
@@ -36,7 +39,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
   const [mutedUsers, setMutedUsers] = useState<UserProfile[]>([]);
   const [allAppUsers, setAllAppUsers] = useState<UserProfile[]>([]);
   const [allFirebaseUsers, setAllFirebaseUsers] = useState<UserProfile[]>([]);
-  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [userFilter, setUserFilter] = useState<'active' | 'all' | 'admins'>('active');
   const [loading, setLoading] = useState(false);
 
   // Live mock & notice inputs
@@ -95,12 +98,30 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
     }
   }, [initialTab, editNoticeData, editCountdownData, isOpen]);
 
+  const [expandedAdminId, setExpandedAdminId] = useState<string | null>(null);
+  const adminListRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (adminListRef.current && !adminListRef.current.contains(event.target as Node)) {
+        setExpandedAdminId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
+      if (initialTab !== undefined) {
+        setActiveTab(initialTab as any);
+      }
       fetchUsers();
       fetchAnnouncement();
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -128,6 +149,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
   const [challenges, setChallenges] = useState<any[]>([]);
   const [telegramLink, setTelegramLink] = useState('');
   const [telegramText, setTelegramText] = useState('Contact us');
+  const [muteDurationDays, setMuteDurationDays] = useState<number | string>(7);
 
   const fetchAnnouncement = async () => {
     try {
@@ -143,6 +165,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
         if (d.id === 'settings') {
           setTelegramLink(data.telegramLink || '');
           setTelegramText(data.telegramText || 'Contact us');
+          setMuteDurationDays(data.muteDurationDays || 7);
         } else if (data.type === 'notice') {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === 'liveMock') {
@@ -165,18 +188,20 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
     }
   };
 
-  const saveSettings = async () => {
+  const saveSettings = async (silent: boolean | React.FocusEvent<HTMLInputElement> = false) => {
+    const isSilent = typeof silent === 'boolean' ? silent : true;
     setSavingAnnouncement(true);
     try {
       await setDoc(doc(db, 'system', 'settings'), { 
         type: 'settings', 
         telegramLink,
-        telegramText 
+        telegramText,
+        muteDurationDays: Number(muteDurationDays) || 1
       }, { merge: true });
-      alert("Settings saved successfully");
+      if (!isSilent) alert("Settings saved successfully");
     } catch (error) {
       console.error(error);
-      alert("Failed to save settings");
+      if (!isSilent) alert("Failed to save settings");
     }
     setSavingAnnouncement(false);
   };
@@ -448,6 +473,26 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
     }
   };
 
+  const handleUpdateUserRole = async (userId: string, role: string) => {
+    try {
+      await setDoc(doc(db, 'users', userId), { role }, { merge: true });
+      fetchUsers();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleTogglePermission = async (user: UserProfile, permission: string) => {
+    try {
+      const perms = user.permissions || {};
+      const newPerms = { ...perms, [permission]: !perms[permission as keyof typeof perms] };
+      await setDoc(doc(db, 'users', user.userId), { permissions: newPerms }, { merge: true });
+      fetchUsers();
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
   const handleUpdateUserStatus = async (userId: string, updates: Partial<UserProfile>) => {
     try {
       await setDoc(doc(db, 'users', userId), updates, { merge: true });
@@ -504,65 +549,86 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen && !asPage) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden my-8 flex flex-col md:flex-row h-[85vh] border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
-        
-        {/* Sidebar Nav */}
-        <div className="w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-100 dark:border-slate-800 flex flex-col">
+  const content = (
+    <div className={`bg-white dark:bg-slate-900 ${asPage ? 'rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-h-[75vh]' : 'rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800'} overflow-hidden flex flex-col md:flex-row w-full animate-in zoom-in-95 duration-200`}>
+      
+      {/* Sidebar Nav */}
+      <div className={`w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-100 dark:border-slate-800 flex flex-col ${asPage ? 'min-h-[75vh]' : ''}`}>
           <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
             <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Admin</h2>
           </div>
           <div className="p-3 space-y-1 flex-1 overflow-y-auto">
+            {(isOwner || adminPermissions?.canManageUsers) && (
             <button 
               onClick={() => setActiveTab('users')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Users className="w-4 h-4" /> User Management
             </button>
+            )}
+            {(isOwner || adminPermissions?.canManageLiveMocks) && (
             <button 
               onClick={() => setActiveTab('liveMock')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'liveMock' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Radio className="w-4 h-4" /> Live Mock
             </button>
+            )}
+            {(isOwner || adminPermissions?.canManageNotices) && (
             <button 
               onClick={() => setActiveTab('notice')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'notice' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <FileText className="w-4 h-4" /> Notice
             </button>
+            )}
+            {(isOwner || adminPermissions?.canManageCountdowns) && (
             <button 
               onClick={() => setActiveTab('countdown')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'countdown' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Timer className="w-4 h-4" /> Countdowns
             </button>
+            )}
+            {(isOwner || adminPermissions?.canManageChallenges) && (
             <button 
               onClick={() => setActiveTab('challenge')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'challenge' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Timer className="w-4 h-4" /> Challenges
             </button>
+            )}
+            {(isOwner || adminPermissions?.canManageSettings) && (
             <button 
               onClick={() => setActiveTab('settings')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'settings' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
             >
               <Settings className="w-4 h-4" /> Settings
             </button>
+            )}
           </div>
         </div>
 
         {/* Form Content */}
         <div className="flex-1 overflow-y-auto relative p-6">
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors z-10">
-            <X className="w-5 h-5" />
-          </button>
+          {!asPage && (
+            <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors z-10">
+              <X className="w-5 h-5" />
+            </button>
+          )}
           
-          {activeTab === 'users' && (
+          {(!activeTab || (activeTab as any) === '') && (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+              <Shield className="w-12 h-12 mb-4 opacity-50" />
+              <p>You don't have any admin permissions yet.</p>
+              <p className="text-sm mt-1">Please ask the owner to assign you permissions.</p>
+            </div>
+          )}
+          
+          {activeTab === 'users' && (isOwner || adminPermissions?.canManageUsers) && (
             <div className="space-y-6 max-w-2xl mx-auto pt-6 md:pt-0">
               <h3 className="font-semibold text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">User Management</h3>
               
@@ -572,83 +638,147 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                 <div className="space-y-6">
                   <div>
                     <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <button onClick={() => setShowAllUsers(false)} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${!showAllUsers ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4" /> Active Users ({allAppUsers.length})</button>
-                      <button onClick={() => setShowAllUsers(true)} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${showAllUsers ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4" /> All Users ({allFirebaseUsers.length})</button>
+                      <button onClick={() => setUserFilter('active')} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${userFilter === 'active' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4" /> Active Users ({allAppUsers.length})</button>
+                      {isOwner && (
+                        <>
+                          <button onClick={() => setUserFilter('all')} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${userFilter === 'all' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4" /> All Users ({allFirebaseUsers.length})</button>
+                          <button onClick={() => setUserFilter('admins')} className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${userFilter === 'admins' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}><Shield className="w-4 h-4" /> Admins ({allFirebaseUsers.filter(u => u.role === 'admin').length})</button>
+                        </>
+                      )}
                     </div>
-                    {(showAllUsers ? allFirebaseUsers : allAppUsers).length === 0 ? (
+                    {(userFilter === 'admins' ? allFirebaseUsers.filter(u => u.role === 'admin') : userFilter === 'all' ? allFirebaseUsers : allAppUsers).filter(u => isOwner || u.email !== 'mrityunjoyk29@gmail.com').length === 0 ? (
                       <p className="text-sm text-slate-500 dark:text-slate-400 italic">No users found.</p>
                     ) : (
                       <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
-                        {(showAllUsers ? allFirebaseUsers : allAppUsers).map(user => (
-                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
-                              <div>
-                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
+                        {(userFilter === 'admins' ? allFirebaseUsers.filter(u => u.role === 'admin') : userFilter === 'all' ? allFirebaseUsers : allAppUsers).filter(u => isOwner || u.email !== 'mrityunjoyk29@gmail.com').map(user => (
+                          <li 
+                            key={user.userId} 
+                            ref={expandedAdminId === user.userId ? adminListRef : null}
+                            className={`p-3 bg-white dark:bg-slate-900 transition-colors ${user.role === 'admin' ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
+                            onClick={(e) => {
+                              if (user.role === 'admin' && expandedAdminId !== user.userId) {
+                                setExpandedAdminId(user.userId);
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                <div>
+                                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
+                                  {isOwner && (
+                                    <>
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
+                                      <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                {isOwner && (
+                                  <select 
+                                     value={user.role || 'user'} 
+                                     onChange={(e) => handleUpdateUserRole(user.userId, e.target.value)}
+                                     className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 outline-none text-slate-700 dark:text-slate-300"
+                                  >
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                )}
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleUpdateUserStatus(user.userId, { isMuted: true, mutedAt: new Date().getTime() }); }}
+                                  className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-900/50 dark:hover:text-amber-400 rounded-md transition-colors flex items-center gap-1"
+                                >
+                                  Mute
+                                </button>
+                                {isOwner && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleUpdateUserStatus(user.userId, { isBanned: true }); }}
+                                    className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/50 dark:hover:text-rose-400 rounded-md transition-colors flex items-center gap-1"
+                                  >
+                                    Ban
+                                  </button>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={() => handleUpdateUserStatus(user.userId, { isMuted: true })}
-                                className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-900/50 dark:hover:text-amber-400 rounded-md transition-colors flex items-center gap-1"
-                              >
-                                Mute
-                              </button>
-                              <button 
-                                onClick={() => handleUpdateUserStatus(user.userId, { isBanned: true })}
-                                className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/50 dark:hover:text-rose-400 rounded-md transition-colors flex items-center gap-1"
-                              >
-                                Ban
-                              </button>
-                            </div>
+                            {isOwner && user.role === 'admin' && expandedAdminId === user.userId && (
+                                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/50 w-full animate-in slide-in-from-top-2 duration-200" onClick={e => e.stopPropagation()}>
+                                  <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2">Admin Permissions</p>
+                                  <div className="flex flex-wrap gap-1.5 w-full">
+                                    {['canManageUsers', 'canManageNotices', 'canManageChallenges', 'canManageLiveMocks', 'canManageCountdowns', 'canManageSettings'].map(perm => (
+                                      <label key={perm} className={`text-[10px] flex items-center justify-center font-medium px-2 py-1 rounded-md cursor-pointer transition-colors border select-none ${!!(user.permissions as any)?.[perm] ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-800/50 dark:text-indigo-300' : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                        <input 
+                                          type="checkbox" 
+                                          checked={!!(user.permissions as any)?.[perm]} 
+                                          onChange={() => handleTogglePermission(user, perm)} 
+                                          className="sr-only"
+                                        />
+                                        {perm.replace('canManage', '')}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                           </li>
                         ))}
                       </ul>
                     )}
                   </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-rose-600 dark:text-rose-400 mb-3 flex items-center gap-1.5"><UserX className="w-4 h-4" /> Banned Users ({bannedUsers.length})</h4>
-                    {bannedUsers.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">No banned users.</p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
-                        {bannedUsers.map(user => (
-                          <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
-                              <div>
-                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
+                  {isOwner && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-rose-600 dark:text-rose-400 mb-3 flex items-center gap-1.5"><UserX className="w-4 h-4" /> Banned Users ({bannedUsers.length})</h4>
+                      {bannedUsers.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 italic">No banned users.</p>
+                      ) : (
+                        <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
+                          {bannedUsers.map(user => (
+                            <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
+                              <div className="flex items-center gap-3">
+                                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
+                                <div>
+                                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
+                                </div>
                               </div>
-                            </div>
-                            <button 
-                              onClick={() => handleUpdateUserStatus(user.userId, { isBanned: false })}
-                              className="text-xs font-medium px-3 py-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-md transition-colors flex items-center gap-1"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" /> Unban
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                              <button 
+                                onClick={() => handleUpdateUserStatus(user.userId, { isBanned: false })}
+                                className="text-xs font-medium px-3 py-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-md transition-colors flex items-center gap-1"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" /> Unban
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                   <div>
-                     <h4 className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-1.5"><MessageSquareOff className="w-4 h-4" /> Muted Users ({mutedUsers.length})</h4>
-                     {mutedUsers.length === 0 ? (
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5"><MessageSquareOff className="w-4 h-4" /> Muted Users ({mutedUsers.filter(u => isOwner || (u.email !== 'mrityunjoyk29@gmail.com' && (u.mutedAt && (new Date().getTime() - u.mutedAt) / (1000 * 60 * 60 * 24) <= (Number(muteDurationDays) || 1)))).length})</h4>
+                       {isOwner && (
+                         <div className="flex items-center gap-2">
+                           <label className="text-xs text-slate-500 dark:text-slate-400">Duration (Days):</label>
+                           <input type="number" min="1" value={muteDurationDays} onChange={e => setMuteDurationDays(e.target.value === '' ? '' : parseInt(e.target.value))} onBlur={saveSettings} className="w-16 px-2 py-1 border border-slate-200 dark:border-slate-700/50 rounded-md text-xs bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" />
+                         </div>
+                       )}
+                    </div>
+                     {mutedUsers.filter(u => isOwner || (u.email !== 'mrityunjoyk29@gmail.com' && (u.mutedAt && (new Date().getTime() - u.mutedAt) / (1000 * 60 * 60 * 24) <= (Number(muteDurationDays) || 1)))).length === 0 ? (
                       <p className="text-sm text-slate-500 dark:text-slate-400 italic">No muted users.</p>
                     ) : (
                       <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg max-h-60 overflow-y-auto w-full relative">
-                        {mutedUsers.map(user => (
+                        {mutedUsers.filter(u => isOwner || (u.email !== 'mrityunjoyk29@gmail.com' && (u.mutedAt && (new Date().getTime() - u.mutedAt) / (1000 * 60 * 60 * 24) <= (Number(muteDurationDays) || 1)))).map(user => (
                           <li key={user.userId} className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors">
                              <div className="flex items-center gap-3">
                               <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} className="w-8 h-8 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
                               <div>
                                 <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.displayName}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
+                                {isOwner && (
+                                  <>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{user.email || user.userId}</p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">Last active: {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleString() : 'N/A'}</p>
+                                  </>
+                                )}
                               </div>
                             </div>
                             <button 
@@ -667,7 +797,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
             </div>
           )}
 
-          {activeTab === 'liveMock' && (
+          {activeTab === 'liveMock' && (isOwner || adminPermissions?.canManageLiveMocks) && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6">
                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                  <h3 className="font-semibold text-indigo-900 dark:text-indigo-300 flex items-center gap-2"><Radio className="w-5 h-5" /> Host a Live Mock</h3>
@@ -817,7 +947,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
             </div>
           )}
 
-          {activeTab === 'countdown' && (
+          {activeTab === 'countdown' && (isOwner || adminPermissions?.canManageCountdowns) && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Timer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Manage Countdowns</h3>
@@ -895,7 +1025,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
             </div>
           )}
 
-          {activeTab === 'notice' && (
+          {activeTab === 'notice' && (isOwner || adminPermissions?.canManageNotices) && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Broadcast Notice</h3>
@@ -977,7 +1107,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
             </div>
           )}
 
-          {activeTab === 'challenge' && (
+          {activeTab === 'challenge' && (isOwner || adminPermissions?.canManageChallenges) && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Timer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Manage Challenges</h3>
@@ -1110,7 +1240,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
             </div>
           )}
 
-          {activeTab === 'settings' && (
+          {activeTab === 'settings' && (isOwner || adminPermissions?.canManageSettings) && (
             <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> System Settings</h3>
@@ -1128,7 +1258,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                    <p className="mt-1 text-xs text-slate-500">The text to display on the Telegram button.</p>
                  </div>
                  
-                 <button onClick={saveSettings} disabled={savingAnnouncement} className="mt-4 w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                 <button onClick={() => saveSettings(false)} disabled={savingAnnouncement} className="mt-4 w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                    <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Saving...' : 'Save Settings'}
                  </button>
               </div>
@@ -1136,7 +1266,14 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
           )}
 
         </div>
-      </div>
+    </div>
+  );
+
+  if (asPage) return content;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+      {content}
     </div>
   );
 }

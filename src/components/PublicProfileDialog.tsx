@@ -12,11 +12,12 @@ interface PublicProfileDialogProps {
   isCurrentUser: boolean;
   onEditProfile?: () => void;
   isAdmin?: boolean;
+  isViewerOwner?: boolean;
   onMuteUser?: (userId: string, isMuted: boolean) => void;
   onBanUser?: (userId: string, isBanned: boolean) => void;
 }
 
-export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, onEditProfile, isAdmin, onMuteUser, onBanUser }: PublicProfileDialogProps) {
+export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, onEditProfile, isAdmin, isViewerOwner, onMuteUser, onBanUser }: PublicProfileDialogProps) {
   const [recentMocks, setRecentMocks] = useState<MockScore[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -48,14 +49,16 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
            <button onClick={onClose} className="absolute top-4 right-4 text-white hover:bg-white/20 p-1 rounded-full transition-colors">
               <X className="w-5 h-5" />
            </button>
-           {isAdmin && !isCurrentUser && (
+           {isAdmin && !isCurrentUser && (isViewerOwner || profile.email !== 'mrityunjoyk29@gmail.com') && (
               <div className="absolute top-4 left-4 flex gap-2">
                  <button onClick={() => onMuteUser?.(profile.userId, !profile.isMuted)} className={`text-xs px-2 py-1 rounded bg-white/20 text-white hover:bg-white/30 transition-colors ${profile.isMuted ? 'text-red-300 dark:text-red-400' : ''}`}>
                    {profile.isMuted ? 'Unmute' : 'Mute'}
                  </button>
-                 <button onClick={() => onBanUser?.(profile.userId, !profile.isBanned)} className={`text-xs px-2 py-1 rounded bg-white/20 text-white hover:bg-white/30 transition-colors ${profile.isBanned ? 'text-red-300 dark:text-red-400' : ''}`}>
-                   {profile.isBanned ? 'Unban' : 'Ban'}
-                 </button>
+                 {isViewerOwner && (
+                   <button onClick={() => onBanUser?.(profile.userId, !profile.isBanned)} className={`text-xs px-2 py-1 rounded bg-white/20 text-white hover:bg-white/30 transition-colors ${profile.isBanned ? 'text-red-300 dark:text-red-400' : ''}`}>
+                     {profile.isBanned ? 'Unban' : 'Ban'}
+                   </button>
+                 )}
               </div>
            )}
         </div>

@@ -22,8 +22,16 @@ service cloud.firestore {
       return resource.data; 
     }
 
-    function isAdminUser() {
+    function isSuperAdmin() {
       return isSignedIn() && request.auth.token.email == 'mrityunjoyk29@gmail.com';
+    }
+
+    function isAnyAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
     }
 
     function isValidNestedScore(nested) {
@@ -105,22 +113,22 @@ service cloud.firestore {
 
     match /system/{docId} {
       allow read: if isSignedIn() || docId == 'settings';
-      allow create: if isAdminUser() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
-      allow update: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock') || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
-      allow delete: if isAdminUser() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid);
+      allow create: if isAnyAdmin() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
+      allow update: if isAnyAdmin() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock') || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
+      allow delete: if isAnyAdmin() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid);
     }
 
     match /challenges/{challengeId} {
       allow read: if isSignedIn();
-      allow create: if isAdminUser() || (isSignedIn() && incoming().keys().hasAll(['creatorId']) && incoming().creatorId == request.auth.uid);
-      allow update: if isAdminUser() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid && (!incoming().keys().hasAny(['creatorId']) || incoming().creatorId == existing().creatorId));
-      allow delete: if isAdminUser() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid);
+      allow create: if isAnyAdmin() || (isSignedIn() && incoming().keys().hasAll(['creatorId']) && incoming().creatorId == request.auth.uid);
+      allow update: if isAnyAdmin() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid && (!incoming().keys().hasAny(['creatorId']) || incoming().creatorId == existing().creatorId));
+      allow delete: if isAnyAdmin() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid);
       
       match /participants/{userId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.auth.uid == userId;
-        allow update: if (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks'])) || isAdminUser();
-        allow delete: if isAdminUser() || (isSignedIn() && request.auth.uid == userId);
+        allow update: if (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks'])) || isAnyAdmin();
+        allow delete: if isAnyAdmin() || (isSignedIn() && request.auth.uid == userId);
       }
     }
 
@@ -132,20 +140,20 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidChatMessage(incoming());
-      allow update: if isAdminUser() 
+      allow update: if isAnyAdmin() 
         || (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isEdited', 'updatedAt']) && incoming().text is string && incoming().text.size() <= 2000)
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['poll']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'poll']));
-      allow delete: if isAdminUser() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow delete: if isAnyAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming());
       allow update: if (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && (
-        !incoming().diff(existing()).affectedKeys().hasAny(['isBanned', 'isMuted', 'role'])
-      )) || isAdminUser();
+        !incoming().diff(existing()).affectedKeys().hasAny(['isBanned', 'isMuted', 'role', 'permissions'])
+      )) || isSuperAdmin() || (isAnyAdmin() && !incoming().diff(existing()).affectedKeys().hasAny(['role', 'permissions']));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
     }
 
@@ -171,9 +179,9 @@ service cloud.firestore {
         && isValidMockScore(incoming())
         && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'updatedAt', 'streakAtTime', 'note', 'tags', 'difficulty', 'nervousness', 'focus', 'energy', 'timeState', 'tasks', 'isDeleted'])
         && incoming().id == existing().id
-        && incoming().userId == existing().userId) || isAdminUser();
+        && incoming().userId == existing().userId) || isAnyAdmin();
         
-      allow delete: if (isSignedIn() && request.auth.uid == userId && isValidId(mockId)) || isAdminUser();
+      allow delete: if (isSignedIn() && request.auth.uid == userId && isValidId(mockId)) || isAnyAdmin();
     }
   }
 }

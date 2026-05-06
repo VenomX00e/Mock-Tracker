@@ -65,7 +65,7 @@ export default function App() {
       localStorage.setItem('darkMode', 'false');
     }
   }, [darkMode]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'community'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'community' | 'admin'>('dashboard');
   const [notices, setNotices] = useState<any[]>([]);
   const [challenges, setChallenges] = useState<any[]>([]);
   const [deletedChallenges, setDeletedChallenges] = useState<any[]>([]);
@@ -134,7 +134,18 @@ export default function App() {
 
   const [now, setNow] = useState(new Date().getTime());
   
-  const isAdmin = user?.email === 'mrityunjoyk29@gmail.com';
+  const isOwner = user?.email === 'mrityunjoyk29@gmail.com';
+  const isAdminUser = profile?.role === 'admin';
+  const isAdmin = isOwner || isAdminUser;
+  
+  const adminPermissions = {
+    canManageUsers: isOwner || (isAdminUser && profile?.permissions?.canManageUsers),
+    canManageNotices: isOwner || (isAdminUser && profile?.permissions?.canManageNotices),
+    canManageChallenges: isOwner || (isAdminUser && profile?.permissions?.canManageChallenges),
+    canManageLiveMocks: isOwner || (isAdminUser && profile?.permissions?.canManageLiveMocks),
+    canManageCountdowns: isOwner || (isAdminUser && profile?.permissions?.canManageCountdowns),
+    canManageSettings: isOwner || (isAdminUser && profile?.permissions?.canManageSettings),
+  };
 
   const saveInlineNotice = async (id: string) => {
     try {
@@ -216,7 +227,7 @@ export default function App() {
   
   const togglePin = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isAdmin) return;
+    if (!adminPermissions?.canManageCountdowns) return;
     
     let newPins = [...pinnedCountdowns];
     if (newPins.includes(id)) {
@@ -242,7 +253,7 @@ export default function App() {
 
   const togglePinNotice = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isAdmin) return;
+    if (!adminPermissions?.canManageNotices) return;
     
     let newPins = [...pinnedNotices];
     if (newPins.includes(id)) {
@@ -350,7 +361,7 @@ export default function App() {
                   return;
               }
            } else {
-              if (isAdmin) {
+              if (adminPermissions?.canManageChallenges) {
                  if (isPermanentlyDeletedByAdmin) {
                      return;
                  }
@@ -370,7 +381,7 @@ export default function App() {
               if (data.visibility === 'global') {
                 if (data.approvalStatus === 'pending') {
                   // Only creator and admin can see pending global challenges
-                  if (data.creatorId !== user?.uid && !isAdmin) {
+                  if (data.creatorId !== user?.uid && !adminPermissions?.canManageChallenges) {
                     return;
                   }
                 } else if (data.approvalStatus === 'rejected') {
@@ -385,7 +396,7 @@ export default function App() {
         } else if (data.status === 'deleted') {
            if (data.creatorId === user?.uid && !isPermanentlyDeletedByCreator) {
              delChallenges.push({ id: d.id, ...data });
-           } else if (isAdmin && data.creatorId !== user?.uid && !isPermanentlyDeletedByAdmin) {
+           } else if (adminPermissions?.canManageChallenges && data.creatorId !== user?.uid && !isPermanentlyDeletedByAdmin) {
              delChallenges.push({ id: d.id, ...data });
            }
         }
@@ -412,7 +423,7 @@ export default function App() {
       const interval = setInterval(fetchAnnouncement, 60000);
       return () => clearInterval(interval);
     }
-  }, [user, isAdminModalOpen, isCreateChallengeOpen, isRequestsModalOpen]);
+  }, [user, activeTab, isAdminModalOpen, isCreateChallengeOpen, isRequestsModalOpen]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -490,7 +501,7 @@ export default function App() {
   const handleDeleteChallenge = async (challenge: any) => {
     try {
       const { setDoc, doc } = await import('firebase/firestore');
-      if (isAdmin && challenge.creatorId !== user?.uid) {
+      if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
           await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: true }, { merge: true });
       } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
           await setDoc(doc(db, 'challenges', challenge.id), { deletedByCreator: true }, { merge: true });
@@ -506,7 +517,7 @@ export default function App() {
   };
 
   const handlePinChallenge = async (challenge: any) => {
-    if (!isAdmin) return;
+    if (!adminPermissions?.canManageChallenges) return;
     
     let newPins = [...pinnedChallenges];
     if (newPins.includes(challenge.id)) {
@@ -534,7 +545,7 @@ export default function App() {
   const handleRestoreChallenge = async (challenge: any) => {
     try {
       const { setDoc, doc } = await import('firebase/firestore');
-      if (isAdmin && challenge.creatorId !== user?.uid) {
+      if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
           await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: false, permanentlyDeletedByAdmin: false }, { merge: true });
       } else {
           await setDoc(doc(db, 'challenges', challenge.id), { status: 'active', deletedByCreator: false, permanentlyDeletedByCreator: false }, { merge: true });
@@ -550,7 +561,7 @@ export default function App() {
   const handlePermanentlyDeleteChallenge = async (challenge: any) => {
     try {
       const { deleteDoc, doc, setDoc } = await import('firebase/firestore');
-      if (isAdmin && challenge.creatorId !== user?.uid) {
+      if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
           await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByAdmin: true }, { merge: true });
       } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
           await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByCreator: true }, { merge: true });
@@ -596,6 +607,10 @@ export default function App() {
   }
 
   const handleMuteUser = async (userId: string, isMuted: boolean) => {
+    if (activePublicProfile?.email === 'mrityunjoyk29@gmail.com' && !isOwner) {
+      alert("You cannot mute the owner.");
+      return;
+    }
     const { doc, setDoc } = await import('firebase/firestore');
     const { db } = await import('./services/firebase');
     await setDoc(doc(db, 'users', userId), { isMuted }, { merge: true });
@@ -603,6 +618,10 @@ export default function App() {
   };
 
   const handleBanUser = async (userId: string, isBanned: boolean) => {
+    if (activePublicProfile?.email === 'mrityunjoyk29@gmail.com' && !isOwner) {
+      alert("You cannot ban the owner.");
+      return;
+    }
     const { doc, setDoc } = await import('firebase/firestore');
     const { db } = await import('./services/firebase');
     await setDoc(doc(db, 'users', userId), { isBanned }, { merge: true });
@@ -627,20 +646,47 @@ export default function App() {
               {user ? (
                 <>
                   <div className="flex items-center gap-1 sm:gap-2 mr-1 sm:mr-2">
-                    <button
-                      onClick={() => { setActiveTab(activeTab === 'dashboard' ? 'community' : 'dashboard'); window.scrollTo(0, 0); }}
-                      className="px-2 sm:px-3 py-1.5 lg:hidden text-xs font-medium rounded-lg transition-all bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700 w-9 sm:w-auto hover:bg-slate-200 dark:hover:bg-slate-700"
-                      title={activeTab === 'dashboard' ? 'Community' : 'My Mocks'}
-                    >
-                      {activeTab === 'dashboard' ? (
-                        <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      ) : (
-                        <LayoutDashboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <div className="flex items-center gap-1 lg:hidden bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                      {isOwner && (
+                        <button
+                          onClick={() => { setActiveTab('admin'); window.scrollTo(0, 0); }}
+                          className={`p-1.5 rounded-lg transition-colors ${activeTab === 'admin' ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'}`}
+                          title="Admin Dashboard"
+                        >
+                          <Shield className="w-4 h-4" />
+                        </button>
                       )}
-                    </button>
+                      <button
+                        onClick={() => { setActiveTab('dashboard'); window.scrollTo(0, 0); }}
+                        className={`p-1.5 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'}`}
+                        title="My Mocks"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => { setActiveTab('community'); window.scrollTo(0, 0); }}
+                        className={`p-1.5 rounded-lg transition-colors ${activeTab === 'community' ? 'bg-white dark:bg-slate-700 shadow-sm text-purple-600 dark:text-purple-400' : 'text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'}`}
+                        title="Community"
+                      >
+                        <Users className="w-4 h-4" />
+                      </button>
+                    </div>
 
                     {/* Desktop Tabs */}
                     <div className="hidden lg:flex items-center gap-1.5 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-xl relative">
+                      {isOwner && (
+                        <button
+                          onClick={() => { setActiveTab('admin'); window.scrollTo(0, 0); }}
+                          className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 flex items-center gap-1.5 ${
+                            activeTab === 'admin' 
+                              ? 'text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600' 
+                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent'
+                          }`}
+                        >
+                          <Shield className="w-4 h-4" />
+                          <span className="relative z-10 block pointer-events-none">Admin</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => { setActiveTab('dashboard'); window.scrollTo(0, 0); }}
                         className={`relative px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 ${
@@ -672,11 +718,21 @@ export default function App() {
                     <span className="hidden lg:inline">Add Mock</span>
                   </button>
 
-                  {isAdmin && (
+                  {!isOwner && isAdmin && (
                     <button
                       onClick={() => {
-                        setAdminTab('users');
+                        let firstTab: any = 'users';
+                        if (adminPermissions?.canManageUsers) firstTab = 'users';
+                        else if (adminPermissions?.canManageLiveMocks) firstTab = 'liveMock';
+                        else if (adminPermissions?.canManageNotices) firstTab = 'notice';
+                        else if (adminPermissions?.canManageCountdowns) firstTab = 'countdown';
+                        else if (adminPermissions?.canManageChallenges) firstTab = 'challenge';
+                        else if (adminPermissions?.canManageSettings) firstTab = 'settings';
+                        else firstTab = '';
+                        
+                        setAdminTab(firstTab);
                         setAdminEditNotice(null);
+                        setAdminEditCountdown(null);
                         setIsAdminModalOpen(true);
                        }}
                       className="p-1.5 md:p-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border border-transparent rounded-lg transition-colors"
@@ -867,14 +923,14 @@ export default function App() {
                             </div>
                           </div>
                           
-                          {isAdmin && tappedCountdownId === c.id && (
+                          {adminPermissions?.canManageCountdowns && tappedCountdownId === c.id && (
                             <div className="flex items-center gap-1.5 justify-end animate-in fade-in slide-in-from-right-2" style={{ marginRight: '-12px' }}>
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setAdminEditCountdown(c);
                                   setAdminTab('countdown');
-                                  setIsAdminModalOpen(true);
+                                  setActiveTab('admin');
                                 }}
                                 className={`p-1.5 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all active:scale-95 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200`}
                                 title="Edit"
@@ -920,7 +976,7 @@ export default function App() {
             )}
 
             {/* Notices */}
-            {[...notices].sort((a, b) => {
+            {activeTab !== 'admin' && [...notices].sort((a, b) => {
               const aIdx = pinnedNotices.indexOf(a.id);
               const bIdx = pinnedNotices.indexOf(b.id);
               if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
@@ -1071,9 +1127,9 @@ export default function App() {
                   )}
                 </div>
                 )}
-                {((isAdmin && inlineEditingId !== n.id) || (!isAdmin && n.editableBy === 'users' && activeNoticeId === n.id && inlineEditingId !== n.id)) && (
+                {((adminPermissions?.canManageNotices && inlineEditingId !== n.id) || (!adminPermissions?.canManageNotices && n.editableBy === 'users' && activeNoticeId === n.id && inlineEditingId !== n.id)) && (
                   <div className="absolute top-3 right-3 flex items-center gap-2 z-20">
-                    {isAdmin && (
+                    {adminPermissions?.canManageNotices && (
                       <button
                         onClick={(e) => togglePinNotice(n.id, e)}
                         className={`p-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all shadow-sm border border-slate-200 dark:border-slate-700 hover:scale-110 active:scale-95 ${pinnedNotices.includes(n.id) ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400'}`}
@@ -1092,7 +1148,7 @@ export default function App() {
                         setHistoryIndex(0);
                       }}
                       className="p-2 bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-xl transition-all shadow-sm border border-slate-200 dark:border-slate-700 hover:scale-110 active:scale-95"
-                      title={isAdmin ? "Edit Notice Inline" : "Edit Notice"}
+                      title={adminPermissions?.canManageNotices ? "Edit Notice Inline" : "Edit Notice"}
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -1102,7 +1158,7 @@ export default function App() {
             )})}
 
             {/* Challenges */}
-            {(challenges.length > 0 || user) && (
+            {activeTab !== 'admin' && (challenges.length > 0 || user) && (
               <div className="mb-6">
                 <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4 mt-6 flex-nowrap w-full">
                   <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-1 sm:gap-2 min-w-0">
@@ -1131,7 +1187,7 @@ export default function App() {
                         </span>
                       </button>
                     )}
-                    {isAdmin && challenges.some(c => c.visibility === 'global' && c.approvalStatus === 'pending') && (
+                    {adminPermissions?.canManageChallenges && challenges.some(c => c.visibility === 'global' && c.approvalStatus === 'pending') && (
                       <button
                         onClick={() => setIsRequestsModalOpen(true)}
                         className="p-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors shrink-0 relative"
@@ -1194,7 +1250,7 @@ export default function App() {
                           onDelete={handleDeleteChallenge}
                           onDismiss={dismissChallenge}
                           onPin={handlePinChallenge}
-                          isAdmin={isAdmin}
+                          isAdmin={adminPermissions?.canManageChallenges}
                         />
                       ))}
                     </div>
@@ -1279,7 +1335,24 @@ export default function App() {
 
             <section className="w-full">
                 <>
-                  {activeTab === 'dashboard' ? (
+                  {activeTab === 'admin' && isAdmin ? (
+                    <AdminDialog
+                      isOpen={true}
+                      isOwner={isOwner}
+                      adminPermissions={adminPermissions}
+                      asPage={true}
+                      initialTab={adminTab || ((!isOwner && adminPermissions) ? (
+                           adminPermissions.canManageUsers ? 'users' :
+                           adminPermissions.canManageLiveMocks ? 'liveMock' :
+                           adminPermissions.canManageNotices ? 'notice' :
+                           adminPermissions.canManageCountdowns ? 'countdown' :
+                           adminPermissions.canManageChallenges ? 'challenge' :
+                           adminPermissions.canManageSettings ? 'settings' : 'users'
+                      ) : 'users') as any}
+                      editNoticeData={adminEditNotice}
+                      editCountdownData={adminEditCountdown}
+                    />
+                  ) : activeTab === 'dashboard' ? (
                     <Dashboard 
                       mocks={mocks} 
                       deletedMocks={deletedMocks}
@@ -1301,7 +1374,7 @@ export default function App() {
                     <CommunityHub 
                        onCopyMock={handleCopyMock} 
                        onUserClick={(u) => setActivePublicProfile(u)}
-                       isAdmin={isAdmin}
+                       isAdmin={adminPermissions?.canManageLiveMocks}
                        pinnedChallenges={pinnedChallenges}
                        challenges={challenges}
                        onPinChallenge={handlePinChallenge}
@@ -1349,13 +1422,14 @@ export default function App() {
             profile={activePublicProfile}
             isCurrentUser={user?.uid === activePublicProfile.userId}
             onEditProfile={() => setIsProfileModalOpen(true)}
-            isAdmin={isAdmin}
+            isAdmin={adminPermissions?.canManageUsers}
+            isViewerOwner={isOwner}
             onMuteUser={handleMuteUser}
             onBanUser={handleBanUser}
          />
       )}
 
-      {isAdmin && (
+      {adminPermissions?.canManageChallenges && (
         <ChallengeRequestsDialog
           isOpen={isRequestsModalOpen}
           onClose={() => setIsRequestsModalOpen(false)}
@@ -1373,7 +1447,7 @@ export default function App() {
           deletedChallenges={deletedChallenges}
           onRestore={handleRestoreChallenge}
           onPermanentlyDelete={handlePermanentlyDeleteChallenge}
-          isAdmin={isAdmin}
+          isAdmin={adminPermissions?.canManageChallenges}
         />
       )}
 
@@ -1386,9 +1460,11 @@ export default function App() {
         />
       )}
 
-      {isAdmin && (
+      {!isOwner && isAdmin && (
         <AdminDialog 
           isOpen={isAdminModalOpen}
+          isOwner={isOwner}
+          adminPermissions={adminPermissions}
           onClose={() => {
             setIsAdminModalOpen(false);
             setAdminEditNotice(null);
