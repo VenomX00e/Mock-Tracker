@@ -269,7 +269,7 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
   const groupedCheckIns = getGroupedCheckIns();
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50/80 to-white dark:from-slate-800/80 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl p-4 shadow-sm mb-4 relative overflow-hidden transition-all hover:shadow-md">
+    <div className="bg-gradient-to-br from-indigo-50/80 to-white dark:from-slate-800/80 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md flex flex-col h-full">
       <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
       
       <div className={`flex justify-between items-start mb-4 relative z-10`}>

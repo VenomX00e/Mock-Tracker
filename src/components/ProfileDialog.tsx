@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Image as ImageIcon, Target, Edit2, LogOut } from 'lucide-react';
+import { X, User, Image as ImageIcon, Target, Edit2, LogOut, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { useAuth } from '../services/AuthContext';
@@ -8,8 +8,9 @@ import { CustomDropdown } from './CustomDropdown';
 interface ProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  darkMode: boolean;
+  setDarkMode: (value: boolean) => void;
 }
-
 
 const exams = ['SBI PO', 'IBPS PO', 'SBI Clerk', 'IBPS Clerk', 'RRB PO', 'RRB Clerk', 'RBI Grade B', 'RBI Assistant'];
 
@@ -41,7 +42,7 @@ const PRESET_AVATARS = [
   "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f43b.svg"  // Bear
 ];
 
-export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
+export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode }: ProfileDialogProps) {
   const { profile, updateProfile, loading } = useUserProfile();
   const { logout } = useAuth();
   const [displayName, setDisplayName] = useState('');
@@ -96,6 +97,14 @@ export default function ProfileDialog({ isOpen, onClose }: ProfileDialogProps) {
             <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
           <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Edit Profile</h2>
           <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 rounded-full transition-colors flex items-center"
+              title="Toggle Theme"
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700"></div>
             <button 
               onClick={handleLogout}
               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 dark:hover:text-red-400 rounded-full transition-colors flex items-center gap-1.5"

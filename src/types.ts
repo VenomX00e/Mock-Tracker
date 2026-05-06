@@ -32,6 +32,8 @@ export interface ReflectionTask {
   id: string;
   text: string;
   completed: boolean;
+  completedParts?: number;
+  totalParts?: number;
 }
 
 export interface MockScore {

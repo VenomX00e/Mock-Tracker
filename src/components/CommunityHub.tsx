@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, addDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
@@ -34,7 +34,11 @@ export default function CommunityHub({
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
   const [feedSort, setFeedSort] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: null, direction: null });
+  const [selectedPhase, setSelectedPhase] = useState<string>('All');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('All');
   const [feedLogs, setFeedLogs] = useState<any[]>([]);
+  const [allFeedMocks, setAllFeedMocks] = useState<any[]>([]);
+  const [leaderboardHideDays, setLeaderboardHideDays] = useState<number>(11);
   const [loadingTop, setLoadingTop] = useState(true);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [daysVisible, setDaysVisible] = useState(1);
@@ -72,11 +76,26 @@ export default function CommunityHub({
            if (data.defaultSortKey) {
              setSortConfig({ key: data.defaultSortKey, direction: data.defaultSortDirection || 'desc' });
            }
+           if (data.hideAfterDays !== undefined) {
+             setLeaderboardHideDays(data.hideAfterDays);
+           }
         }
       } catch(e) {}
     };
     fetchSettings();
   }, []);
+
+  const handleSetHideDays = async () => {
+     if (!isAdmin) return;
+     const val = window.prompt("Hide inactive users after how many days?", String(leaderboardHideDays));
+     if (val) {
+        const parsed = parseInt(val, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+           setLeaderboardHideDays(parsed);
+           await setDoc(doc(db, 'system', 'leaderboardSettings'), { hideAfterDays: parsed }, { merge: true });
+        }
+     }
+  };
 
   const handleAdminChangeGlobalSort = async (key: string) => {
      if (!isAdmin) return;
@@ -440,6 +459,8 @@ export default function CommunityHub({
            return true;
         });
 
+        setAllFeedMocks(mocks);
+
         // Group by Date -> ExamName -> Mocks (sorted by percentile)
         const profileToMocksMap: Record<string, MockScore[]> = {};
         mocks.forEach(m => {
@@ -549,7 +570,133 @@ export default function CommunityHub({
     return feedSort.direction === 'desc' ? '⬇' : '⬆';
   };
 
-  const sortedLeaderboard = [...allUsers].sort((a, b) => {
+  const availablePhases = useMemo(() => {
+    // If we want all possible phases ever known statically, we can use a fixed list.
+    // However, keeping consistent with Dashboard, we can use a global list or extract from feed.
+    const phases = new Set<string>();
+    feedLogs.forEach(day => {
+        day.mocks?.forEach((m: any) => {
+            if (m.examPhase) phases.add(m.examPhase);
+        });
+    });
+    // Ensure we have some common ones if feed is small
+    ['Prelims', 'Mains'].forEach(p => phases.add(p));
+    
+    const sortedPhases = Array.from(phases).sort((a, b) => {
+      if (a === 'Prelims') return -1;
+      if (b === 'Prelims') return 1;
+      if (a === 'Mains') return -1;
+      if (b === 'Mains') return 1;
+      return a.localeCompare(b);
+    });
+    
+    return ['All', ...sortedPhases];
+  }, [feedLogs]);
+
+  const activeAllUsers = useMemo(() => {
+    let users = allUsers;
+    
+    // Check if it's a known period
+    const is30D = selectedPeriod === '30 Days' || selectedPeriod === 'Last 30 Days';
+    const is7D = selectedPeriod === '7 Days' || selectedPeriod === 'Last 7 Days';
+    const isAll = selectedPeriod === 'All Time' || selectedPeriod === 'All';
+    const isCustom = !is30D && !is7D && !isAll;
+
+    if (selectedPhase === 'All' && isAll) {
+      // Nothing special doing, proceed to the regular filtering at the bottom
+    } else {
+      const userStats: Record<string, any> = {};
+      
+      let cutoffTime = 0;
+      if (is30D) {
+         const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 30); cutoffTime = d.getTime();
+      } else if (is7D) {
+         const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 7); cutoffTime = d.getTime();
+      } else if (isCustom) {
+         const parsed = parseInt(selectedPeriod);
+         if (!isNaN(parsed) && parsed > 0) {
+           const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - parsed); cutoffTime = d.getTime();
+         }
+      }
+
+      allFeedMocks.forEach(m => {
+         if (selectedPhase !== 'All' && m.examPhase !== selectedPhase) return;
+         if (cutoffTime > 0) {
+            const d = parseLocalDate(m.date);
+            if (d.getTime() < cutoffTime) return;
+         }
+         const uid = m.userId;
+         if (!uid) return;
+         if (!userStats[uid]) {
+            const u = userMap[uid] || {} as any;
+            userStats[uid] = {
+               ...u, 
+               totalTests: 0,
+               pCount: 0, pSum: 0,
+               qCount: 0, qSum: 0,
+               rCount: 0, rSum: 0,
+               eCount: 0, eSum: 0,
+            };
+         }
+         const stat = userStats[uid];
+         stat.totalTests++;
+         if ((!m.examScope || m.examScope === 'Full') && m.percentile > 0) {
+            stat.pSum += m.percentile; stat.pCount++;
+         }
+         if (m.quant?.percentile > 0) {
+            stat.qSum += m.quant.percentile; stat.qCount++;
+         }
+         if (m.reasoning?.percentile > 0) {
+            stat.rSum += m.reasoning.percentile; stat.rCount++;
+         }
+         if (m.english?.percentile > 0) {
+            stat.eSum += m.english.percentile; stat.eCount++;
+         }
+      });
+
+      if (selectedPhase === 'All') {
+         users = allUsers.map(u => {
+            const uid = u.userId;
+            if (is30D && (u as any).stats30D) return { ...u, ...((u as any).stats30D) };
+            if (is7D && (u as any).stats7D) return { ...u, ...((u as any).stats7D) };
+            
+            const stat = userStats[uid];
+            if (!stat) return { ...u, totalTests: 0 };
+            return {
+               ...stat,
+               avgPercentile: stat.pCount > 0 ? Number((stat.pSum / stat.pCount).toFixed(2)) : 0,
+               avgQuantPercentile: stat.qCount > 0 ? Number((stat.qSum / stat.qCount).toFixed(2)) : 0,
+               avgReasoningPercentile: stat.rCount > 0 ? Number((stat.rSum / stat.rCount).toFixed(2)) : 0,
+               avgEnglishPercentile: stat.eCount > 0 ? Number((stat.eSum / stat.eCount).toFixed(2)) : 0,
+            };
+         }).filter(u => u.totalTests > 0);
+      } else {
+        users = Object.values(userStats).map((stat: any) => ({
+           ...stat,
+           avgPercentile: stat.pCount > 0 ? Number((stat.pSum / stat.pCount).toFixed(2)) : 0,
+           avgQuantPercentile: stat.qCount > 0 ? Number((stat.qSum / stat.qCount).toFixed(2)) : 0,
+           avgReasoningPercentile: stat.rCount > 0 ? Number((stat.rSum / stat.rCount).toFixed(2)) : 0,
+           avgEnglishPercentile: stat.eCount > 0 ? Number((stat.eSum / stat.eCount).toFixed(2)) : 0,
+        })).filter(u => u.avgPercentile > 0 || u.totalTests > 0);
+      }
+    }
+    
+    return users.filter((u: any) => {
+       if (u.lastMockDate) {
+          const dA = parseLocalDate(u.lastMockDate);
+          const lastDtA = new Date(dA.getFullYear(), dA.getMonth(), dA.getDate()).getTime();
+          const todayDt = new Date();
+          const today = new Date(todayDt.getFullYear(), todayDt.getMonth(), todayDt.getDate()).getTime();
+          const diffDays = Math.floor((today - lastDtA) / 86400000);
+          if (diffDays >= leaderboardHideDays) return false;
+       } else {
+          return false;
+       }
+       return true;
+    });
+  }, [allUsers, allFeedMocks, selectedPhase, selectedPeriod, userMap, leaderboardHideDays]);
+
+  const sortedLeaderboard = [...activeAllUsers].sort((a, b) => {
     if (!sortConfig.key || !sortConfig.direction) return 0;
     let aVal = (a as any)[sortConfig.key] || 0;
     let bVal = (b as any)[sortConfig.key] || 0;
@@ -577,26 +724,93 @@ export default function CommunityHub({
     return 0;
   });
 
+  const filteredFeedLogs = useMemo(() => {
+    if (selectedPhase === 'All') return feedLogs;
+    return feedLogs.map(dg => ({
+       ...dg,
+       mocks: dg.mocks.filter((m: any) => m.examPhase === selectedPhase)
+    })).filter(dg => dg.mocks.length > 0);
+  }, [feedLogs, selectedPhase]);
+
   return (
     <div className="space-y-8 mt-6 lg:mt-8 mb-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-               <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
-             </h3>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-3 sm:flex-row sm:items-center justify-between rounded-t-2xl">
+          <div className="flex items-center justify-between sm:justify-start gap-4">
+             <div className="flex items-center gap-3">
+               <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
+                 <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
+               </h3>
+               
+               <div className="flex items-center gap-1.5 shrink-0">
+                  <CustomDropdown
+                    value={selectedPeriod}
+                    options={['All', '7 Days', '30 Days', 'Custom']}
+                    onChange={(val) => {
+                       if (val === 'Custom') setSelectedPeriod('60');
+                       else setSelectedPeriod(val);
+                    }}
+                    placeholder="Period"
+                    buttonClassName="px-2 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700/50 rounded-lg w-fit text-center"
+                    optionClassName="px-2 py-1 text-xs text-center"
+                    hideArrow={true}
+                    editable={!['All', '7 Days', '30 Days'].includes(selectedPeriod)}
+                  />
+               </div>
+             </div>
+             
              {isAdmin && (
-                <div className="flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-3">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-400">Admin Default</span>
-                  <div className="w-[180px]">
-                    <CustomDropdown 
-                       value={sortConfig.key || ''}
-                       onChange={handleAdminChangeGlobalSort}
-                       options={['avgPercentile', 'avgAccuracy', 'totalTests', 'streak']}
-                       placeholder="Select default"
+               <div className="w-[140px] sm:hidden">
+                 <CustomDropdown 
+                    value={sortConfig.key || ''}
+                    onChange={handleAdminChangeGlobalSort}
+                    options={['avgPercentile', 'avgAccuracy', 'totalTests', 'streak']}
+                    placeholder="Sort Default"
+                    buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-transparent rounded-lg w-full"
+                 />
+               </div>
+             )}
+          </div>
+          
+          <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+             <div className="w-24 sm:w-32 flex-shrink-0">
+               <CustomDropdown
+                 value={selectedPhase}
+                 options={availablePhases.map(p => typeof p === 'string' ? p : p)}
+                 onChange={(val) => setSelectedPhase(val)}
+                 placeholder="Phase"
+                 buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
+                 optionClassName="px-3 py-1.5 text-xs"
+               />
+             </div>
+             {isAdmin && (
+               <div className="flex items-center justify-end gap-2 sm:border-l border-slate-200 dark:border-slate-700 sm:pl-3">
+                 <div className="hidden sm:block w-[180px]">
+                   <CustomDropdown 
+                      value={sortConfig.key || ''}
+                      onChange={handleAdminChangeGlobalSort}
+                      options={['avgPercentile', 'avgAccuracy', 'totalTests', 'streak']}
+                      placeholder="Select default sort"
+                      buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
+                   />
+                 </div>
+                 <div className="flex items-center gap-2 text-xs bg-transparent text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg border-transparent focus-within:border-indigo-500 transition-colors">
+                    <span className="font-medium text-slate-500 dark:text-slate-400">Hide:</span>
+                    <input
+                       type="number"
+                       min="1"
+                       value={leaderboardHideDays}
+                       onChange={e => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val > 0) setLeaderboardHideDays(val);
+                       }}
+                       onBlur={async () => {
+                          await setDoc(doc(db, 'system', 'leaderboardSettings'), { hideAfterDays: leaderboardHideDays }, { merge: true });
+                       }}
+                       className="w-10 bg-transparent text-center border-none p-0 focus:ring-0 text-xs font-semibold text-slate-800 dark:text-slate-200"
                     />
-                  </div>
-                </div>
+                 </div>
+               </div>
              )}
           </div>
         </div>
@@ -694,7 +908,7 @@ export default function CommunityHub({
               {(() => {
                 const flattenFeed = () => {
                   const flat: any[] = [];
-                  feedLogs.slice(0, daysVisible).forEach(dg => {
+                  filteredFeedLogs.slice(0, daysVisible).forEach(dg => {
                     flat.push(...dg.mocks);
                   });
                   return flat;
@@ -869,7 +1083,7 @@ export default function CommunityHub({
                   );
                 }
 
-                return feedLogs.slice(0, daysVisible).map((dayGroup, idx) => (
+                return filteredFeedLogs.slice(0, daysVisible).map((dayGroup, idx) => (
                   <div key={dayGroup.date} className="animate-in fade-in slide-in-from-bottom-2">
                     <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500" /> {dayGroup.date}
@@ -890,17 +1104,17 @@ export default function CommunityHub({
                 ));
               })()}
 
-              {daysVisible < feedLogs.length && (
+              {daysVisible < filteredFeedLogs.length && (
                 <div className="text-center pt-0 pb-1 -mt-2 -mb-1">
                   <button 
                     onClick={() => setDaysVisible(prev => prev + 3)}
                     className="inline-flex items-center px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-sm font-medium text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
-                    View Next {Math.min(3, feedLogs.length - daysVisible)} Days <ArrowRight className="w-4 h-4 ml-1.5" />
+                    View Next {Math.min(3, filteredFeedLogs.length - daysVisible)} Days <ArrowRight className="w-4 h-4 ml-1.5" />
                   </button>
                 </div>
               )}
-              {feedLogs.length === 0 && (
+              {filteredFeedLogs.length === 0 && (
                  <div className="text-center text-slate-400 py-4">No community data yet.</div>
               )}
             </div>

@@ -23,15 +23,22 @@ import { PublicProfileDialog } from './components/PublicProfileDialog';
 import { ChallengeCard } from './components/ChallengeCard';
 import { CreateChallengeDialog } from './components/CreateChallengeDialog';
 import ChallengeRecycleBinDialog from './components/ChallengeRecycleBinDialog';
+import { TasksTile } from './components/TasksTile';
 
 export default function App() {
   const { user, loading, signInWithGoogle, logout } = useAuth();
-  const { profile } = useUserProfile();
+  const { profile, updateProfile } = useUserProfile();
   const { mocks, deletedMocks, loading: mocksLoading, addMock, updateMock, deleteMock, permanentlyDeleteMock, restoreDeletedMock } = useMocks();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [activePublicProfile, setActivePublicProfile] = useState<any>(null);
   const [mockToEdit, setMockToEdit] = useState<MockScore | undefined>(undefined);
+  
+  const handleUpdateProfileTasks = async (tasks: any[]) => {
+    if (updateProfile) {
+      await updateProfile({ tasks });
+    }
+  };
   
   // Admin & Announcement states
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -43,6 +50,7 @@ export default function App() {
   const [isCreateChallengeOpen, setIsCreateChallengeOpen] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<any>(null);
   const [apiKeyInput, setApiKeyInput] = useState(localStorage.getItem('geminiApiKey') || '');
+  const [showTasksModal, setShowTasksModal] = useState(false);
 
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true' || false;
@@ -68,8 +76,9 @@ export default function App() {
   const [liveMocks, setLiveMocks] = useState<any[]>([]);
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]'));
   const [dismissedChallenges, setDismissedChallenges] = useState<string[]>(JSON.parse(localStorage.getItem('dismissedChallenges') || '[]'));
-  const [adminTab, setAdminTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings'>('users');
   const [adminEditNotice, setAdminEditNotice] = useState<any>(null);
+  const [adminEditCountdown, setAdminEditCountdown] = useState<any>(null);
   
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [inlineNoticeTitle, setInlineNoticeTitle] = useState('');
@@ -77,22 +86,50 @@ export default function App() {
   const [descHistory, setDescHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-
-  const [telegramLink, setTelegramLink] = useState<string>('');
+  const countdownsRef = React.useRef<HTMLDivElement>(null);
+  const [tappedCountdownId, setTappedCountdownId] = useState<string | null>(null);
 
   useEffect(() => {
+    const el = countdownsRef.current;
+    if (el) {
+      const onWheel = (e: WheelEvent) => {
+        if (e.deltaY === 0) return;
+        // Don't prevent default if we're at the very edge to allow page scrolling?
+        // Actually it's better to always prevent default if mouse is inside and scrolling vertically
+        // But only if there is overflow
+        if (el.scrollWidth > el.clientWidth) {
+           e.preventDefault();
+           el.scrollBy({ left: e.deltaY, behavior: 'auto' });
+        }
+      };
+      el.addEventListener('wheel', onWheel, { passive: false });
+      return () => el.removeEventListener('wheel', onWheel);
+    }
+  }, [activeTab, countdowns]);
+
+  const [telegramLink, setTelegramLink] = useState<string>('');
+  const [telegramText, setTelegramText] = useState<string>('Contact us');
+
+  useEffect(() => {
+    let unsubscribe: any;
     const fetchPublicSettings = async () => {
       try {
-        const { getDoc, doc } = await import('firebase/firestore');
-        const snap = await getDoc(doc(db, 'system', 'settings'));
-        if (snap.exists()) {
-          setTelegramLink(snap.data().telegramLink || '');
-        }
+        const { onSnapshot, doc } = await import('firebase/firestore');
+        unsubscribe = onSnapshot(doc(db, 'system', 'settings'), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            setTelegramLink(data.telegramLink || '');
+            setTelegramText(data.telegramText || 'Contact us');
+          }
+        });
       } catch (e) {
         console.error("Error fetching settings", e);
       }
     };
     fetchPublicSettings();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const [now, setNow] = useState(new Date().getTime());
@@ -635,15 +672,6 @@ export default function App() {
                     <span className="hidden lg:inline">Add Mock</span>
                   </button>
 
-                  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 md:mx-2 hidden lg:block"></div>
-
-                  <button 
-                    onClick={() => setDarkMode(!darkMode)}
-                    className="p-1.5 md:p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors flex"
-                  >
-                    {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                  </button>
-
                   {isAdmin && (
                     <button
                       onClick={() => {
@@ -745,17 +773,24 @@ export default function App() {
                 Sign In to Start Tracking
               </button>
 
-              {telegramLink && (
                 <a
-                  href={telegramLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={telegramLink || '#'}
+                  target={telegramLink ? "_blank" : undefined}
+                  rel={telegramLink ? "noopener noreferrer" : undefined}
                   className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg transition-colors mt-2"
+                  onClick={(e) => {
+                    if (!telegramLink) {
+                      e.preventDefault();
+                      alert('Telegram link is not configured yet. Set it in the Admin Settings.');
+                    }
+                  }}
                 >
-                  <Send className="w-4 h-4 mr-2" />
-                  Contact us
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 mr-2" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  {telegramText}
                 </a>
-              )}
             </div>
           </div>
         ) : mocksLoading ? (
@@ -766,7 +801,7 @@ export default function App() {
           <>
             {/* Countdowns */}
             {activeTab === 'dashboard' && countdowns.length > 0 && (
-              <div className="flex gap-3 overflow-x-auto custom-scrollbar snap-x" style={{ marginBottom: '25px', marginTop: '0px', paddingBottom: '0px' }}>
+              <div ref={countdownsRef} className="flex gap-3 overflow-x-auto custom-scrollbar snap-x" style={{ marginBottom: '25px', marginTop: '0px', paddingBottom: '0px' }}>
                 {[...countdowns].sort((a, b) => {
                   const aIdx = pinnedCountdowns.indexOf(a.id);
                   const bIdx = pinnedCountdowns.indexOf(b.id);
@@ -806,7 +841,11 @@ export default function App() {
                   const isPinned = pinnedCountdowns.includes(c.id);
 
                   return (
-                    <div key={c.id} className={`flex-shrink-0 w-[205px] sm:w-[225px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}>
+                    <div 
+                      key={c.id} 
+                      onClick={() => setTappedCountdownId(tappedCountdownId === c.id ? null : c.id)}
+                      className={`flex-shrink-0 w-[205px] sm:w-[225px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start cursor-pointer transition-transform active:scale-[0.98]`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}
+                    >
                       <div className="mb-3 relative z-10 flex justify-between items-start gap-2">
                          <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate flex-1 animate-subtle-float text-lg sm:text-[21px]`} style={{ lineHeight: '1.2', fontFamily: '"Times New Roman", Times, serif', marginTop: '-4px', paddingLeft: '0px', paddingRight: '0px', marginLeft: '-4px', marginRight: '-22px', textAlign: 'left' }} title={c.title}>{c.title}</h3>
                       </div>
@@ -828,10 +867,31 @@ export default function App() {
                             </div>
                           </div>
                           
-                          {isAdmin && (
-                            <button onClick={(e) => togglePin(c.id, e)} className={`p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95 ${isPinned ? theme.pop : 'text-slate-400 dark:text-slate-500'}`} title={isPinned ? "Unpin" : "Pin"}>
-                               <Pin className="w-4 h-4" style={{ marginLeft: '0px', marginRight: '-18px', marginBottom: '6px' }} />
-                            </button>
+                          {isAdmin && tappedCountdownId === c.id && (
+                            <div className="flex items-center gap-1.5 justify-end animate-in fade-in slide-in-from-right-2" style={{ marginRight: '-12px' }}>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAdminEditCountdown(c);
+                                  setAdminTab('countdown');
+                                  setIsAdminModalOpen(true);
+                                }}
+                                className={`p-1.5 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all active:scale-95 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200`}
+                                title="Edit"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  togglePin(c.id, e);
+                                }} 
+                                className={`p-1.5 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all active:scale-95 ${isPinned ? theme.pop : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`} 
+                                title={isPinned ? "Unpin" : "Pin"}
+                              >
+                                 <Pin className="w-4 h-4" />
+                              </button>
+                            </div>
                           )}
                         </div>
                         
@@ -1097,44 +1157,53 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {challenges.filter(c => {
-                  const isVisible = (c.creatorId === user?.uid || !(c.visibility === 'global' && (c.approvalStatus === 'pending' || c.approvalStatus === 'rejected'))) && !dismissedChallenges.includes(c.id);
-                  if (!isVisible) return false;
-                  if (activeTab === 'community') return pinnedChallenges.includes(c.id);
-                  return true;
-                }).length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {challenges
-                      .filter(c => {
-                         const isVisible = (c.creatorId === user?.uid || !(c.visibility === 'global' && (c.approvalStatus === 'pending' || c.approvalStatus === 'rejected'))) && !dismissedChallenges.includes(c.id);
-                         if (!isVisible) return false;
-                         if (activeTab === 'community') return pinnedChallenges.includes(c.id);
-                         return true;
-                      })
-                      .sort((a, b) => {
-                         const aP = pinnedChallenges.includes(a.id);
-                         const bP = pinnedChallenges.includes(b.id);
-                         if (aP && !bP) return -1;
-                         if (!aP && bP) return 1;
-                         return 0;
-                      })
-                      .map(challenge => (
-                      <ChallengeCard 
-                        key={challenge.id} 
-                        challenge={{ ...challenge, isPinned: pinnedChallenges.includes(challenge.id) }}
-                        onEdit={handleEditChallenge}
-                        onDelete={handleDeleteChallenge}
-                        onDismiss={dismissChallenge}
-                        onPin={handlePinChallenge}
-                        isAdmin={isAdmin}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-                    <p className="text-sm">No active challenges available. Click the + button to create one!</p>
-                  </div>
-                )}
+                {(() => {
+                  const visibleChallenges = challenges
+                    .filter(c => {
+                      const isVisible = (c.creatorId === user?.uid || !(c.visibility === 'global' && (c.approvalStatus === 'pending' || c.approvalStatus === 'rejected'))) && !dismissedChallenges.includes(c.id);
+                      if (!isVisible) return false;
+                      if (activeTab === 'community') return pinnedChallenges.includes(c.id);
+                      return true;
+                    })
+                    .sort((a, b) => {
+                      const aP = pinnedChallenges.includes(a.id);
+                      const bP = pinnedChallenges.includes(b.id);
+                      if (aP && !bP) return -1;
+                      if (!aP && bP) return 1;
+                      return 0;
+                    });
+
+                  const showGrid = visibleChallenges.length > 0 || (activeTab === 'dashboard' && user && profile);
+
+                  return showGrid ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {activeTab === 'dashboard' && user && profile && (
+                        <TasksTile 
+                          mocks={mocks} 
+                          profileTasks={profile?.tasks || []}
+                          onUpdateReflection={handleUpdateReflection} 
+                          onUpdateProfileTasks={handleUpdateProfileTasks}
+                          onOpenTasks={() => setShowTasksModal(true)} 
+                        />
+                      )}
+                      {visibleChallenges.map(challenge => (
+                        <ChallengeCard 
+                          key={challenge.id} 
+                          challenge={{ ...challenge, isPinned: pinnedChallenges.includes(challenge.id) }}
+                          onEdit={handleEditChallenge}
+                          onDelete={handleDeleteChallenge}
+                          onDismiss={dismissChallenge}
+                          onPin={handlePinChallenge}
+                          isAdmin={isAdmin}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                      <p className="text-sm">No active challenges available. Click the + button to create one!</p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1220,6 +1289,8 @@ export default function App() {
                       onRestoreMock={restoreDeletedMock}
                       onPermanentlyDeleteMock={permanentlyDeleteMock}
                       onUpdateReflection={handleUpdateReflection}
+                      showTasksModal={showTasksModal}
+                      setShowTasksModal={setShowTasksModal}
                       onUpdateProfileTasks={async (tasks) => {
                         if (!profile) return;
                         const { doc, setDoc } = await import('firebase/firestore');
@@ -1266,6 +1337,8 @@ export default function App() {
         <ProfileDialog
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
         />
       )}
 
@@ -1316,9 +1389,14 @@ export default function App() {
       {isAdmin && (
         <AdminDialog 
           isOpen={isAdminModalOpen}
-          onClose={() => setIsAdminModalOpen(false)}
+          onClose={() => {
+            setIsAdminModalOpen(false);
+            setAdminEditNotice(null);
+            setAdminEditCountdown(null);
+          }}
           initialTab={adminTab}
           editNoticeData={adminEditNotice}
+          editCountdownData={adminEditCountdown}
         />
       )}
 

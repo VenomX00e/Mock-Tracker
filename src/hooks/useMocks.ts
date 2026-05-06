@@ -5,10 +5,22 @@ import { useAuth } from '../services/AuthContext';
 import { MockScore } from '../types';
 import { parseLocalDate } from '../lib/utils';
 
-function calculateStats(mocks: MockScore[]) {
-  if (!mocks.length) return { avgPercentile: 0, avgAccuracy: 0, avgQuantPercentile: 0, avgReasoningPercentile: 0, avgEnglishPercentile: 0, totalTests: 0, streak: 0, lastMockDate: '' };
+function calculateStats(mocks: MockScore[], periodDays?: number) {
+  let filteredMocks = mocks;
+  if (periodDays !== undefined) {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - periodDays);
+    const cutoffTime = cutoff.getTime();
+    filteredMocks = mocks.filter(m => {
+       const d = parseLocalDate(m.date);
+       return d.getTime() >= cutoffTime;
+    });
+  }
+
+  if (!filteredMocks.length) return { avgPercentile: 0, avgAccuracy: 0, avgQuantPercentile: 0, avgReasoningPercentile: 0, avgEnglishPercentile: 0, avgGaPercentile: 0, totalTests: 0, streak: 0, lastMockDate: '' };
   
-  const total = mocks.length;
+  const total = filteredMocks.length;
   let sumP = 0, pCount = 0;
   let sumQ = 0, qCount = 0;
   let sumR = 0, rCount = 0;
@@ -16,7 +28,7 @@ function calculateStats(mocks: MockScore[]) {
   let sumG = 0, gCount = 0;
   let sumAcc = 0, accCount = 0;
   
-  mocks.forEach(m => {
+  filteredMocks.forEach(m => {
     if ((!m.examScope || m.examScope === 'Full') && m.percentile != null && !isNaN(m.percentile) && m.percentile > 0) {
       sumP += m.percentile;
       pCount++;
@@ -43,10 +55,10 @@ function calculateStats(mocks: MockScore[]) {
     }
   });
 
-  const datesStr = mocks.map(m => m.date).sort((a,b) => parseLocalDate(b).getTime() - parseLocalDate(a).getTime());
+  const datesStr = filteredMocks.map(m => m.date).sort((a,b) => parseLocalDate(b).getTime() - parseLocalDate(a).getTime());
   const lastMockDate = datesStr[0] || '';
 
-  const dates = mocks.map(m => {
+  const dates = filteredMocks.map(m => {
     const d = parseLocalDate(m.date);
     return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   }).sort((a,b) => b - a);
@@ -145,10 +157,15 @@ export function useMocks() {
       
       // Sync stats back to user profile when mock data changes
       const calculatedStats = calculateStats(mockData);
+      const stats30D = calculateStats(mockData, 30);
+      const stats7D = calculateStats(mockData, 7);
+      
       setStats(calculatedStats);
       
       setDoc(doc(db, 'users', user.uid), {
         ...calculatedStats,
+        stats30D,
+        stats7D,
         updatedAt: serverTimestamp()
       }, { merge: true }).catch(console.error);
 

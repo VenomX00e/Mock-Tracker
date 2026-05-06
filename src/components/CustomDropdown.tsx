@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required, allowClear, className = '', buttonClassName = 'px-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl', optionClassName = 'px-3 py-2.5 text-sm' }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean, allowClear?: boolean, className?: string, buttonClassName?: string, optionClassName?: string }) {
+export function CustomDropdown({ value, options, onChange, placeholder, allowCustom, required, allowClear, className = '', buttonClassName = 'w-full text-left px-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 rounded-xl', optionClassName = 'px-3 py-2.5 text-sm', hideArrow, editable }: { value: string, options: string[], onChange: (val: string) => void, placeholder: string, allowCustom?: boolean, required?: boolean, allowClear?: boolean, className?: string, buttonClassName?: string, optionClassName?: string, hideArrow?: boolean, editable?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -18,13 +18,24 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
 
   return (
     <div className={`relative ${className}`} ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(`w-full text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 transition-all font-medium flex justify-between items-center`, !value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200', buttonClassName)}
+      <div
+        onClick={() => !editable && setIsOpen(!isOpen)}
+        className={cn(`focus-within:ring-2 focus-within:ring-indigo-500 focus-within:bg-white dark:focus-within:bg-slate-800 transition-all font-medium flex justify-between items-center cursor-pointer`, !value ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200', buttonClassName)}
       >
-        <span>{value || placeholder}</span>
-        <div className="flex flex-row items-center gap-1">
+        {editable ? (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setIsOpen(true)}
+            placeholder={placeholder}
+            size={Math.max((value || '').toString().length, 1)}
+            className={`bg-transparent border-none p-0 m-0 focus:ring-0 min-w-0 placeholder-slate-400 text-inherit ${buttonClassName?.includes('text-center') ? 'text-center' : ''}`}
+          />
+        ) : (
+          <span>{value || placeholder}</span>
+        )}
+        <div className="flex flex-row items-center gap-1 shrink-0" onClick={() => editable && setIsOpen(!isOpen)}>
           {allowClear && value && (
              <span 
                onClick={(e) => { e.stopPropagation(); onChange(''); }}
@@ -34,13 +45,15 @@ export function CustomDropdown({ value, options, onChange, placeholder, allowCus
                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
              </span>
           )}
-          <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          {!hideArrow && (
+            <ChevronDown className={`w-4 h-4 text-slate-400 dark:text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          )}
         </div>
-      </button>
+      </div>
       
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none p-2 overflow-y-auto animate-in fade-in slide-in-from-top-2 flex flex-col max-h-64">
-          <div className="space-y-1">
+        <div className="absolute z-50 min-w-full w-max max-w-[200px] mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none p-1.5 overflow-y-auto animate-in fade-in slide-in-from-top-2 flex flex-col max-h-64">
+          <div className="space-y-0.5">
             {options.map(opt => (
               <button
                 key={opt}

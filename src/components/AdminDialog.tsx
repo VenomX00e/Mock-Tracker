@@ -12,11 +12,12 @@ interface AdminDialogProps {
   onClose: () => void;
   initialTab?: 'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings';
   editNoticeData?: any;
+  editCountdownData?: any;
 }
 
 import { useAuth } from '../services/AuthContext';
 
-export default function AdminDialog({ isOpen, onClose, initialTab = 'users', editNoticeData = null }: AdminDialogProps) {
+export default function AdminDialog({ isOpen, onClose, initialTab = 'users', editNoticeData = null, editCountdownData = null }: AdminDialogProps) {
   const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'liveMock' | 'notice' | 'countdown' | 'challenge' | 'settings'>(initialTab as any);
 
@@ -85,8 +86,14 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
       setNoticeUrgency(editNoticeData.urgency || '');
       setNoticeTags(Array.isArray(editNoticeData.tags) ? editNoticeData.tags.join(', ') : (editNoticeData.tags || ''));
       setNoticeEditableBy(editNoticeData.editableBy || 'admin');
+    } else if (editCountdownData && initialTab === 'countdown') {
+      setEditingCountdownId(editCountdownData.id);
+      setCountdownTitle(editCountdownData.title || '');
+      setCountdownDate(editCountdownData.date || '');
+      setCountdownNote(editCountdownData.note || '');
+      setCountdownColor(editCountdownData.color || 'green');
     }
-  }, [initialTab, editNoticeData, isOpen]);
+  }, [initialTab, editNoticeData, editCountdownData, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -120,6 +127,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
   const [countdowns, setCountdowns] = useState<any[]>([]);
   const [challenges, setChallenges] = useState<any[]>([]);
   const [telegramLink, setTelegramLink] = useState('');
+  const [telegramText, setTelegramText] = useState('Contact us');
 
   const fetchAnnouncement = async () => {
     try {
@@ -134,6 +142,7 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
         const data = d.data();
         if (d.id === 'settings') {
           setTelegramLink(data.telegramLink || '');
+          setTelegramText(data.telegramText || 'Contact us');
         } else if (data.type === 'notice') {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === 'liveMock') {
@@ -159,7 +168,11 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
   const saveSettings = async () => {
     setSavingAnnouncement(true);
     try {
-      await setDoc(doc(db, 'system', 'settings'), { type: 'settings', telegramLink }, { merge: true });
+      await setDoc(doc(db, 'system', 'settings'), { 
+        type: 'settings', 
+        telegramLink,
+        telegramText 
+      }, { merge: true });
       alert("Settings saved successfully");
     } catch (error) {
       console.error(error);
@@ -840,9 +853,24 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                      }}
                    />
                  </div>
-                 <button onClick={saveCountdown} disabled={savingAnnouncement} className="w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 transition-colors">
-                   <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Saving...' : 'Save Countdown'}
-                 </button>
+                 <div className="flex gap-2">
+                   <button onClick={saveCountdown} disabled={savingAnnouncement} className="flex-1 justify-center inline-flex items-center px-4 py-3 bg-indigo-600 dark:bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 dark:hover:bg-indigo-600 disabled:opacity-50 transition-colors">
+                     <Save className="w-4 h-4 mr-2" /> {savingAnnouncement ? 'Saving...' : (editingCountdownId ? 'Update Countdown' : 'Save Countdown')}
+                   </button>
+                   {editingCountdownId && (
+                     <button 
+                       onClick={() => {
+                         setEditingCountdownId(null);
+                         setCountdownTitle('');
+                         setCountdownDate('');
+                         setCountdownNote('');
+                       }} 
+                       className="px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                     >
+                       Cancel
+                     </button>
+                   )}
+                 </div>
               </div>
 
                {countdowns.length > 0 && (
@@ -1092,6 +1120,12 @@ export default function AdminDialog({ isOpen, onClose, initialTab = 'users', edi
                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telegram Support Link</label>
                    <input type="url" value={telegramLink} onChange={e => setTelegramLink(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400" placeholder="https://t.me/yourgroup" />
                    <p className="mt-1 text-xs text-slate-500">This will be shown on the login screen and header for support.</p>
+                 </div>
+                 
+                 <div>
+                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telegram Button Text</label>
+                   <input type="text" value={telegramText} onChange={e => setTelegramText(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200 placeholder:text-slate-400" placeholder="Contact us" />
+                   <p className="mt-1 text-xs text-slate-500">The text to display on the Telegram button.</p>
                  </div>
                  
                  <button onClick={saveSettings} disabled={savingAnnouncement} className="mt-4 w-full justify-center inline-flex items-center px-4 py-3 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
