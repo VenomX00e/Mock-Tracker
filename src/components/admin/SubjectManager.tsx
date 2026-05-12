@@ -63,30 +63,30 @@ export function SubjectManager({
         subjects.map((sub, i) => (
           <div
             key={i}
-            className="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50 group"
+            className="flex items-center justify-between gap-2 sm:gap-4 bg-white dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50 group"
           >
             {editingIndex === i ? (
-              <div className="flex-1 space-y-2">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="flex-1 space-y-2 min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
                     type="text"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5 min-w-0"
                     placeholder="Name"
                   />
                   <input
                     type="text"
                     value={editShort}
                     onChange={(e) => setEditShort(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5 min-w-0"
                     placeholder="Short (e.g. Q)"
                   />
                   <input
                     type="text"
                     value={editId}
                     onChange={(e) => setEditId(e.target.value)}
-                    className="w-full text-xs font-mono border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
+                    className="w-full text-xs font-mono border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5 min-w-0"
                     placeholder="ID"
                   />
                 </div>
@@ -102,19 +102,19 @@ export function SubjectManager({
                             if (e.target.checked) setEditPhases([...editPhases, phase]);
                             else setEditPhases(editPhases.filter(p => p !== phase));
                           }}
-                          className="w-3 h-3 text-indigo-600 rounded bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 focus:ring-indigo-500"
+                          className="w-3 h-3 text-indigo-600 rounded bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 focus:ring-indigo-500 shrink-0"
                         />
-                        {phase}
+                        <span className="truncate max-w-[80px] sm:max-w-none">{phase}</span>
                       </label>
                     ))}
-                    <span className="text-[10px] text-slate-400 italic ml-2">(None selected = applies to all)</span>
+                    <span className="text-[10px] text-slate-400 italic sm:ml-2">(None = all)</span>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="w-48 font-medium text-sm text-slate-700 dark:text-slate-300">
+              <div className="flex-1 min-w-0 font-medium text-sm text-slate-700 dark:text-slate-300">
                 <div className="flex flex-col">
-                  <span>
+                  <span className="truncate">
                     {sub.name}{" "}
                     {sub.short ? (
                       <span className="text-slate-400 bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-xs ml-1 font-bold">
@@ -125,13 +125,13 @@ export function SubjectManager({
                     )}
                   </span>
                   <div className="flex flex-col gap-0.5 mt-0.5">
-                    <span className="text-[10px] text-slate-400 font-mono">
+                    <span className="text-[10px] text-slate-400 font-mono truncate">
                       {sub.id}
                     </span>
                     {sub.phases && sub.phases.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {sub.phases.map((p) => (
-                          <span key={p} className="text-[8px] bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 px-1.5 py-0.5 rounded font-medium border border-indigo-100 dark:border-indigo-800/50">
+                           <span key={p} className="text-[8px] bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 px-1.5 py-0.5 rounded font-medium border border-indigo-100 dark:border-indigo-800/50 truncate max-w-[60px] sm:max-w-none">
                             {p}
                           </span>
                         ))}
@@ -143,22 +143,22 @@ export function SubjectManager({
             )}
 
             {!editingIndex || editingIndex !== i ? (
-              <div className="flex-1 flex gap-2 opacity-50 pointer-events-none hidden md:flex">
-                <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400">
+              <div className="hidden lg:flex flex-1 gap-2 opacity-50 pointer-events-none">
+                <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400 truncate">
                   Score
                 </div>
-                <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400">
+                <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400 truncate">
                   Percentile
                 </div>
-                <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400">
+                <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400 truncate">
                   Accuracy
                 </div>
               </div>
             ) : (
-              <div className="hidden md:block w-px"></div>
+              <div className="hidden lg:block w-px"></div>
             )}
 
-            <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
               {editingIndex === i ? (
                 <>
                   <button

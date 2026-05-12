@@ -20,10 +20,6 @@ export function CountdownsSection() {
     return () => clearInterval(timer);
   }, []);
 
-  if (activeTab !== 'dashboard' || countdowns.length === 0) {
-    return null;
-  }
-
   const filteredCountdowns = [...countdowns]
     .filter(c => c.categoryId === selectedCategory || (!c.categoryId && selectedCategory === 'banking'))
     .sort((a, b) => {
@@ -36,7 +32,35 @@ export function CountdownsSection() {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
-  if (filteredCountdowns.length === 0) return null;
+  useEffect(() => {
+    const el = countdownsRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Only scroll horizontally if user is scrolling vertically with mouse wheel
+      if (e.deltaY !== 0 && Math.abs(e.deltaX) === 0) {
+        e.preventDefault();
+        
+        let scrollAmount = e.deltaY;
+        if (e.deltaMode === 1) {
+          scrollAmount *= 40; // Firefox line scroll
+        } else if (e.deltaMode === 0) {
+          // Amplify pixel scrolls (like standard 1-tick mouse wheels) 
+          // to push past CSS scroll-snap thresholds
+          scrollAmount *= 2.5; 
+        }
+        
+        el.scrollBy({ left: scrollAmount, behavior: 'auto' });
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [activeTab, countdowns.length, filteredCountdowns.length]);
+
+  if (activeTab !== 'dashboard' || countdowns.length === 0 || filteredCountdowns.length === 0) {
+    return null;
+  }
 
   return (
     <div className="relative mb-6">

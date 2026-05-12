@@ -52,6 +52,7 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
   const [photoURL, setPhotoURL] = useState('');
   const [targetedExam, setTargetedExam] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [bio, setBio] = useState('');
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingAvatar, setIsPickingAvatar] = useState(false);
@@ -62,6 +63,7 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
       setPhotoURL(profile.photoURL || '');
       setTargetedExam(profile.targetedExam || 'SBI PO');
       setCategoryId(profile.categoryId || 'banking');
+      setBio(profile.bio || '');
       
       const currentCat = categories.find(c => c.id === (profile.categoryId || 'banking'));
       const catExams = currentCat ? currentCat.exams : exams;
@@ -71,14 +73,28 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
 
   const handleSave = async () => {
     setIsSaving(true);
-    await updateProfile({
-      displayName,
-      photoURL,
-      targetedExam,
-      categoryId,
-    });
-    setIsSaving(false);
-    onClose();
+    
+    // Bio validation
+    if (bio && !/^[a-zA-Z0-9\s]*$/.test(bio)) {
+      alert("Bio can only contain alphanumeric characters and spaces.");
+      setIsSaving(false);
+      return;
+    }
+    
+    try {
+      await updateProfile({
+        displayName,
+        photoURL,
+        targetedExam,
+        categoryId,
+        bio,
+      });
+      onClose();
+    } catch (e: any) {
+      alert(e.message || "Failed to update profile");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -183,6 +199,30 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
                     onChange={(e) => setDisplayName(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm outline-none"
                     placeholder="Enter your name"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Edit2 className="w-4 h-4 text-slate-400" /> Bio
+                    </label>
+                    <span className={`text-xs ${bio.length > 70 ? 'text-red-500' : 'text-slate-400'}`}>
+                      {bio.length}/70
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={bio}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val.length <= 70 && /^[a-zA-Z0-9\s]*$/.test(val)) {
+                        setBio(val);
+                      }
+                    }}
+                    maxLength={70}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm outline-none"
+                    placeholder="Bio"
                   />
                 </div>
 

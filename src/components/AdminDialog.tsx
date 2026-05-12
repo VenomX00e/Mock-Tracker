@@ -1787,27 +1787,27 @@ export default function AdminDialog({
         </div>
       )}
       <div
-        className={`bg-white dark:bg-slate-900 ${asPage ? "min-h-[calc(100vh-140px)] shadow-sm -mx-[15px] sm:-mx-6 lg:-mx-8 px-[15px] sm:px-6 lg:px-8 border-y border-slate-200 dark:border-slate-800" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col md:flex-row w-full ${!asPage ? "animate-in zoom-in-95 duration-200" : ""}`}
+        className={`bg-white dark:bg-slate-900 ${asPage ? "min-h-[calc(100vh-140px)] shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col md:flex-row ${!asPage ? "animate-in zoom-in-95 duration-200" : ""}`}
       >
         {/* Sidebar Nav */}
         {activeTab !== "categories" && (
           <div
-            className={`w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-100 dark:border-slate-800 flex flex-col ${asPage ? "min-h-[calc(100vh-140px)]" : ""}`}
+            className={`w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0 ${asPage ? "md:min-h-[calc(100vh-140px)]" : ""}`}
           >
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+            <div className="hidden md:flex p-6 border-b border-slate-100 dark:border-slate-800 items-center gap-2">
               <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
                 {isOwner ? "Owner" : "Admin"}
               </h2>
             </div>
-            <div className="p-3 space-y-1 flex-1 overflow-y-auto">
+            <div className="p-3 flex flex-row overflow-x-auto custom-scrollbar md:flex-col gap-2 md:gap-0 md:space-y-1 md:flex-1">
               {adminCategoryScope && isOwner && !isForcedCategory && (
-                <div className="mb-6 space-y-1">
+                <div className="flex-shrink-0 md:mb-6 md:space-y-1 flex items-center">
                   <button
                     onClick={() => {
                       setActiveTab("categories");
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                    className="whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
                   >
                     <ArrowLeft className="w-4 h-4" /> Back to{" "}
                     {adminCategoryScope}
@@ -1815,9 +1815,9 @@ export default function AdminDialog({
                 </div>
               )}
               <div
-                className={`mb-6 space-y-1 ${adminCategoryScope && isOwner ? "opacity-50 pointer-events-none" : ""}`}
+                className={`flex flex-row md:flex-col gap-2 md:gap-0 md:space-y-1 md:mb-6 ${adminCategoryScope && isOwner ? "opacity-50 pointer-events-none" : ""}`}
               >
-                <h3 className="px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                <h3 className="hidden md:block px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                   {isOwner ? "Owner Panel" : "Admin Panel"}
                 </h3>
 
@@ -1829,9 +1829,9 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "admins" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "admins" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
-                    <Shield className="w-4 h-4" /> Admins Management
+                    <Shield className="w-4 h-4" /> Admins
                   </button>
                 )}
 
@@ -1843,9 +1843,9 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "users" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "users" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
-                    <Users className="w-4 h-4" /> User Management
+                    <Users className="w-4 h-4" /> Users
                   </button>
                 )}
                 {!isOwner && adminPermissions?.canManageLiveMocks && (
@@ -1856,7 +1856,7 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "liveMock" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "liveMock" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <Radio className="w-4 h-4" /> Live Mock
                   </button>
@@ -1869,7 +1869,7 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "notice" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "notice" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <FileText className="w-4 h-4" /> Notice
                   </button>
@@ -1882,7 +1882,7 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "countdown" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "countdown" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <Timer className="w-4 h-4" /> Countdowns
                   </button>
@@ -1895,7 +1895,7 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "challenge" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "challenge" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <Timer className="w-4 h-4" /> Challenges
                   </button>
@@ -1908,7 +1908,7 @@ export default function AdminDialog({
                         isForcedCategory ? currentCategory || null : null,
                       );
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "settings" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "settings" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <Settings className="w-4 h-4" /> Settings
                   </button>

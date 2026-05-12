@@ -53,6 +53,10 @@ export function useUserProfile() {
     if (data.displayName && data.displayName.length > 200) throw new Error("Display name too long");
     if (data.targetedExam && data.targetedExam.length > 100) throw new Error("Targeted exam too long");
     if (data.photoURL && data.photoURL.length > 500) throw new Error("Photo URL too long");
+    if (data.bio !== undefined) {
+      if (data.bio.length > 70) throw new Error("Bio must be 70 characters or less");
+      if (data.bio.length > 0 && !/^[a-zA-Z0-9\s]*$/.test(data.bio)) throw new Error("Bio can only contain alphanumeric characters and spaces");
+    }
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {

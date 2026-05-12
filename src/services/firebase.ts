@@ -19,8 +19,8 @@ if (typeof window !== 'undefined') {
   // @ts-ignore
   const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || import.meta.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
   
-  // Enable debug mode for localhost, AI Studio preview domains, and Vercel domains
-  if (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app') || window.location.hostname.includes('vercel.app')) {
+  // Enable debug mode for localhost and AI Studio preview domains
+  if (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app')) {
     (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = "41257785-ef5d-4299-96cd-f4f6c903d2ca";
   }
 

@@ -899,31 +899,44 @@ function CommunityLeaderboard(props: any) {
   const { Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isAdmin, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame } = props;
   return <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-3 sm:flex-row sm:items-center justify-between rounded-t-2xl">
-          <div className="flex items-center justify-between sm:justify-start gap-4">
-             <div className="flex items-center gap-3">
-               <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
-                 <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
-               </h3>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+             <div className="flex items-center justify-between w-full sm:w-auto">
+               <div className="flex items-center gap-3">
+                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 whitespace-nowrap">
+                   <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
+                 </h3>
+                 
+                 <div className="flex items-center gap-1.5 shrink-0">
+                    <CustomDropdown
+                      value={selectedPeriod}
+                      options={['All', '7 Days', '30 Days', 'Custom']}
+                      onChange={(val) => {
+                         if (val === 'Custom') setSelectedPeriod('60');
+                         else setSelectedPeriod(val);
+                      }}
+                      placeholder="Period"
+                      buttonClassName="px-2 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700/50 rounded-lg w-fit text-center"
+                      optionClassName="px-2 py-1 text-xs text-center"
+                      hideArrow={true}
+                      editable={!['All', '7 Days', '30 Days'].includes(selectedPeriod)}
+                    />
+                 </div>
+               </div>
                
-               <div className="flex items-center gap-1.5 shrink-0">
-                  <CustomDropdown
-                    value={selectedPeriod}
-                    options={['All', '7 Days', '30 Days', 'Custom']}
-                    onChange={(val) => {
-                       if (val === 'Custom') setSelectedPeriod('60');
-                       else setSelectedPeriod(val);
-                    }}
-                    placeholder="Period"
-                    buttonClassName="px-2 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700/50 rounded-lg w-fit text-center"
-                    optionClassName="px-2 py-1 text-xs text-center"
-                    hideArrow={true}
-                    editable={!['All', '7 Days', '30 Days'].includes(selectedPeriod)}
-                  />
+               <div className="w-24 flex-shrink-0 sm:hidden">
+                 <CustomDropdown
+                   value={selectedPhase}
+                   options={availablePhases.map(p => typeof p === 'string' ? p : p)}
+                   onChange={(val) => setSelectedPhase(val)}
+                   placeholder="Phase"
+                   buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg w-full font-medium text-left"
+                   optionClassName="px-3 py-1.5 text-xs"
+                 />
                </div>
              </div>
              
              {isAdmin && (
-               <div className="w-[140px] sm:hidden">
+               <div className="w-[140px] sm:hidden -ml-2">
                  <CustomDropdown 
                     value={sortConfig.key || ''}
                     onChange={handleAdminChangeGlobalSort}
@@ -935,20 +948,10 @@ function CommunityLeaderboard(props: any) {
              )}
           </div>
           
-          <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-             <div className="w-24 sm:w-32 flex-shrink-0">
-               <CustomDropdown
-                 value={selectedPhase}
-                 options={availablePhases.map(p => typeof p === 'string' ? p : p)}
-                 onChange={(val) => setSelectedPhase(val)}
-                 placeholder="Phase"
-                 buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
-                 optionClassName="px-3 py-1.5 text-xs"
-               />
-             </div>
+          <div className="hidden sm:flex items-center justify-end gap-3 sm:gap-4">
              {isAdmin && (
-               <div className="flex items-center justify-end gap-2 sm:border-l border-slate-200 dark:border-slate-700 sm:pl-3">
-                 <div className="hidden sm:block w-[180px]">
+               <div className="flex items-center justify-end gap-2 border-r border-slate-200 dark:border-slate-700 pr-3">
+                 <div className="w-[180px]">
                    <CustomDropdown 
                       value={sortConfig.key || ''}
                       onChange={handleAdminChangeGlobalSort}
@@ -959,6 +962,16 @@ function CommunityLeaderboard(props: any) {
                  </div>
                </div>
              )}
+             <div className="w-32 flex-shrink-0">
+               <CustomDropdown
+                 value={selectedPhase}
+                 options={availablePhases.map(p => typeof p === 'string' ? p : p)}
+                 onChange={(val) => setSelectedPhase(val)}
+                 placeholder="Phase"
+                 buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
+                 optionClassName="px-3 py-1.5 text-xs"
+               />
+             </div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -1448,7 +1461,7 @@ function CommunityChat(props: any) {
                               {msg.poll.options.reduce((acc: number, o: any) => acc + Object.keys(o.votes || {}).length, 0)} votes
                             </div>
                             {showPollVotersForId === msg.id && (
-                              <div className="absolute top-6 right-0 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 p-3 max-h-60 overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+                              <div className={`absolute top-6 w-64 ${msg.userId === user?.uid ? 'right-0' : 'left-0'} max-w-[calc(100vw-3rem)] sm:max-w-none bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-[60] p-3 max-h-60 overflow-y-auto custom-scrollbar`} onClick={e => e.stopPropagation()}>
                                 <h4 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">Voters</h4>
                                 {msg.poll.options.map((opt: any) => {
                                    const voters = Object.entries(opt.votes || {});
@@ -1505,7 +1518,7 @@ function CommunityChat(props: any) {
                              )
                           })}
                           {activeReactionView === msg.id && (
-                            <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                            <div className={`absolute top-full ${msg.userId === user?.uid ? 'right-0' : 'left-0'} mt-1 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2`} onClick={e => e.stopPropagation()}>
                               <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
                                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Reactions</span>
                                 <button onClick={() => setActiveReactionView(null)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors"><X className="w-3 h-3"/></button>

@@ -21,6 +21,7 @@ import {
   Check,
   AlertTriangle,
   Database,
+  ArrowLeft,
 } from "lucide-react";
 
 import { OptionManagerDropdown } from './admin/OptionManagerDropdown';
@@ -279,9 +280,9 @@ export function AdminCategoriesTab({
   const selectedCategory = categories.find((c) => c.id === selectedId);
 
   return (
-    <div className="absolute inset-0 flex bg-white dark:bg-slate-900 md:rounded-r-2xl overflow-hidden">
+    <div className="absolute inset-0 flex flex-col md:flex-row bg-white dark:bg-slate-900 md:rounded-r-2xl overflow-hidden">
       {/* Left Navigation */}
-      <div className="w-full md:w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col h-full shrink-0">
+      <div className={`w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col shrink-0 ${selectedId !== null ? 'hidden md:flex' : 'flex-1 md:h-full'}`}>
         <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <h3 className="font-semibold text-slate-800 dark:text-slate-200 shrink-0">
             Exam Categories
@@ -362,7 +363,7 @@ export function AdminCategoriesTab({
       </div>
 
       {/* Right Content */}
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-white dark:bg-slate-900 custom-scrollbar">
+      <div className={`flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 md:p-8 bg-white dark:bg-slate-900 custom-scrollbar ${selectedId === null ? 'hidden md:block' : 'block'}`}>
         {selectedId === null ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 pb-12">
             <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex gap-2 items-center justify-center mb-4">
@@ -378,35 +379,41 @@ export function AdminCategoriesTab({
           </div>
         ) : (
           <div className="max-w-4xl mx-auto space-y-6 pb-20">
+            <button 
+              onClick={() => setSelectedId(null)} 
+              className="md:hidden flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-4 font-medium"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to Categories
+            </button>
             {selectedId !== "" && (
               <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700/50 w-full mb-6 overflow-x-auto custom-scrollbar shadow-sm">
                 <button
                   onClick={() => setSubTab("details")}
-                  className={`flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "details" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "details" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Category Details
                 </button>
                 <button
                   onClick={() => setSubTab("liveMock")}
-                  className={`flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "liveMock" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "liveMock" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Live Mocks
                 </button>
                 <button
                   onClick={() => setSubTab("notice")}
-                  className={`flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "notice" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "notice" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Notices
                 </button>
                 <button
                   onClick={() => setSubTab("countdown")}
-                  className={`flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "countdown" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "countdown" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Countdowns
                 </button>
                 <button
                   onClick={() => setSubTab("challenge")}
-                  className={`flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "challenge" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "challenge" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Challenges
                 </button>
@@ -415,26 +422,26 @@ export function AdminCategoriesTab({
 
             {subTab === "details" || selectedId === "" ? (
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <div className="flex justify-between items-start pb-6 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex-1 max-w-md">
+                <div className="flex flex-col xl:flex-row justify-between items-start pb-6 border-b border-slate-100 dark:border-slate-800 gap-4 xl:gap-8">
+                  <div className="w-full xl:flex-1 max-w-full xl:max-w-md">
                     <input
                       type="text"
                       value={workingCat.name || ""}
                       onChange={(e) =>
                         setWorkingCat({ ...workingCat, name: e.target.value })
                       }
-                      className="w-full text-2xl font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2"
+                      className="w-full text-2xl font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3"
                       placeholder="Category Name"
                       autoFocus={selectedId === ""}
                     />
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full">
                       {selectedId !== "" && (
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider shrink-0 break-all">
                           ID: {workingCat.id}
                         </p>
                       )}
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0">
                           ID Starter
                         </label>
                         <input
@@ -457,34 +464,34 @@ export function AdminCategoriesTab({
                                 ? `${workingCat.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}_`
                                 : "prefix_"
                           }
-                          className="px-2 py-1 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="flex-1 min-w-0 px-2 py-1.5 w-full text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto mt-4 xl:mt-0 xl:shrink-0">
                     {selectedId &&
                       selectedId !== "" &&
                       selectedId !== "banking" && (
                         <button
                           onClick={(e) => handleDelete(selectedId, e)}
                           title="Delete Category"
-                          className="p-2.5 text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:border-red-800 rounded-xl transition-colors shrink-0"
+                          className="flex items-center justify-center gap-2 p-2.5 sm:px-4 sm:py-2.5 text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:border-red-800 rounded-xl transition-colors w-full sm:w-auto shrink-0"
                         >
-                          <Trash2 className="w-5 h-5" />
+                          <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                          <span className="sm:hidden">Delete Category</span>
                         </button>
                       )}
-                    <div className="flex-1"></div>
                     <button
                       onClick={cancelEditing}
-                      className="px-5 py-2.5 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-xl transition-colors"
+                      className="px-5 py-2.5 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 rounded-xl transition-colors w-full sm:w-auto"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={!workingCat.name?.trim()}
-                      className="px-5 py-2.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+                      className="px-5 py-2.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors w-full sm:w-auto"
                     >
                       <Save className="w-4 h-4" /> Save Options
                     </button>
@@ -500,8 +507,8 @@ export function AdminCategoriesTab({
                     <div className="w-3 h-3 rounded-full bg-red-400"></div>
                     <div className="w-3 h-3 rounded-full bg-amber-400"></div>
                     <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                    <span className="ml-3 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      Dropdown Options Manager (Add Mock Score Layout)
+                    <span className="ml-3 text-sm font-medium text-slate-500 dark:text-slate-400 truncate">
+                      Dropdown Options Manager <span className="hidden sm:inline">(Add Mock Score Layout)</span>
                     </span>
                   </div>
 
@@ -522,6 +529,7 @@ export function AdminCategoriesTab({
                           <OptionManagerDropdown
                             title="Role"
                             options={workingCat.roles || []}
+                            align="right"
                             onChange={(opts) =>
                               setWorkingCat({ ...workingCat, roles: opts })
                             }

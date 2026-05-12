@@ -30,6 +30,7 @@ export interface UserProfile {
   role?: string;
   adminCategories?: string[];
   categoryId?: string; // Add categoryId
+  bio?: string;
   permissions?: {
     canManageUsers?: boolean;
     canManageNotices?: boolean;

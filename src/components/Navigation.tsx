@@ -30,7 +30,7 @@ export default function Navigation() {
               <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-lg sm:text-[21px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 group-hover:from-blue-800 group-hover:to-indigo-800 transition-colors" style={{ marginLeft: '-7px', paddingLeft: '0px', paddingRight: '5px' }}>
-              MockTracker <span className="hidden sm:inline-block text-[10px] font-normal text-slate-500 dark:text-slate-400 ml-1">by Joy</span>
+              MockTracker
             </h1>
           </div>
           

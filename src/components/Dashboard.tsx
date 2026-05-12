@@ -7,7 +7,7 @@ import { useUIStore } from '../store/uiStore';
 import { useMocks } from '../hooks/useMocks';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, ReferenceLine, LabelList, Cell,
+  BarChart, Bar, Legend, ReferenceLine, LabelList, Cell, Label,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download, CheckSquare, X, Check } from 'lucide-react';
@@ -342,6 +342,25 @@ export default function Dashboard() {
   const activeTrendFilteredChronologicalMocks = useMemo(() => {
     return [...activeTrendFilteredMocks].sort((a,b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
   }, [activeTrendFilteredMocks]);
+
+  const averageTrendLineValue = useMemo(() => {
+    let sum = 0;
+    let count = 0;
+    activeTrendFilteredChronologicalMocks.forEach(m => {
+      let val = null;
+      if (activeTrendId === 'overall' || activeTrendId === 'full') {
+         val = m.percentile || m.score;
+      } else {
+         const v = getSub(m, activeTrendId);
+         if (v) val = v.percentile || v.score;
+      }
+      if (val != null && val !== '') {
+        sum += typeof val === 'string' ? parseFloat(val) : val;
+        count++;
+      }
+    });
+    return count > 0 ? Number((sum / count).toFixed(1)) : undefined;
+  }, [activeTrendFilteredChronologicalMocks, activeTrendId]);
 
   // Derive unique roles and scopes for the current selection
   const availableRoles = useMemo(() => {
@@ -768,9 +787,18 @@ export default function Dashboard() {
                     <LineChart key={`line-${activeTrendId}`} data={activeTrendFilteredChronologicalMocks} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} tickFormatter={(value) => {
+                      if (averageTrendLineValue !== undefined && Math.abs(value - averageTrendLineValue) <= 2) {
+                        return '';
+                      }
+                      return String(Math.round(value));
+                    }} />
                     <RechartsTooltip content={<CustomTooltip chartRefBox={lineChartRefInner} activeTrendId={activeTrendId} subjects={subjects} getSub={getSub} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
-                    <ReferenceLine y={90} stroke="#10b981" strokeDasharray="3 3" opacity={0.5} />
+                    {averageTrendLineValue !== undefined && (
+                      <ReferenceLine y={averageTrendLineValue} stroke="#10b981" strokeDasharray="3 3" opacity={0.5}>
+                        <Label value={`${Math.round(averageTrendLineValue * 10) / 10}`} position="left" fill="#10b981" fontSize={12} fontWeight="bold" />
+                      </ReferenceLine>
+                    )}
                     <Line connectNulls={true} type="monotone" dataKey={(m: any) => {
                         if (activeTrendId === 'overall' || activeTrendId === 'full') return m.percentile || m.score;
                         const v = getSub(m, activeTrendId);

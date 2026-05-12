@@ -102,6 +102,11 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
               <Crosshair className="w-4 h-4" />
               <span>Target: <span className="text-slate-700 dark:text-slate-300">{profile.targetedExam || 'Any'}</span></span>
             </div>
+            {profile.bio && (
+              <div className="mt-3 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                {profile.bio}
+              </div>
+            )}
             {(profile.isMuted || profile.isBanned) && (
               <div className="mt-2 text-xs flex gap-2">
                   {profile.isMuted && <span className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/50 px-2 py-0.5 rounded font-medium">Muted</span>}

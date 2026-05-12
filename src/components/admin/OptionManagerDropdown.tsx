@@ -3,10 +3,12 @@ import { Plus, Trash2, Save, X, Edit2, ChevronRight, ChevronDown, Check } from "
 export function OptionManagerDropdown({
   title,
   options,
+  align = "left",
   onChange,
 }: {
   title: string;
   options: string[];
+  align?: "left" | "right";
   onChange: (opts: string[]) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -62,7 +64,7 @@ export function OptionManagerDropdown({
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 min-w-full w-max mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none p-2 animate-in fade-in slide-in-from-top-2 flex flex-col max-h-80 overflow-hidden">
+        <div className={`absolute z-50 min-w-[200px] sm:min-w-full w-[calc(100vw-2rem)] sm:w-max mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none p-2 animate-in fade-in slide-in-from-top-2 flex flex-col max-h-80 overflow-hidden max-w-[280px] sm:max-w-none ${align === 'right' ? 'right-0' : '-left-2 sm:left-0'}`}>
           <div className="p-2 border-b border-slate-100 dark:border-slate-700 mb-2 font-medium text-xs text-slate-500 uppercase tracking-wider text-center">
             Manage {title}s
           </div>
