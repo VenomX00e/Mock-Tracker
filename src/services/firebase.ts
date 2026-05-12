@@ -2,11 +2,33 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// Initialize Firebase App Check with reCAPTCHA v3
+if (typeof window !== 'undefined') {
+  // Use explicit static references so Vite can replace them
+  // @ts-ignore
+  const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || import.meta.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+  
+  // Enable debug mode for localhost and AI Studio preview domains
+  if (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app')) {
+    (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+
+  if (recaptchaKey) {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(recaptchaKey),
+      isTokenAutoRefreshEnabled: true
+    });
+  } else {
+    console.warn("reCAPTCHA site key is missing. App Check will not be initialized.");
+  }
+}
 
 // Initialize Analytics conditionally to avoid server-side or unsupported browser issues
 export let analytics: any = null;

@@ -10,6 +10,7 @@ export default defineConfig(({mode}) => {
       react(), 
       tailwindcss(),
     ],
+    envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: {
     },
     resolve: {
