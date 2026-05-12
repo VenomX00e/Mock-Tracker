@@ -1,12 +1,16 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(
+  app,
+  { experimentalForceLongPolling: true },
+  firebaseConfig.firestoreDatabaseId
+);
 export const auth = getAuth(app);
 
 // Initialize Firebase App Check with reCAPTCHA v3
@@ -15,8 +19,8 @@ if (typeof window !== 'undefined') {
   // @ts-ignore
   const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || import.meta.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
   
-  // Enable debug mode for localhost and AI Studio preview domains
-  if (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app')) {
+  // Enable debug mode for localhost, AI Studio preview domains, and Vercel domains
+  if (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app') || window.location.hostname.includes('vercel.app')) {
     (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = "41257785-ef5d-4299-96cd-f4f6c903d2ca";
   }
 
