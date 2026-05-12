@@ -17,7 +17,7 @@ if (typeof window !== 'undefined') {
   
   // Enable debug mode for localhost and AI Studio preview domains
   if (window.location.hostname === 'localhost' || window.location.hostname.includes('run.app')) {
-    (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = "41257785-ef5d-4299-96cd-f4f6c903d2ca";
   }
 
   if (recaptchaKey) {
