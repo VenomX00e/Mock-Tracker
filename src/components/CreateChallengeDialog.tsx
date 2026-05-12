@@ -9,9 +9,11 @@ interface CreateChallengeDialogProps {
   onClose: () => void;
   uid: string;
   initialData?: any;
+  categoryId?: string;
+  categories?: any[];
 }
 
-export function CreateChallengeDialog({ isOpen, onClose, uid, initialData }: CreateChallengeDialogProps) {
+export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categoryId, categories }: CreateChallengeDialogProps) {
   const [title, setTitle] = useState(initialData?.title || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [challengeType, setChallengeType] = useState(initialData?.challengeType || 'streak');
@@ -78,9 +80,17 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData }: Cre
       if (!initialData) {
         payload.creatorId = uid;
         payload.createdAt = new Date().toISOString();
+        if (categoryId) payload.categoryId = categoryId;
       }
 
-      const id = initialData?.id || `usr_chal_${Date.now()}`;
+      let idPrefix = 'usr_chal';
+      if (!initialData && categoryId) {
+        const currentCat = categories?.find(c => c.id === categoryId);
+        const prefix = currentCat?.subjectPrefix || categoryId;
+        idPrefix = `${prefix.replace(/_$/, '').toUpperCase()}_CHALLENGE`;
+      }
+
+      const id = initialData?.id || `${idPrefix}_${Date.now()}`;
       await setDoc(doc(db, 'challenges', id), payload, { merge: true });
       
       setTitle('');

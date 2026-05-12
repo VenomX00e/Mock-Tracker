@@ -16,7 +16,9 @@ export interface UserProfile {
   avgReasoningPercentile: number;
   avgEnglishPercentile: number;
   avgGaPercentile?: number;
+  dynamicAverages?: Record<string, number>;
   totalTests: number;
+  categoryStats?: Record<string, any>;
   streak: number;
   streakActive?: boolean;
   updatedAt?: any;
@@ -26,6 +28,8 @@ export interface UserProfile {
   mutedAt?: number;
   lastMockDate?: string;
   role?: string;
+  adminCategories?: string[];
+  categoryId?: string; // Add categoryId
   permissions?: {
     canManageUsers?: boolean;
     canManageNotices?: boolean;
@@ -76,4 +80,18 @@ export interface MockScore {
   energy?: string;
   timeState?: string;
   tasks?: ReflectionTask[];
+  categoryId?: string;
+  dynamicSubjects?: Record<string, SectionalScore>;
+}
+
+export interface ExamCategory {
+  id: string;
+  name: string;
+  subjectPrefix?: string;
+  exams?: string[];
+  roles?: string[];
+  phases?: string[];
+  scopes?: string[];
+  platforms?: string[];
+  subjects?: { id: string; name: string; short?: string, phases?: string[] }[];
 }

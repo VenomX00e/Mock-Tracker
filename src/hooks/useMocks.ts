@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { useState, useEffect, useMemo } from 'react';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp, writeBatch, deleteField } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
 import { MockScore } from '../types';
@@ -18,7 +18,7 @@ function calculateStats(mocks: MockScore[], periodDays?: number) {
     });
   }
 
-  if (!filteredMocks.length) return { avgPercentile: 0, avgAccuracy: 0, avgQuantPercentile: 0, avgReasoningPercentile: 0, avgEnglishPercentile: 0, avgGaPercentile: 0, totalTests: 0, streak: 0, lastMockDate: '' };
+  if (!filteredMocks.length) return { avgPercentile: 0, avgAccuracy: 0, avgQuantPercentile: 0, avgReasoningPercentile: 0, avgEnglishPercentile: 0, avgGaPercentile: 0, totalTests: 0, streak: 0, lastMockDate: '', dynamicAverages: {} };
   
   const total = filteredMocks.length;
   let sumP = 0, pCount = 0;
@@ -28,30 +28,47 @@ function calculateStats(mocks: MockScore[], periodDays?: number) {
   let sumG = 0, gCount = 0;
   let sumAcc = 0, accCount = 0;
   
+  const dynamicSums: Record<string, { sum: number; count: number }> = {};
+
   filteredMocks.forEach(m => {
+    const qPerc = m.quant?.percentile || m.dynamicSubjects?.['bank_quant']?.percentile || m.dynamicSubjects?.['ssc_maths']?.percentile;
+    const rPerc = m.reasoning?.percentile || m.dynamicSubjects?.['bank_reasoning']?.percentile || m.dynamicSubjects?.['ssc_reasoning']?.percentile;
+    const ePerc = m.english?.percentile || m.dynamicSubjects?.['bank_english']?.percentile || m.dynamicSubjects?.['ssc_english']?.percentile;
+    const gPerc = m.ga?.percentile || m.dynamicSubjects?.['bank_ga']?.percentile || m.dynamicSubjects?.['ssc_gk']?.percentile;
+
     if ((!m.examScope || m.examScope === 'Full') && m.percentile != null && !isNaN(m.percentile) && m.percentile > 0) {
       sumP += m.percentile;
       pCount++;
     }
-    if (m.quant?.percentile != null && !isNaN(m.quant.percentile) && m.quant.percentile > 0) {
-      sumQ += m.quant.percentile;
+    if (qPerc != null && !isNaN(qPerc) && qPerc > 0) {
+      sumQ += qPerc;
       qCount++;
     }
-    if (m.reasoning?.percentile != null && !isNaN(m.reasoning.percentile) && m.reasoning.percentile > 0) {
-      sumR += m.reasoning.percentile;
+    if (rPerc != null && !isNaN(rPerc) && rPerc > 0) {
+      sumR += rPerc;
       rCount++;
     }
-    if (m.english?.percentile != null && !isNaN(m.english.percentile) && m.english.percentile > 0) {
-      sumE += m.english.percentile;
+    if (ePerc != null && !isNaN(ePerc) && ePerc > 0) {
+      sumE += ePerc;
       eCount++;
     }
-    if (m.ga?.percentile != null && !isNaN(m.ga.percentile) && m.ga.percentile > 0) {
-        sumG += m.ga.percentile;
+    if (gPerc != null && !isNaN(gPerc) && gPerc > 0) {
+        sumG += gPerc;
         gCount++;
     }
     if (m.accuracy !== undefined && m.accuracy !== null && !isNaN(m.accuracy)) {
         sumAcc += m.accuracy;
         accCount++;
+    }
+    if (m.dynamicSubjects) {
+      Object.keys(m.dynamicSubjects).forEach(subId => {
+        const perc = m.dynamicSubjects![subId]?.percentile;
+        if (perc != null && !isNaN(perc) && perc > 0) {
+          if (!dynamicSums[subId]) dynamicSums[subId] = { sum: 0, count: 0 };
+          dynamicSums[subId].sum += perc;
+          dynamicSums[subId].count++;
+        }
+      });
     }
   });
 
@@ -101,6 +118,11 @@ function calculateStats(mocks: MockScore[], periodDays?: number) {
     }
   }
 
+    const dynamicAverages: Record<string, number> = {};
+    Object.keys(dynamicSums).forEach(subId => {
+      dynamicAverages[subId] = Number((dynamicSums[subId].sum / dynamicSums[subId].count).toFixed(2));
+    });
+
   return {
     avgPercentile: pCount > 0 ? Number((sumP / pCount).toFixed(2)) : 0,
     avgAccuracy: accCount > 0 ? Number((sumAcc / accCount).toFixed(2)) : 0,
@@ -111,76 +133,96 @@ function calculateStats(mocks: MockScore[], periodDays?: number) {
     totalTests: total,
     streak,
     streakActive,
+    dynamicAverages,
     ...(lastMockDate ? { lastMockDate } : {})
   };
 }
 
+import useSWRSubscription from 'swr/subscription';
+
 export function useMocks() {
   const { user } = useAuth();
-  const [mocks, setMocks] = useState<MockScore[]>([]);
-  const [deletedMocks, setDeletedMocks] = useState<MockScore[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const [stats, setStats] = useState<any>(null);
+  const { data, error } = useSWRSubscription(
+    user ? ['mocks', user.uid] : null,
+    ([_, uid], { next }) => {
+      const q = query(collection(db, 'users', uid, 'mocks'));
+      return onSnapshot(q, (snapshot) => {
+        const mockData: MockScore[] = [];
+        const deletedData: MockScore[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data() as any;
+          if (data.isDeleted) {
+              deletedData.push({ ...data, id: doc.id } as MockScore);
+          } else {
+              mockData.push({ ...data, id: doc.id } as MockScore);
+          }
+        });
+        mockData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        deletedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        // Calculate stats purely in memory for local app state
+        const calculatedStats = calculateStats(mockData);
 
-  useEffect(() => {
-    if (!user) {
-      setMocks([]);
-      setDeletedMocks([]);
-      setStats(null);
-      setLoading(false);
-      return;
-    }
-
-    const q = query(collection(db, 'users', user.uid, 'mocks'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const mockData: MockScore[] = [];
-      const deletedData: MockScore[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data() as any;
-        if (data.isDeleted) {
-            deletedData.push({
-              ...data,
-              id: doc.id,
-            } as MockScore);
-        } else {
-            mockData.push({
-              ...data,
-              id: doc.id,
-            } as MockScore);
-        }
+        next(null, { mocks: mockData, deletedMocks: deletedData, stats: calculatedStats });
+      }, (err) => {
+        console.error("Error fetching mocks:", err);
+        next(err);
       });
-      mockData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      deletedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setMocks(mockData);
-      setDeletedMocks(deletedData);
-      
-      // Sync stats back to user profile when mock data changes
+    }
+  );
+
+  const mocks = data?.mocks || [];
+  const deletedMocks = data?.deletedMocks || [];
+  const stats = data?.stats || null;
+  const loading = !data && !error && !!user;
+
+  const updateStatsForUser = async (uid: string, mockData: MockScore[]) => {
+    try {
       const calculatedStats = calculateStats(mockData);
       const stats30D = calculateStats(mockData, 30);
       const stats7D = calculateStats(mockData, 7);
       
-      setStats(calculatedStats);
+      const categoryStats: Record<string, any> = {};
+      const uniqueCats = new Set(mockData.map(m => m.categoryId || 'banking'));
+      uniqueCats.forEach(cat => {
+        const catMocks = mockData.filter(m => (m.categoryId || 'banking') === cat);
+        categoryStats[cat] = {
+           allTime: calculateStats(catMocks),
+           stats30D: calculateStats(catMocks, 30),
+           stats7D: calculateStats(catMocks, 7)
+        };
+      });
       
-      setDoc(doc(db, 'users', user.uid), {
+      await setDoc(doc(db, 'users', uid), {
         ...calculatedStats,
         stats30D,
         stats7D,
+        categoryStats,
         updatedAt: serverTimestamp()
-      }, { merge: true }).catch(console.error);
+      }, { merge: true });
+    } catch (e) {
+      console.error("Error updating stats", e);
+    }
+  };
 
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching mocks:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+  const validateMockScore = (mock: MockScore) => {
+    if (!mock.id || mock.id.length > 128) throw new Error("Invalid mock ID");
+    if (!mock.mockName || mock.mockName.length > 200) throw new Error("Mock name too long");
+    if (!mock.examType || mock.examType.length > 100) throw new Error("Exam type too long");
+    if (mock.examRole && mock.examRole.length > 100) throw new Error("Exam role too long");
+    if (mock.examPhase && mock.examPhase.length > 100) throw new Error("Exam phase too long");
+    if (mock.examScope && mock.examScope.length > 100) throw new Error("Exam scope too long");
+    if (mock.platform && mock.platform.length > 100) throw new Error("Platform too long");
+    if (mock.customPlatform && mock.customPlatform.length > 100) throw new Error("Custom platform too long");
+    if (!mock.date || mock.date.length > 50) throw new Error("Invalid date");
+  };
 
   const addMock = async (mock: MockScore) => {
     if (!user) return;
     try {
+      validateMockScore(mock);
+
       const docRef = doc(db, 'users', user.uid, 'mocks', mock.id);
       
       // Calculate what the streak will be after this mock is added
@@ -216,14 +258,20 @@ export function useMocks() {
         streakAtTime: mock.streakAtTime ?? newStreakAtTime,
         createdAt: serverTimestamp()
       });
-    } catch (error) {
+      
+      const newMocks = [...mocks, mock].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      await updateStatsForUser(user.uid, newMocks);
+    } catch (error: any) {
       console.error("Error adding mock:", error);
+      throw error; // Rethrow to UI
     }
   };
 
   const updateMock = async (updatedMock: MockScore) => {
     if (!user) return;
     try {
+      validateMockScore(updatedMock);
+
       const docRef = doc(db, 'users', user.uid, 'mocks', updatedMock.id);
       const oldItem = mocks.find(m => m.id === updatedMock.id);
       await setDoc(docRef, {
@@ -232,8 +280,12 @@ export function useMocks() {
         userName: user.displayName || 'Anonymous',
         createdAt: oldItem?.createdAt || serverTimestamp()
       }, { merge: true });
-    } catch (error) {
+
+      const newMocks = mocks.map(m => m.id === updatedMock.id ? updatedMock : m);
+      await updateStatsForUser(user.uid, newMocks);
+    } catch (error: any) {
       console.error("Error updating mock:", error);
+      throw error; // Rethrow to UI
     }
   };
   
@@ -241,6 +293,8 @@ export function useMocks() {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'mocks', id), { isDeleted: true, updatedAt: serverTimestamp() }, { merge: true });
+      const newMocks = mocks.filter(m => m.id !== id);
+      await updateStatsForUser(user.uid, newMocks);
     } catch (error) {
       console.error("Error deleting mock:", error);
     }
@@ -259,10 +313,17 @@ export function useMocks() {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'mocks', id), { isDeleted: false, updatedAt: serverTimestamp() }, { merge: true });
+      const restoredMock = deletedMocks.find(m => m.id === id);
+      if (restoredMock) {
+        const newMocks = [...mocks, { ...restoredMock, isDeleted: false }].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        await updateStatsForUser(user.uid, newMocks);
+      }
     } catch (error) {
       console.error("Error restoring mock:", error);
     }
   };
 
-  return { mocks, deletedMocks, stats, loading, addMock, updateMock, deleteMock, permanentlyDeleteMock, restoreDeletedMock };
+  return useMemo(() => ({
+    mocks, deletedMocks, stats, loading, addMock, updateMock, deleteMock, permanentlyDeleteMock, restoreDeletedMock
+  }), [mocks, deletedMocks, stats, loading]);
 }

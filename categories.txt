@@ -1,0 +1,159 @@
+41-    | "challenge"
+42-    | "settings";
+43-  editNoticeData?: any;
+44-  editCountdownData?: any;
+45-  asPage?: boolean;
+46:  categories: ExamCategory[];
+47-  currentCategory?: string | null;
+48-}
+49-
+50-import { useAuth } from "../services/AuthContext";
+51-
+--
+56-  adminPermissions,
+57-  initialTab = "users",
+58-  editNoticeData = null,
+59-  editCountdownData = null,
+60-  asPage = false,
+61:  categories,
+62-  currentCategory = null,
+63-}: AdminDialogProps) {
+64-  const { user: currentUser } = useAuth();
+65-  const [activeTab, setActiveTab] = useState<
+66-    | "users"
+67-    | "liveMock"
+68-    | "notice"
+69-    | "countdown"
+70-    | "challenge"
+71-    | "settings"
+72:    | "categories"
+73-    | "admins"
+74-  >(initialTab as any);
+75-  const [adminCategoryScope, setAdminCategoryScope] = useState<string | null>(
+76-    !isOwner && currentCategory ? currentCategory : null,
+77-  );
+--
+306-    setSavingAnnouncement(false);
+307-  };
+308-
+309-  const getPrefix = (categoryId: string | null) => {
+310-    if (!categoryId) return "";
+311:    const currentCat = categories.find((c) => c.id === categoryId);
+312-    const prefix = currentCat?.subjectPrefix || categoryId;
+313-    return prefix.replace(/_$/, "").toUpperCase();
+314-  };
+315-
+316-  const saveNotice = async () => {
+--
+1696-              setAdminCategoryScope(
+1697-                isForcedCategory ? currentCategory || null : null,
+1698-              );
+1699-            }}
+1700-            className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 z-10 border ${
+1701:              activeTab !== "categories" && !adminCategoryScope
+1702-                ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-md border-indigo-200 dark:border-indigo-700"
+1703-                : "text-slate-600 dark:text-slate-400 bg-slate-50 border-slate-200/80 dark:bg-slate-800/50 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
+1704-            }`}
+1705-          >
+1706-            <Shield className="w-4 h-4" />
+1707-            <span>{isOwner ? "Owner Panel" : "Admin Panel"}</span>
+1708-          </button>
+1709-          {isOwner && (
+1710-            <button
+1711:              onClick={() => setActiveTab("categories")}
+1712-              className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 z-10 border ${
+1713:                activeTab === "categories" || adminCategoryScope
+1714-                  ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-md border-indigo-200 dark:border-indigo-700"
+1715-                  : "text-slate-600 dark:text-slate-400 bg-slate-50 border-slate-200/80 dark:bg-slate-800/50 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
+1716-              }`}
+1717-            >
+1718-              <Settings className="w-4 h-4" />
+--
+1723-      )}
+1724-      <div
+1725-        className={`bg-white dark:bg-slate-900 ${asPage ? "min-h-[calc(100vh-140px)] shadow-sm -mx-[15px] sm:-mx-6 lg:-mx-8 px-[15px] sm:px-6 lg:px-8 border-y border-slate-200 dark:border-slate-800" : "rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col md:flex-row w-full ${!asPage ? "animate-in zoom-in-95 duration-200" : ""}`}
+1726-      >
+1727-        {/* Sidebar Nav */}
+1728:        {activeTab !== "categories" && (
+1729-          <div
+1730-            className={`w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-100 dark:border-slate-800 flex flex-col ${asPage ? "min-h-[calc(100vh-140px)]" : ""}`}
+1731-          >
+1732-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+1733-              <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+--
+1738-            <div className="p-3 space-y-1 flex-1 overflow-y-auto">
+1739-              {adminCategoryScope && isOwner && !isForcedCategory && (
+1740-                <div className="mb-6 space-y-1">
+1741-                  <button
+1742-                    onClick={() => {
+1743:                      setActiveTab("categories");
+1744-                    }}
+1745-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+1746-                  >
+1747-                    <ArrowLeft className="w-4 h-4" /> Back to{" "}
+1748-                    {adminCategoryScope}
+--
+1889-                      value={adminSearch}
+1890-                      onChange={(e) => setAdminSearch(e.target.value)}
+1891-                      className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-full sm:w-[160px]"
+1892-                    />
+1893-                  </div>
+1894:                  {categories.length > 0 && (
+1895-                    <CustomDropdown
+1896-                      value={
+1897-                        adminManagementCategoryFilter === "all"
+1898-                          ? "All Categories"
+1899:                          : categories.find(
+1900-                              (c) => c.id === adminManagementCategoryFilter,
+1901-                            )?.name || "All Categories"
+1902-                      }
+1903-                      options={[
+1904-                        "All Categories",
+1905:                        ...categories.map((c) => c.name),
+1906-                      ]}
+1907-                      onChange={(val) => {
+1908-                        if (val === "All Categories") {
+1909-                          setAdminManagementCategoryFilter("all");
+1910-                        } else {
+1911:                          const catId = categories.find(
+1912-                            (c) => c.name === val,
+1913-                          )?.id;
+1914-                          setAdminManagementCategoryFilter(catId || "all");
+1915-                        }
+1916-                      }}
+--
+2121-                                </div>
+2122-                                <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2 mt-4">
+2123-                                  Category Permissions
+2124-                                </p>
+2125-                                <div className="flex flex-wrap gap-1.5 w-full">
+2126:                                  {categories.map((cat) => {
+2127-                                    const isSelected = (
+2128-                                      user as any
+2129-                                    ).adminCategories?.includes(cat.id);
+2130-                                    return (
+2131-                                      <label
+--
+2171-                                      </label>
+2172-                                    );
+2173-                                  })}
+2174-                                </div>
+2175-                                <p className="text-[10px] text-slate-400 mt-2">
+2176:                                  If no categories are selected, to them admin
+2177-                                  panel is not visible in any category.
+2178-                                </p>
+2179-                              </div>
+2180-                            )}
+2181-                        </li>
+--
+2684-          {activeTab === "challenge" &&
+2685-            (!adminCategoryScope || isForcedCategory) &&
+2686-            (isOwner || adminPermissions?.canManageChallenges) &&
+2687-            renderChallengeContent()}
+2688-
+2689:          {activeTab === "categories" && (
+2690-            <AdminCategoriesTab
+2691-              onManageSection={(sec, catId) => {
+2692-                setAdminCategoryScope(catId);
+2693-                setActiveTab(sec as any);
+2694-              }}

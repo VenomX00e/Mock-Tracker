@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from './firebase';
+import { getErrorMessage } from '../lib/errorUtils';
 
 interface AuthContextType {
   user: User | null;
@@ -38,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error.code === 'auth/network-request-failed') {
         alert("Network request failed during sign in. This is often caused by ad blockers (like Brave Shields), strict privacy settings, or disabled third-party cookies. Please try disabling them, or open the app in a new tab.");
       } else {
-        alert(`Failed to sign in: ${error.message || 'Unknown error'}`);
+        alert(`Failed to sign in: ${getErrorMessage(error)}`);
       }
       throw error;
     }

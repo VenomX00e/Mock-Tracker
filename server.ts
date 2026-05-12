@@ -2,6 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import apiRouter from "./api-router.js";
+import { startCron } from "./cron.js";
 
 async function startServer() {
   const app = express();
@@ -9,6 +10,9 @@ async function startServer() {
 
   // Mount API routes
   app.use(apiRouter);
+
+  // Initialize background jobs
+  startCron();
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

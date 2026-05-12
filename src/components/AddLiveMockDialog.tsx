@@ -6,14 +6,17 @@ import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from '../lib/constants';
 import { parseMockAnnouncementImage } from '../services/geminiService';
 import { X, Save, FileText, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../services/AuthContext';
+import { getErrorMessage } from '../lib/errorUtils';
 
 interface AddLiveMockDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  categoryId?: string;
+  categories?: any[];
 }
 
-export default function AddLiveMockDialog({ isOpen, onClose, onSuccess }: AddLiveMockDialogProps) {
+export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, categoryId, categories }: AddLiveMockDialogProps) {
   const { user } = useAuth();
   const [liveMockData, setLiveMockData] = useState({
     examType: '',
@@ -73,7 +76,7 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess }: AddLiv
       }
     } catch (err: any) {
       console.error(err);
-      alert(err.message || 'Failed to process images');
+      alert(getErrorMessage(err));
     } finally {
       setIsProcessingImage(false);
       e.target.value = '';
@@ -94,9 +97,16 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess }: AddLiv
         return;
       }
 
-      const newId = `liveMock_${Date.now()}`;
+      let idPrefix = 'liveMock';
+      if (categoryId) {
+        const currentCat = categories?.find(c => c.id === categoryId);
+        const prefix = currentCat?.subjectPrefix || categoryId;
+        idPrefix = `${prefix.replace(/_$/, '').toUpperCase()}_LIVEMOCK`;
+      }
+      const newId = `${idPrefix}_${Date.now()}`;
       await setDoc(doc(db, 'system', newId), {
         type: 'liveMock',
+        categoryId: categoryId || null,
         createdBy: user.uid,
         ...liveMockData,
         title: `Live: ${liveMockData.mockName}`,
@@ -179,7 +189,7 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess }: AddLiv
         </div>
 
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 bg-slate-50 dark:bg-slate-800/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors">Cancel</button>
+          <button onClick={onClose} disabled={savingAnnouncement} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors disabled:opacity-50">Cancel</button>
           <button onClick={saveLiveMock} disabled={savingAnnouncement || !liveMockData.mockName || !liveMockData.examType} className="flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-sm disabled:opacity-50">
             {savingAnnouncement ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
             Host Live Mock

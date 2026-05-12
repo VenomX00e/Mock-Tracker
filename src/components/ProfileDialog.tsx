@@ -5,11 +5,14 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { useAuth } from '../services/AuthContext';
 import { CustomDropdown } from './CustomDropdown';
 
+import { ExamCategory } from '../types';
+
 interface ProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
   darkMode: boolean;
   setDarkMode: (value: boolean) => void;
+  categories: ExamCategory[];
 }
 
 const exams = ['SBI PO', 'IBPS PO', 'SBI Clerk', 'IBPS Clerk', 'RRB PO', 'RRB Clerk', 'RBI Grade B', 'RBI Assistant'];
@@ -42,12 +45,13 @@ const PRESET_AVATARS = [
   "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/1f43b.svg"  // Bear
 ];
 
-export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode }: ProfileDialogProps) {
+export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, categories }: ProfileDialogProps) {
   const { profile, updateProfile, loading } = useUserProfile();
   const { logout } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [photoURL, setPhotoURL] = useState('');
   const [targetedExam, setTargetedExam] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingAvatar, setIsPickingAvatar] = useState(false);
@@ -57,9 +61,13 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode }
       setDisplayName(profile.displayName || '');
       setPhotoURL(profile.photoURL || '');
       setTargetedExam(profile.targetedExam || 'SBI PO');
-      setIsCustomExam(profile.targetedExam ? !['', ...exams].includes(profile.targetedExam) : false);
+      setCategoryId(profile.categoryId || 'banking');
+      
+      const currentCat = categories.find(c => c.id === (profile.categoryId || 'banking'));
+      const catExams = currentCat ? currentCat.exams : exams;
+      setIsCustomExam(profile.targetedExam ? !['', ...catExams].includes(profile.targetedExam) : false);
     }
-  }, [profile]);
+  }, [profile, categories]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -67,6 +75,7 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode }
       displayName,
       photoURL,
       targetedExam,
+      categoryId,
     });
     setIsSaving(false);
     onClose();
@@ -177,6 +186,23 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode }
                   />
                 </div>
 
+                <div className="pt-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <Target className="w-4 h-4 text-slate-400" /> Exam Category
+                  </label>
+                  <CustomDropdown
+                      value={categories.find(c => c.id === categoryId)?.name || categoryId}
+                      onChange={(val) => {
+                        const cat = categories.find(c => c.name === val) || categories[0];
+                        setCategoryId(cat.id);
+                        // Do not change targeted exam on category change
+                      }}
+                      options={categories.map(c => c.name)}
+                      placeholder="Select category"
+                      allowCustom={false}
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                     <Target className="w-4 h-4 text-slate-400" /> Targeted Exam
@@ -192,7 +218,7 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode }
                           setTargetedExam(val);
                         }
                       }}
-                      options={exams}
+                      options={categories.find(c => c.id === categoryId)?.exams || exams}
                       placeholder="Select targeted exam"
                       allowCustom={true}
                     />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { CommunityHubTrashModal } from './community/CommunityHubTrashModal';
 import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, addDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
@@ -7,38 +8,71 @@ import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert
 import { motion } from 'motion/react';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
+import { getErrorMessage } from '../lib/errorUtils';
 import { ChallengeCard } from './ChallengeCard';
+import { useAuthCtx, useAppStateCtx, useSystemDataCtx, useChallengesManagerCtx } from '../context/AppContext';
+import { useUIStore } from '../store/uiStore';
 
-export default function CommunityHub({ 
-  onCopyMock,
-  onUserClick,
-  isAdmin,
-  pinnedChallenges = [],
-  challenges = [],
-  onPinChallenge,
-  onEditChallenge,
-  onDeleteChallenge,
-  onDismissChallenge
-}: { 
-  onCopyMock?: (mock: MockScore) => void;
-  onUserClick?: (profile: any) => void;
-  isAdmin?: boolean;
-  pinnedChallenges?: string[];
-  challenges?: any[];
-  onPinChallenge?: (challenge: any) => void;
-  onEditChallenge?: (challenge: any) => void;
-  onDeleteChallenge?: (challenge: any) => void;
-  onDismissChallenge?: (id: string) => void;
-}) {
-  const { user } = useAuth();
+export default function CommunityHub() {
+
+  const { user } = useAuthCtx();
+  const { adminPermissions, setMockToEdit, setEditingChallenge, localCategory: categoryId } = useAppStateCtx();
+  const { challenges, categories, pinnedChallenges } = useSystemDataCtx();
+  const { setActivePublicProfile, setIsCreateChallengeOpen, setIsRequestsModalOpen, setIsAddModalOpen } = useUIStore();
+  const { handlePinChallenge, handleDeleteChallenge, dismissChallenge } = useChallengesManagerCtx();
+
+  const onCopyMock = (mock: MockScore) => {
+    // Copy the details but remove the ID so it's treated as a new entry
+    const copiedMock = { ...mock, id: '', score: '', percentile: '', percentage: '', accuracy: '', quant: { score: '', percentile: '', accuracy: '' }, reasoning: { score: '', percentile: '', accuracy: '' }, english: { score: '', percentile: '', accuracy: '' }, ga: { score: '', percentile: '', accuracy: '' }};
+    setMockToEdit(copiedMock as any);
+    setIsAddModalOpen(true);
+  };
+  
+  const onUserClick = setActivePublicProfile;
+  const isAdmin = adminPermissions?.canManageLiveMocks;
+  const onPinChallenge = handlePinChallenge;
+  const onEditChallenge = (challenge: any) => {
+    setIsRequestsModalOpen(false);
+    setEditingChallenge(challenge);
+    setIsCreateChallengeOpen(true);
+  };
+  const onDeleteChallenge = handleDeleteChallenge;
+  const onDismissChallenge = dismissChallenge;
+
+
+  
+  const activeCategory = (categories || []).find(c => c.id === categoryId) || categories?.[0];
+  const subjects = activeCategory?.subjects && activeCategory.subjects.length > 0 ? activeCategory.subjects : [
+    { id: 'quant', name: 'Quant', short: 'Q' },
+    { id: 'reasoning', name: 'Reasoning', short: 'R' },
+    { id: 'english', name: 'English', short: 'E' },
+    { id: 'ga', name: 'GA', short: 'GA' }
+  ];
+
+  const getSub = (mock: any, id: string) => {
+    if (['quant', 'reasoning', 'english', 'ga', 'computer'].includes(id)) return mock[id];
+    if (mock.dynamicSubjects?.[id] != null) return mock.dynamicSubjects[id];
+    
+    const subj = subjects.find((s: any) => s.id === id);
+    if (subj) {
+       const n = subj.name.toLowerCase();
+       const sh = (subj.short || '').toLowerCase();
+       if (n.includes('quant') || sh === 'q') return mock.quant;
+       if (n.includes('reason') || sh === 'r') return mock.reasoning;
+       if (n.includes('english') || sh === 'e') return mock.english;
+       if (n.includes('ga') || n.includes('general') || sh === 'ga') return mock.ga;
+       if (n.includes('computer') || sh === 'c') return mock.computer;
+    }
+    return null;
+  };
+
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
   const [feedSort, setFeedSort] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: null, direction: null });
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('All');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('7 Days');
   const [feedLogs, setFeedLogs] = useState<any[]>([]);
   const [allFeedMocks, setAllFeedMocks] = useState<any[]>([]);
-  const [leaderboardHideDays, setLeaderboardHideDays] = useState<number>(11);
   const [loadingTop, setLoadingTop] = useState(true);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [daysVisible, setDaysVisible] = useState(1);
@@ -76,26 +110,11 @@ export default function CommunityHub({
            if (data.defaultSortKey) {
              setSortConfig({ key: data.defaultSortKey, direction: data.defaultSortDirection || 'desc' });
            }
-           if (data.hideAfterDays !== undefined) {
-             setLeaderboardHideDays(data.hideAfterDays);
-           }
         }
       } catch(e) {}
     };
     fetchSettings();
   }, []);
-
-  const handleSetHideDays = async () => {
-     if (!isAdmin) return;
-     const val = window.prompt("Hide inactive users after how many days?", String(leaderboardHideDays));
-     if (val) {
-        const parsed = parseInt(val, 10);
-        if (!isNaN(parsed) && parsed > 0) {
-           setLeaderboardHideDays(parsed);
-           await setDoc(doc(db, 'system', 'leaderboardSettings'), { hideAfterDays: parsed }, { merge: true });
-        }
-     }
-  };
 
   const handleAdminChangeGlobalSort = async (key: string) => {
      if (!isAdmin) return;
@@ -134,13 +153,9 @@ export default function CommunityHub({
            setDeletedMocks(prev => [mock, ...prev]);
 
             await updateDoc(doc(db, 'users', mock.userId, 'mocks', mock.id), { isDeleted: true, updatedAt: serverTimestamp() });
-        } catch (err) {
+        } catch (err: any) {
            console.error("Error soft deleting mock:", err);
-           if (err instanceof Error) {
-               alert("Failed to delete from database: " + err.message + ". It is hidden for this session.");
-           } else {
-               alert("Failed to delete from database. It is hidden for this session.");
-           }
+           alert("Failed to delete from database: " + getErrorMessage(err) + ". It is hidden for this session.");
         }
      }
   };
@@ -208,7 +223,7 @@ export default function CommunityHub({
     }, (error) => {
       console.warn("Chat subscription error:", error);
     });
-    return () => unsubscribe();
+  return () => unsubscribe();
   }, [user, isAdmin]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -216,6 +231,19 @@ export default function CommunityHub({
     const hasText = newMessage.trim().length > 0;
     const hasPoll = showPollMaker && pollQuestion.trim().length > 0 && pollOptions.filter(o => o.text.trim().length > 0).length >= 2;
     if (!user || isSending || (!hasText && !hasPoll)) return;
+    
+    // UI Hardening: enforce maxLength on text as per DB rules
+    if (newMessage.trim().length > 2000) {
+      setChatError(`Message cannot exceed 2000 characters.`);
+      setTimeout(() => setChatError(''), 4000);
+      return;
+    }
+
+    if (hasPoll && pollQuestion.trim().length > 200) {
+      setChatError(`Poll question cannot exceed 200 characters.`);
+      setTimeout(() => setChatError(''), 4000);
+      return;
+    }
     
     // Check limit
     const midnight = new Date();
@@ -295,6 +323,16 @@ export default function CommunityHub({
         };
       }
 
+      const validateChatMessage = (data: any) => {
+        if (!data.userId) throw new Error("Missing user ID");
+        if (data.userName && data.userName.length > 100) throw new Error("User name too long");
+        if (data.userPhoto && data.userPhoto.length > 500) throw new Error("User photo URL too long");
+        if (data.text && data.text.length > 2000) throw new Error("Message text too long");
+        if (data.poll && data.poll.question && data.poll.question.length > 200) throw new Error("Poll question too long");
+      };
+      
+      validateChatMessage(payload);
+
       await addDoc(collection(db, 'community_chat'), payload);
       setNewMessage('');
       setReplyingTo(null);
@@ -314,7 +352,7 @@ export default function CommunityHub({
         await deleteDoc(doc(db, 'community_chat', msgId));
      } catch (err: any) { 
         console.error(err);
-        setChatError(err.message || 'Failed to delete message');
+        setChatError(getErrorMessage(err));
         setTimeout(() => setChatError(''), 3000);
      }
   };
@@ -405,25 +443,100 @@ export default function CommunityHub({
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const q = query(collection(db, 'users'), orderBy('avgPercentile', 'desc'));
+        // Query sorted by avgPercentile, limiting to top 150 to prevent massive client-side scans
+        const q = query(
+          collection(db, 'users'),
+          orderBy('avgPercentile', 'desc'),
+          limit(150)
+        );
         const snap = await getDocs(q);
         const users = snap.docs.map(d => d.data() as UserProfile);
         
+        users.forEach(u => {
+           if (categoryId && categoryId !== 'All') {
+               if (u.categoryStats) {
+                   const cs = u.categoryStats[categoryId]?.allTime;
+                   if (cs) {
+                       u.avgPercentile = cs.avgPercentile || 0;
+                       u.totalTests = cs.totalTests || 0;
+                       u.avgAccuracy = cs.avgAccuracy || 0;
+                       u.avgQuantPercentile = cs.avgQuantPercentile || 0;
+                       u.avgReasoningPercentile = cs.avgReasoningPercentile || 0;
+                       u.avgEnglishPercentile = cs.avgEnglishPercentile || 0;
+                       u.avgGaPercentile = cs.avgGaPercentile || 0;
+                       u.dynamicAverages = cs.dynamicAverages || {};
+                   } else {
+                       u.avgPercentile = 0;
+                       u.totalTests = 0;
+                       u.avgAccuracy = 0;
+                       u.avgQuantPercentile = 0;
+                       u.avgReasoningPercentile = 0;
+                       u.avgEnglishPercentile = 0;
+                       u.avgGaPercentile = 0;
+                       u.dynamicAverages = {};
+                   }
+               } else if (u.categoryId === categoryId || (!u.categoryId && categoryId === 'banking')) {
+                   // Fallback for old stats that haven't been mapped yet
+                   u.dynamicAverages = u.dynamicAverages || {};
+               } else {
+                   u.avgPercentile = 0;
+                   u.totalTests = 0;
+                   u.avgAccuracy = 0;
+                   u.avgQuantPercentile = 0;
+                   u.avgReasoningPercentile = 0;
+                   u.avgEnglishPercentile = 0;
+                   u.avgGaPercentile = 0;
+                   u.dynamicAverages = {};
+               }
+           }
+        });
+
+        users.sort((a, b) => (b.avgPercentile || 0) - (a.avgPercentile || 0));
+        
         // Filter out banned/muted users from leaderboard
-        const visibleUsers = users.filter((u) => !u.isBanned && !u.isMuted);
+        let visibleUsers = users.filter((u) => !u.isBanned && !u.isMuted);
         
         const map: Record<string, UserProfile> = {};
         users.forEach(u => map[u.userId] = u);
         setUserMap(map);
 
-        setAllUsers(visibleUsers.filter(u => u.totalTests > 0));
+        if (categoryId && categoryId !== 'All') {
+          visibleUsers = visibleUsers.filter(u => u.categoryId === categoryId || (!u.categoryId && categoryId === 'banking') || (u.categoryStats && u.categoryStats[categoryId] && u.categoryStats[categoryId].allTime.totalTests > 0));
+        }
+        
+        visibleUsers = visibleUsers.filter(u => u.totalTests > 0);
+
+        // Deduplicate by email
+        const emailMap = new Map<string, UserProfile>();
+        const finalVisibleUsers: UserProfile[] = [];
+        for (const u of visibleUsers) {
+           if (u.email) {
+               if (!emailMap.has(u.email)) {
+                   emailMap.set(u.email, u);
+               } else {
+                   const existing = emailMap.get(u.email)!;
+                   if ((u.totalTests || 0) > (existing.totalTests || 0)) {
+                       emailMap.set(u.email, u);
+                   }
+               }
+           } else {
+               finalVisibleUsers.push(u);
+           }
+        }
+        for (const u of emailMap.values()) {
+            finalVisibleUsers.push(u);
+        }
+        
+        finalVisibleUsers.sort((a, b) => (b.avgPercentile || 0) - (a.avgPercentile || 0));
+
+        setAllUsers(finalVisibleUsers);
       } catch (e) {
         console.error(e);
       }
       setLoadingTop(false);
     };
     fetchLeaderboard();
-  }, []);
+  }, [categoryId]);
 
   // Fetch Feed
   useEffect(() => {
@@ -453,7 +566,15 @@ export default function CommunityHub({
         // Filter out mocks from banned or muted users, and soft deleted mocks
         mocks = mocks.filter(m => {
            if ((m as any).isDeleted) return false;
+           
+           // If category filtering is active, only show mocks from that category
            const p = userMap[m.userId!];
+           if (categoryId && categoryId !== 'All') { // Assuming 'All' could be a value, though usually it's specific
+             const mockCat = m.categoryId || 'banking';
+             const categoryMatch = mockCat === categoryId;
+             if (!categoryMatch) return false;
+           }
+
            if (!p) return true;
            if (p.isBanned || p.isMuted) return false;
            return true;
@@ -545,7 +666,7 @@ export default function CommunityHub({
       setLoadingFeed(false);
     };
     fetchFeed();
-  }, [daysVisible, userMap]);
+  }, [daysVisible, userMap, categoryId]);
 
   const handleSort = (key: string) => {
     if (sortConfig.key === key) {
@@ -579,14 +700,16 @@ export default function CommunityHub({
             if (m.examPhase) phases.add(m.examPhase);
         });
     });
-    // Ensure we have some common ones if feed is small
-    ['Prelims', 'Mains'].forEach(p => phases.add(p));
+    const catPhases = activeCategory?.phases || ['Prelims', 'Mains'];
+    catPhases.forEach((p: string) => phases.add(p));
     
     const sortedPhases = Array.from(phases).sort((a, b) => {
-      if (a === 'Prelims') return -1;
-      if (b === 'Prelims') return 1;
-      if (a === 'Mains') return -1;
-      if (b === 'Mains') return 1;
+      const idxA = catPhases.indexOf(a);
+      const idxB = catPhases.indexOf(b);
+      
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
       return a.localeCompare(b);
     });
     
@@ -633,73 +756,86 @@ export default function CommunityHub({
                ...u, 
                totalTests: 0,
                pCount: 0, pSum: 0,
-               qCount: 0, qSum: 0,
-               rCount: 0, rSum: 0,
-               eCount: 0, eSum: 0,
+               dynamicSums: {}
             };
          }
          const stat = userStats[uid];
          stat.totalTests++;
+         
          if ((!m.examScope || m.examScope === 'Full') && m.percentile > 0) {
             stat.pSum += m.percentile; stat.pCount++;
          }
-         if (m.quant?.percentile > 0) {
-            stat.qSum += m.quant.percentile; stat.qCount++;
-         }
-         if (m.reasoning?.percentile > 0) {
-            stat.rSum += m.reasoning.percentile; stat.rCount++;
-         }
-         if (m.english?.percentile > 0) {
-            stat.eSum += m.english.percentile; stat.eCount++;
-         }
+         
+         const allSubs = { ...m, ...m.dynamicSubjects };
+         Object.keys(allSubs).forEach(key => {
+            const val = allSubs[key];
+            if (val && typeof val === 'object' && val.percentile > 0) {
+               if (!stat.dynamicSums[key]) stat.dynamicSums[key] = { sum: 0, count: 0 };
+               stat.dynamicSums[key].sum += val.percentile;
+               stat.dynamicSums[key].count++;
+            }
+         });
       });
+
+      const finalizeStat = (stat: any) => {
+         const finalObj = {
+            ...stat,
+            avgPercentile: stat.pCount > 0 ? Number((stat.pSum / stat.pCount).toFixed(2)) : 0,
+            dynamicAverages: {} as Record<string, number>,
+         };
+         if (stat.dynamicSums) {
+            Object.keys(stat.dynamicSums).forEach(k => {
+               finalObj.dynamicAverages[k] = Number((stat.dynamicSums[k].sum / stat.dynamicSums[k].count).toFixed(2));
+            });
+            // Keep aliases for backward compatibility with existing hardcoded columns if needed
+            finalObj.avgQuantPercentile = finalObj.dynamicAverages['quant'] || finalObj.dynamicAverages['bank_quant'] || finalObj.dynamicAverages['ssc_maths'] || 0;
+            finalObj.avgReasoningPercentile = finalObj.dynamicAverages['reasoning'] || finalObj.dynamicAverages['bank_reasoning'] || finalObj.dynamicAverages['ssc_reasoning'] || 0;
+            finalObj.avgEnglishPercentile = finalObj.dynamicAverages['english'] || finalObj.dynamicAverages['bank_english'] || finalObj.dynamicAverages['ssc_english'] || 0;
+         }
+         return finalObj;
+      };
 
       if (selectedPhase === 'All') {
          users = allUsers.map(u => {
             const uid = u.userId;
-            if (is30D && (u as any).stats30D) return { ...u, ...((u as any).stats30D) };
-            if (is7D && (u as any).stats7D) return { ...u, ...((u as any).stats7D) };
+            const catKey = categoryId !== 'All' ? categoryId : null;
+            if (is30D) {
+                if (catKey && (u as any).categoryStats?.[catKey]?.stats30D) return { ...u, ...((u as any).categoryStats[catKey].stats30D) };
+                if (!catKey && (u as any).stats30D) return { ...u, ...((u as any).stats30D) };
+            }
+            if (is7D) {
+                if (catKey && (u as any).categoryStats?.[catKey]?.stats7D) return { ...u, ...((u as any).categoryStats[catKey].stats7D) };
+                if (!catKey && (u as any).stats7D) return { ...u, ...((u as any).stats7D) };
+            }
             
             const stat = userStats[uid];
             if (!stat) return { ...u, totalTests: 0 };
-            return {
-               ...stat,
-               avgPercentile: stat.pCount > 0 ? Number((stat.pSum / stat.pCount).toFixed(2)) : 0,
-               avgQuantPercentile: stat.qCount > 0 ? Number((stat.qSum / stat.qCount).toFixed(2)) : 0,
-               avgReasoningPercentile: stat.rCount > 0 ? Number((stat.rSum / stat.rCount).toFixed(2)) : 0,
-               avgEnglishPercentile: stat.eCount > 0 ? Number((stat.eSum / stat.eCount).toFixed(2)) : 0,
-            };
+            return finalizeStat(stat);
          }).filter(u => u.totalTests > 0);
       } else {
-        users = Object.values(userStats).map((stat: any) => ({
-           ...stat,
-           avgPercentile: stat.pCount > 0 ? Number((stat.pSum / stat.pCount).toFixed(2)) : 0,
-           avgQuantPercentile: stat.qCount > 0 ? Number((stat.qSum / stat.qCount).toFixed(2)) : 0,
-           avgReasoningPercentile: stat.rCount > 0 ? Number((stat.rSum / stat.rCount).toFixed(2)) : 0,
-           avgEnglishPercentile: stat.eCount > 0 ? Number((stat.eSum / stat.eCount).toFixed(2)) : 0,
-        })).filter(u => u.avgPercentile > 0 || u.totalTests > 0);
+        users = Object.values(userStats).map((stat: any) => finalizeStat(stat)).filter((u: any) => u.avgPercentile > 0 || u.totalTests > 0);
       }
     }
     
-    return users.filter((u: any) => {
-       if (u.lastMockDate) {
-          const dA = parseLocalDate(u.lastMockDate);
-          const lastDtA = new Date(dA.getFullYear(), dA.getMonth(), dA.getDate()).getTime();
-          const todayDt = new Date();
-          const today = new Date(todayDt.getFullYear(), todayDt.getMonth(), todayDt.getDate()).getTime();
-          const diffDays = Math.floor((today - lastDtA) / 86400000);
-          if (diffDays >= leaderboardHideDays) return false;
-       } else {
-          return false;
-       }
-       return true;
-    });
-  }, [allUsers, allFeedMocks, selectedPhase, selectedPeriod, userMap, leaderboardHideDays]);
+    return users;
+  }, [allUsers, allFeedMocks, selectedPhase, selectedPeriod, userMap]);
 
   const sortedLeaderboard = [...activeAllUsers].sort((a, b) => {
     if (!sortConfig.key || !sortConfig.direction) return 0;
-    let aVal = (a as any)[sortConfig.key] || 0;
-    let bVal = (b as any)[sortConfig.key] || 0;
+    
+    let aVal;
+    let bVal;
+    if (sortConfig.key.includes('.')) {
+      const parts = sortConfig.key.split('.');
+      aVal = (a as any)[parts[0]]?.[parts[1]];
+      bVal = (b as any)[parts[0]]?.[parts[1]];
+    } else {
+      aVal = (a as any)[sortConfig.key];
+      bVal = (b as any)[sortConfig.key];
+    }
+    
+    if (aVal == null) aVal = 0;
+    if (bVal == null) bVal = 0;
     
     // Fix streak sorting by using 0 if the streak is broken (older than yesterday)
     if (sortConfig.key === 'streak') {
@@ -734,7 +870,34 @@ export default function CommunityHub({
 
   return (
     <div className="space-y-8 mt-6 lg:mt-8 mb-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+      <CommunityLeaderboard Trophy={Trophy} CustomDropdown={CustomDropdown} selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod} isAdmin={isAdmin} sortConfig={sortConfig} handleAdminChangeGlobalSort={handleAdminChangeGlobalSort} selectedPhase={selectedPhase} availablePhases={availablePhases} setSelectedPhase={setSelectedPhase} setDoc={setDoc} doc={doc} db={db} loadingTop={loadingTop} handleSort={handleSort} subjects={subjects} sortedLeaderboard={sortedLeaderboard} parseLocalDate={parseLocalDate} onUserClick={onUserClick} getHeatmapColor={getHeatmapColor} Flame={Flame} />
+
+      <CommunityFeed Users={Users} loadingFeed={loadingFeed} filteredFeedLogs={filteredFeedLogs} daysVisible={daysVisible} feedSort={feedSort} handleFeedSort={handleFeedSort} getFeedSortConfig={getFeedSortConfig} subjects={subjects} onCopyMock={onCopyMock} sortedLeaderboard={sortedLeaderboard} onUserClick={onUserClick} Flame={Flame} getPlatformShort={getPlatformShort} getHeatmapColor={getHeatmapColor} getSub={getSub} handleReact={handleReact} reactions={reactions} Calendar={Calendar} setDaysVisible={setDaysVisible} ArrowRight={ArrowRight} />
+      
+      <CommunityChat MessageSquare={MessageSquare} chatMessages={chatMessages} Pin={Pin} handlePinMessage={handlePinMessage} X={X} setActiveMsgId={setActiveMsgId} setCustomEmojiOpenForId={setCustomEmojiOpenForId} setActiveReactionView={setActiveReactionView} setActiveActionsMsgId={setActiveActionsMsgId} setShowPollVotersForId={setShowPollVotersForId} userMap={userMap} user={user} activeActionsMsgId={activeActionsMsgId} motion={motion} setReplyingTo={setReplyingTo} activeMsgId={activeMsgId} handlePollVote={handlePollVote} CheckCircle2={CheckCircle2} CheckSquare={CheckSquare} showPollVotersForId={showPollVotersForId} activeReactionView={activeReactionView} handleChatReact={handleChatReact} customEmojiOpenForId={customEmojiOpenForId} customEmojiInput={customEmojiInput} setCustomEmojiInput={setCustomEmojiInput} setEditingMessageId={setEditingMessageId} setNewMessage={setNewMessage} setShowPollMaker={setShowPollMaker} setPollQuestion={setPollQuestion} setPollIsMulti={setPollIsMulti} setPollOptions={setPollOptions} Pencil={Pencil} isAdmin={isAdmin} handleDeleteMessage={handleDeleteMessage} Trash2={Trash2} PinOff={PinOff} chatBottomRef={chatBottomRef} chatError={chatError} replyingTo={replyingTo} handleSendMessage={handleSendMessage} editingMessageId={editingMessageId} showPollMaker={showPollMaker} BarChart2={BarChart2} pollIsMulti={pollIsMulti} pollQuestion={pollQuestion} pollOptions={pollOptions}    newMessage={newMessage} isSending={isSending} Send={Send} />
+      
+      {showTrash && isAdmin && (
+        <CommunityHubTrashModal
+          showTrash={showTrash}
+          setShowTrash={setShowTrash}
+          deletedMocks={deletedMocks}
+          userMap={userMap}
+          handleAdminRestore={handleAdminRestore}
+          handleAdminPermanentDelete={handleAdminPermanentDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+
+// ==========================================
+// Phase 9: Monolithic View Decomposition
+// ==========================================
+
+function CommunityLeaderboard(props: any) {
+  const { Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isAdmin, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame } = props;
+  return <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-3 sm:flex-row sm:items-center justify-between rounded-t-2xl">
           <div className="flex items-center justify-between sm:justify-start gap-4">
              <div className="flex items-center gap-3">
@@ -794,22 +957,6 @@ export default function CommunityHub({
                       buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
                    />
                  </div>
-                 <div className="flex items-center gap-2 text-xs bg-transparent text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg border-transparent focus-within:border-indigo-500 transition-colors">
-                    <span className="font-medium text-slate-500 dark:text-slate-400">Hide:</span>
-                    <input
-                       type="number"
-                       min="1"
-                       value={leaderboardHideDays}
-                       onChange={e => {
-                          const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val) && val > 0) setLeaderboardHideDays(val);
-                       }}
-                       onBlur={async () => {
-                          await setDoc(doc(db, 'system', 'leaderboardSettings'), { hideAfterDays: leaderboardHideDays }, { merge: true });
-                       }}
-                       className="w-10 bg-transparent text-center border-none p-0 focus:ring-0 text-xs font-semibold text-slate-800 dark:text-slate-200"
-                    />
-                 </div>
                </div>
              )}
           </div>
@@ -824,9 +971,16 @@ export default function CommunityHub({
                   <th className="p-4 font-semibold text-center hidden sm:table-cell">Rank</th>
                   <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('displayName')}>Aspirant {sortConfig.key === 'displayName' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                   <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgPercentile')}>Avg %ile {sortConfig.key === 'avgPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgQuantPercentile')}>Quant {sortConfig.key === 'avgQuantPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgReasoningPercentile')}>Reasoning {sortConfig.key === 'avgReasoningPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('avgEnglishPercentile')}>English {sortConfig.key === 'avgEnglishPercentile' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  {subjects.map((s: any) => {
+                     const sortKey = ['quant', 'reasoning', 'english', 'ga'].includes(s.id) 
+                       ? `avg${s.id.charAt(0).toUpperCase() + s.id.slice(1)}Percentile` 
+                       : `dynamicAverages.${s.id}`;
+                     return (
+                       <th key={s.id} className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort(sortKey)}>
+                         {s.name} {sortConfig.key === sortKey && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                       </th>
+                     );
+                  })}
                   <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('totalTests')}>Tests {sortConfig.key === 'totalTests' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                   <th className="p-4 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('streak')}>Streak {sortConfig.key === 'streak' && sortConfig.direction && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                 </tr>
@@ -871,9 +1025,21 @@ export default function CommunityHub({
                       </div>
                     </td>
                     <td className="p-4 text-center font-mono font-medium"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgPercentile)}`}>{user.avgPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgQuantPercentile)}`}>{user.avgQuantPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgReasoningPercentile)}`}>{user.avgReasoningPercentile}%</span></td>
-                    <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-400"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(user.avgEnglishPercentile)}`}>{user.avgEnglishPercentile}%</span></td>
+                    {subjects.map((s: any) => {
+                      let val = 0;
+                      if (['quant', 'reasoning', 'english', 'ga'].includes(s.id)) {
+                         val = (user as any)[`avg${s.id.charAt(0).toUpperCase() + s.id.slice(1)}Percentile`] || 0;
+                      } else {
+                         val = user.dynamicAverages?.[s.id] || 0;
+                      }
+                      return (
+                        <td key={s.id} className="p-4 text-center font-mono text-slate-600 dark:text-slate-400">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${getHeatmapColor(val)}`}>
+                            {val}%
+                          </span>
+                        </td>
+                      );
+                    })}
                     <td className="p-4 text-center font-mono text-slate-600 dark:text-slate-300">{user.totalTests}</td>
                     <td className="p-4 text-center">
                       <div className={`flex items-center justify-center gap-1 font-medium ${isToday ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
@@ -892,8 +1058,12 @@ export default function CommunityHub({
           )}
         </div>
       </div>
+}
 
-      {/* FEED */}
+function CommunityFeed(props: any) {
+  const { Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, subjects, onCopyMock, sortedLeaderboard, onUserClick, Flame, getPlatformShort, getHeatmapColor, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight } = props;
+  return <>
+    {/* FEED */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
           <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -947,10 +1117,14 @@ export default function CommunityHub({
                               <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('examType')}>Exam {getFeedSortConfig('examType')}</th>
                               <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('score')}>Score {getFeedSortConfig('score')}</th>
                               <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('percentile')}>Percentile {getFeedSortConfig('percentile')}</th>
-                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('quant.score')}>Quant {getFeedSortConfig('quant.score')}</th>
-                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('reasoning.score')}>Reasoning {getFeedSortConfig('reasoning.score')}</th>
-                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('english.score')}>English {getFeedSortConfig('english.score')}</th>
-                              <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort('ga.score')}>GA {getFeedSortConfig('ga.score')}</th>
+                              {subjects.map((s: any) => {
+                                const sortKey = ['quant', 'reasoning', 'english', 'ga'].includes(s.id) ? `${s.id}.score` : `dynamicSubjects.${s.id}.score`;
+                                return (
+                                  <th key={s.id} className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleFeedSort(sortKey)}>
+                                    {s.name} {getFeedSortConfig(sortKey)}
+                                  </th>
+                                );
+                              })}
                               <th className="px-4 py-3 w-10"></th>
                             </tr>
                           </thead>
@@ -1018,42 +1192,20 @@ export default function CommunityHub({
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-center align-middle">
-                                   <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.quant?.score != null && m.quant.score !== 0 ? m.quant.score : '-'}</span>
-                                      <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                        {m.quant?.percentile != null && m.quant.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.quant.percentile)}`}>{m.quant.percentile}%P</span>}
-                                        {m.quant?.accuracy != null && m.quant.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.quant.accuracy)}`}>{m.quant.accuracy}%A</span>}
-                                      </div>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3 text-center align-middle">
-                                    <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.reasoning?.score != null && m.reasoning.score !== 0 ? m.reasoning.score : '-'}</span>
-                                      <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                        {m.reasoning?.percentile != null && m.reasoning.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.reasoning.percentile)}`}>{m.reasoning.percentile}%P</span>}
-                                        {m.reasoning?.accuracy != null && m.reasoning.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.reasoning.accuracy)}`}>{m.reasoning.accuracy}%A</span>}
-                                      </div>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3 text-center align-middle">
-                                    <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.english?.score != null && m.english.score !== 0 ? m.english.score : '-'}</span>
-                                      <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                        {m.english?.percentile != null && m.english.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.english.percentile)}`}>{m.english.percentile}%P</span>}
-                                        {m.english?.accuracy != null && m.english.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.english.accuracy)}`}>{m.english.accuracy}%A</span>}
-                                      </div>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-3 text-center align-middle">
-                                    <div className="flex flex-col items-center">
-                                      <span className="font-mono text-slate-600 dark:text-slate-300">{m.ga?.score != null && m.ga.score !== 0 ? m.ga.score : '-'}</span>
-                                      <div className="flex flex-col gap-0.5 mt-1 items-center">
-                                        {m.ga?.percentile != null && m.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(m.ga.percentile)}`}>{m.ga.percentile}%P</span>}
-                                        {m.ga?.accuracy != null && m.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(m.ga.accuracy)}`}>{m.ga.accuracy}%A</span>}
-                                      </div>
-                                    </div>
-                                </td>
+                                {subjects.map((s: any) => {
+                                  const sub = getSub(m, s.id);
+                                  return (
+                                    <td key={s.id} className="px-4 py-3 text-center align-middle">
+                                       <div className="flex flex-col items-center">
+                                          <span className="font-mono text-slate-600 dark:text-slate-300">{sub?.score != null && sub.score !== 0 ? sub.score : '-'}</span>
+                                          <div className="flex flex-col gap-0.5 mt-1 items-center">
+                                            {sub?.percentile != null && sub.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded ${getHeatmapColor(sub.percentile)}`}>{sub.percentile}%P</span>}
+                                            {sub?.accuracy != null && sub.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded ${getHeatmapColor(sub.accuracy)}`}>{sub.accuracy}%A</span>}
+                                          </div>
+                                        </div>
+                                    </td>
+                                  );
+                                })}
                                 <td className="px-4 py-3 text-center align-middle">
                                     <div className="flex justify-end items-center gap-2 pr-2">
                                       <button 
@@ -1121,8 +1273,13 @@ export default function CommunityHub({
           )}
         </div>
       </div>
-      
-      {/* CHAT SECTION */}
+  </>
+}
+
+function CommunityChat(props: any) {
+  const { MessageSquare, chatMessages, Pin, handlePinMessage, X, setActiveMsgId, setCustomEmojiOpenForId, setActiveReactionView, setActiveActionsMsgId, setShowPollVotersForId, userMap, user, activeActionsMsgId, motion, setReplyingTo, activeMsgId, handlePollVote, CheckCircle2, CheckSquare, showPollVotersForId, activeReactionView, handleChatReact, customEmojiOpenForId, customEmojiInput, setCustomEmojiInput, setEditingMessageId, setNewMessage, setShowPollMaker, setPollQuestion, setPollIsMulti, setPollOptions, Pencil, isAdmin, handleDeleteMessage, Trash2, PinOff, chatBottomRef, chatError, replyingTo, handleSendMessage, editingMessageId, showPollMaker, BarChart2, pollIsMulti, pollQuestion, pollOptions, newMessage, isSending, Send } = props;
+  return <>
+    {/* CHAT SECTION */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[550px]">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0">
@@ -1586,7 +1743,7 @@ export default function CommunityHub({
               onKeyDown={(e) => {
                  if (e.key === 'Enter' && !e.shiftKey) {
                     // Just let it add a new line, don't prevent default.
-                    // Wait, inside a form, Enter in textarea does NOT submit by default.
+                    // Wait, inside a Enter in textarea does NOT submit by default.
                  }
               }}
               placeholder={editingMessageId ? "Edit message..." : (user ? "Type a message..." : "Sign in to chat")}
@@ -1609,68 +1766,5 @@ export default function CommunityHub({
           </form>
         </div>
       </div>
-      
-      {showTrash && isAdmin && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-4xl shadow-xl flex flex-col max-h-[85vh] overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-red-500" />
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Moderation Trash</h3>
-              </div>
-              <button 
-                onClick={() => setShowTrash(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
-               {deletedMocks.length === 0 ? (
-                  <p className="text-center text-slate-500 py-8">No deleted mocks.</p>
-               ) : (
-                  <div className="space-y-3">
-                     {deletedMocks.map(m => {
-                        const user = userMap[m.userId!] || {} as Partial<UserProfile>;
-                        return (
-                          <div key={m.id} className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center p-4 border border-red-100 dark:border-red-900/30 rounded-xl bg-red-50/50 dark:bg-red-900/10">
-                            <div>
-                               <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-medium text-slate-800 dark:text-slate-200">{user.displayName || 'Unknown'}</span>
-                                  <span className="text-xs text-slate-500">{new Date(m.date).toLocaleDateString()}</span>
-                               </div>
-                               <div className="text-sm font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
-                                  {m.examType} - {m.mockName} 
-                                  <span className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded shadow-sm flex gap-2">
-                                      <span>Score: {m.score}</span>
-                                      <span>{m.percentile}%ile</span>
-                                  </span>
-                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                               <button 
-                                 onClick={() => handleAdminRestore(m)}
-                                 className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded-lg transition-colors"
-                               >
-                                 Restore
-                               </button>
-                               <button 
-                                 onClick={() => handleAdminPermanentDelete(m)}
-                                 className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 rounded-lg transition-colors flex items-center gap-1.5"
-                               >
-                                 <Trash2 className="w-4 h-4" /> Purge
-                               </button>
-                            </div>
-                          </div>
-                        )
-                     })}
-                  </div>
-               )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  </>
 }

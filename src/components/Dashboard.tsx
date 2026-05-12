@@ -1,7 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
-import { MockScore, UserProfile, ReflectionTask } from '../types';
+import { MockScore, UserProfile, ReflectionTask, ExamCategory } from '../types';
+import { useUserProfileCtx, useSystemDataCtx, useAppStateCtx } from '../context/AppContext';
+import { useUIStore } from '../store/uiStore';
+import { useMocks } from '../hooks/useMocks';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Legend, ReferenceLine, LabelList, Cell,
@@ -10,167 +13,18 @@ import {
 import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download, CheckSquare, X, Check } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, writeBatch, collectionGroup, deleteField, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 import { ReflectionEditor } from './ReflectionEditor';
 
+import { ActionItemsModal } from './dashboard/ActionItemsModal';
 import { TaskProgressDisk } from './TasksTile';
 
-interface DashboardProps {
-  mocks: MockScore[];
-  deletedMocks?: MockScore[];
-  profile?: UserProfile;
-  onDeleteMock?: (id: string) => void;
-  onEditMock?: (mock: MockScore) => void;
-  onRestoreMock?: (id: string) => void;
-  onPermanentlyDeleteMock?: (id: string) => void;
-  onUpdateReflection?: (id: string, updates: Partial<MockScore>) => Promise<void>;
-  onUpdateProfileTasks?: (tasks: ReflectionTask[]) => Promise<void>;
-  showTasksModal?: boolean;
-  setShowTasksModal?: (show: boolean) => void;
-}
-
-const PortalContent = ({ chartRefBox, coordinate, content, screenX, screenY, isRight, isBottom }: any) => {
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    const el = tooltipRef.current;
-    if (!el || !chartRefBox.current || !coordinate) return;
-    
-    let animationFrameId: number;
-    
-    const updatePosition = () => {
-       if (chartRefBox.current && tooltipRef.current && coordinate) {
-          const r = chartRefBox.current.getBoundingClientRect();
-          const currentScreenX = r.left + coordinate.x;
-          const currentScreenY = r.top + coordinate.y;
-          
-          const rightHalf = currentScreenX > window.innerWidth / 2;
-          const bottomHalf = currentScreenY > window.innerHeight / 2;
-          
-          tooltipRef.current.style.left = `${currentScreenX}px`;
-          tooltipRef.current.style.top = `${currentScreenY}px`;
-          tooltipRef.current.style.transform = `translate(${rightHalf ? '-110%' : '10%'}, ${bottomHalf ? '-110%' : '10%'})`;
-       }
-       animationFrameId = requestAnimationFrame(updatePosition);
-    };
-    
-    animationFrameId = requestAnimationFrame(updatePosition);
-    
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [chartRefBox, coordinate]);
-
-  return createPortal(
-    <div 
-      ref={tooltipRef}
-      className="fixed z-40 pointer-events-none transition-opacity duration-75 ease-out opacity-100"
-      style={{ 
-        left: screenX, 
-        top: screenY,
-        transform: `translate(${isRight ? '-110%' : '10%'}, ${isBottom ? '-110%' : '10%'})`
-      }}
-    >
-      {content}
-    </div>,
-    document.body
-  );
-};
-
-const CustomTooltip = ({ active, payload, coordinate, chartRefBox, activeTrendId }: any) => {
-  const [visible, setVisible] = useState(false);
-  const [lastTrend, setLastTrend] = useState(activeTrendId);
-  
-  const payloadId = payload?.[0]?.payload?.id || payload?.[0]?.payload?.mockName;
-  const coordX = coordinate?.x;
-  const coordY = coordinate?.y;
-
-  useEffect(() => {
-    if (activeTrendId !== lastTrend) {
-      setVisible(false);
-      setLastTrend(activeTrendId);
-    } else {
-      if (active) setVisible(true);
-      else setVisible(false);
-    }
-  }, [active, payloadId, coordX, coordY, activeTrendId, lastTrend]);
-
-  useEffect(() => {
-    const handleOutsideClick = () => {
-      setVisible(false);
-    };
-
-    if (visible && active) {
-      // Small timeout so the trigger click doesn't immediately close it
-      const timer = setTimeout(() => {
-        document.addEventListener('touchstart', handleOutsideClick);
-        document.addEventListener('mousedown', handleOutsideClick);
-      }, 50);
-      return () => {
-        clearTimeout(timer);
-        document.removeEventListener('touchstart', handleOutsideClick);
-        document.removeEventListener('mousedown', handleOutsideClick);
-      };
-    }
-  }, [visible, active]);
-
-  if (active && visible && payload && payload.length) {
-    const data = payload[0].payload as MockScore;
-    
-    const content = (
-      <div 
-        className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-40 pointer-events-auto"
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-      >
-        <p className="font-semibold text-slate-100 mb-1.5">{data.mockName || 'Mock Test'}</p>
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          <span className="text-[10px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-md text-slate-300 font-medium">{data.examType}</span>
-          {data.examRole && <span className="text-[10px] bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded-md text-indigo-300 font-medium">{data.examRole}</span>}
-          {data.examPhase && <span className="text-[10px] bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-md text-amber-300 font-medium">{data.examPhase}</span>}
-          {data.examScope && <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded-md text-emerald-300 font-medium">{data.examScope}</span>}
-        </div>
-        <div className="space-y-1.5 border-t border-slate-800 pt-3 mt-3">
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-slate-400 font-medium">Percentile</span>
-            <span className="font-mono font-bold text-emerald-400">{data.percentile || '-'}%</span>
-          </div>
-          <div className="flex justify-between items-center gap-4">
-            <span className="text-slate-400 font-medium">Overall Score</span>
-            <span className="font-mono font-bold text-blue-400">{data.score || '-'}</span>
-          </div>
-          {(data.quant?.score || data.reasoning?.score || data.english?.score || data.ga?.score) ? (
-            <>
-              <div className="border-t border-slate-800 my-1.5" />
-              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 mt-2">Sectional Scores</div>
-              {data.quant?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Quant</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.quant.percentile || 0)}`}>{data.quant.percentile || '-'}%</span>{data.quant.score}</span></div> : null}
-              {data.reasoning?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">Reasoning</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.reasoning.percentile || 0)}`}>{data.reasoning.percentile || '-'}%</span>{data.reasoning.score}</span></div> : null}
-              {data.english?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">English</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.english.percentile || 0)}`}>{data.english.percentile || '-'}%</span>{data.english.score}</span></div> : null}
-              {data.ga?.score ? <div className="flex justify-between items-center gap-4"><span className="text-slate-300 text-xs">GA</span><span className="font-mono text-slate-100 font-medium text-xs"><span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(data.ga.percentile || 0)}`}>{data.ga.percentile || '-'}%</span>{data.ga.score}</span></div> : null}
-            </>
-          ) : null}
-        </div>
-      </div>
-    );
-
-    if (chartRefBox && chartRefBox.current && coordinate && typeof document !== 'undefined') {
-      const rect = chartRefBox.current.getBoundingClientRect();
-      const screenX = rect.left + coordinate.x;
-      const screenY = rect.top + coordinate.y;
-      const isRight = screenX > window.innerWidth / 2;
-      const isBottom = screenY > window.innerHeight / 2;
-
-      return <PortalContent chartRefBox={chartRefBox} coordinate={coordinate} content={content} screenX={screenX} screenY={screenY} isRight={isRight} isBottom={isBottom} />;
-    }
-
-    return content;
-  }
-  return null;
-};
+import { PortalContent, CustomTooltip } from './dashboard/TooltipComponents';
+import { InlineTaskEditor } from './dashboard/InlineTaskEditor';
 
 const renderCustomBarLabel = (props: any) => {
   const { x, y, width, value } = props;
@@ -181,20 +35,59 @@ const renderCustomBarLabel = (props: any) => {
   );
 };
 
-function InlineTaskEditor({ initialText, onSave, onCancel }: { initialText: string, onSave: (text: string) => void, onCancel: () => void }) {
-  const [text, setText] = useState(initialText);
-  return (
-    <div className="flex flex-col gap-3 w-full" onClick={(e) => e.stopPropagation()}>
-      <input autoFocus type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSave(text); else if (e.key === 'Escape') onCancel(); }} className="w-full bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-      <div className="flex gap-2">
-         <button onClick={(e) => { e.stopPropagation(); onSave(text); }} className="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Save</button>
-         <button onClick={(e) => { e.stopPropagation(); onCancel(); }} className="text-xs font-medium px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Cancel</button>
-      </div>
-    </div>
-  );
-}
+export default function Dashboard() {
+  const { profile } = useUserProfileCtx();
+  const { mocks: rawMocks, deletedMocks: rawDeletedMocks = [], deleteMock, restoreDeletedMock, permanentlyDeleteMock, updateMock } = useMocks();
+  const { categories } = useSystemDataCtx();
+  const { setIsAddModalOpen, showTasksModal: controlledShowTasksModal, setShowTasksModal: controlledSetShowTasksModal } = useUIStore();
+  const { handleUpdateProfileTasks: onUpdateProfileTasks, setMockToEdit } = useAppStateCtx();
 
-export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteMock, onEditMock, onRestoreMock, onPermanentlyDeleteMock, onUpdateReflection, onUpdateProfileTasks, showTasksModal: controlledShowTasksModal, setShowTasksModal: controlledSetShowTasksModal }: DashboardProps) {
+  const onDeleteMock = deleteMock;
+  const onRestoreMock = restoreDeletedMock;
+  const onPermanentlyDeleteMock = permanentlyDeleteMock;
+  const onUpdateReflection = async (id: string, updates: Partial<MockScore>) => {
+    const mockToUpdate = rawMocks.find(m => m.id === id);
+    if (mockToUpdate) await updateMock({ ...mockToUpdate, ...updates });
+  };
+  const onEditMock = (mock: MockScore) => {
+    setMockToEdit(mock);
+    setIsAddModalOpen(true);
+  };
+
+  const activeCategory = (categories || []).find((c: any) => c.id === profile?.categoryId) || categories?.[0];
+  
+  const mocks = React.useMemo(() => {
+    return rawMocks.filter(m => (m.categoryId || 'banking') === activeCategory?.id);
+  }, [rawMocks, activeCategory]);
+
+  const deletedMocks = React.useMemo(() => {
+    return rawDeletedMocks.filter(m => (m.categoryId || 'banking') === activeCategory?.id);
+  }, [rawDeletedMocks, activeCategory]);
+
+  const subjects = activeCategory?.subjects && activeCategory.subjects.length > 0 ? activeCategory.subjects : [
+    { id: 'quant', name: 'Quant', short: 'Q' },
+    { id: 'reasoning', name: 'Reasoning', short: 'R' },
+    { id: 'english', name: 'English', short: 'E' },
+    { id: 'ga', name: 'GA', short: 'GA' }
+  ];
+
+  const getSub = (mock: any, id: string) => {
+    if (['quant', 'reasoning', 'english', 'ga', 'computer'].includes(id)) return mock[id];
+    if (mock.dynamicSubjects?.[id] != null) return mock.dynamicSubjects[id];
+    
+    const subj = subjects.find((s: any) => s.id === id);
+    if (subj) {
+       const n = subj.name.toLowerCase();
+       const sh = (subj.short || '').toLowerCase();
+       if (n.includes('quant') || sh === 'q') return mock.quant;
+       if (n.includes('reason') || sh === 'r') return mock.reasoning;
+       if (n.includes('english') || sh === 'e') return mock.english;
+       if (n.includes('ga') || n.includes('general') || sh === 'ga') return mock.ga;
+       if (n.includes('computer') || sh === 'c') return mock.computer;
+    }
+    return null;
+  };
+
   const [selectedExam, setSelectedExam] = useState<string>('All');
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
@@ -216,38 +109,23 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
   const [localShowTasksModal, setLocalShowTasksModal] = useState(false);
   const showTasksModal = controlledShowTasksModal !== undefined ? controlledShowTasksModal : localShowTasksModal;
   const setShowTasksModal = controlledSetShowTasksModal || setLocalShowTasksModal;
-  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
-  const [newTaskText, setNewTaskText] = useState('');
-  const [editingGlobalTaskId, setEditingGlobalTaskId] = useState<string | null>(null);
-  const [editGlobalTaskText, setEditGlobalTaskText] = useState('');
-  const [activeActionsTaskId, setActiveActionsTaskId] = useState<string | null>(null);
-  const [addingTaskToMockId, setAddingTaskToMockId] = useState<string | null>(null);
-  const [newMockTaskText, setNewMockTaskText] = useState('');
-  const [editingMockTaskId, setEditingMockTaskId] = useState<string | null>(null);
-  const [editMockTaskText, setEditMockTaskText] = useState('');
-  const [mockIdOfEditingTask, setMockIdOfEditingTask] = useState<string | null>(null);
-  const [expandedActionMocks, setExpandedActionMocks] = useState<Record<string, boolean>>({});
+  
 
   const handleExportExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Mock History');
     
+    const dynamicCols = subjects.flatMap((s: any) => [
+      { header: s.name, key: `sub_${s.id}`, width: 12 },
+      { header: `${s.name} %ile`, key: `sub_perc_${s.id}`, width: 14 }
+    ]);
     sheet.columns = [
       { header: 'Date', key: 'date', width: 12 },
       { header: 'Exam', key: 'exam', width: 25 },
       { header: 'Platform', key: 'platform', width: 15 },
       { header: 'Score', key: 'score', width: 10 },
       { header: 'Percentile', key: 'percentile', width: 12 },
-      { header: 'Quant', key: 'quant', width: 10 },
-      { header: 'Quant %ile', key: 'quant_percentile', width: 12 },
-      { header: 'Reasoning', key: 'reasoning', width: 12 },
-      { header: 'Reasoning %ile', key: 'reasoning_percentile', width: 14 },
-      { header: 'English', key: 'english', width: 10 },
-      { header: 'English %ile', key: 'english_percentile', width: 12 },
-      { header: 'GA', key: 'ga', width: 10 },
-      { header: 'GA %ile', key: 'ga_percentile', width: 10 },
-      { header: 'Computer', key: 'computer', width: 10 },
-      { header: 'Comp %ile', key: 'computer_percentile', width: 10 },
+      ...dynamicCols
     ];
 
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -255,23 +133,19 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
     displayedMocks.forEach(mock => {
       const mockDate = parseLocalDate(mock.date);
-      const row = sheet.addRow({
+      const rowData: any = {
         date: mockDate.toLocaleDateString(),
         exam: mock.mockName || `${mock.examType} ${mock.examRole} ${mock.examPhase}`,
         platform: mock.platform,
         score: mock.score,
         percentile: mock.percentile,
-        quant: mock.quant?.score ?? '-',
-        quant_percentile: mock.quant?.percentile ?? '-',
-        reasoning: mock.reasoning?.score ?? '-',
-        reasoning_percentile: mock.reasoning?.percentile ?? '-',
-        english: mock.english?.score ?? '-',
-        english_percentile: mock.english?.percentile ?? '-',
-        ga: mock.ga?.score ?? '-',
-        ga_percentile: mock.ga?.percentile ?? '-',
-        computer: mock.computer?.score ?? '-',
-        computer_percentile: mock.computer?.percentile ?? '-',
+      };
+      subjects.forEach((s: any) => {
+        const sub = getSub(mock, s.id);
+        rowData[`sub_${s.id}`] = sub?.score ?? '-';
+        rowData[`sub_perc_${s.id}`] = sub?.percentile ?? '-';
       });
+      const row = sheet.addRow(rowData);
 
       // Color coding percentile
       const pCell = row.getCell('percentile');
@@ -320,21 +194,89 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
   useEffect(() => {
     const fetchRank = async () => {
-      if (!profile) return;
+      if (!profile?.userId) return;
       try {
-        const q = query(collection(db, 'users'), orderBy('avgPercentile', 'desc'));
+        const q = query(collection(db, 'users'), orderBy('avgPercentile', 'desc'), limit(1000));
         const snap = await getDocs(q);
-        const users = snap.docs.map(d => d.data() as UserProfile).filter(u => !u.isBanned && !u.isMuted && u.totalTests > 0);
-        const rank = users.findIndex(u => u.userId === profile.userId) + 1;
+        const users = snap.docs.map(d => d.data() as UserProfile);
+        
+        const categoryId = activeCategory?.id || 'banking';
+
+        users.forEach(u => {
+           if (u.categoryStats) {
+               const cs = u.categoryStats[categoryId]?.allTime;
+               if (cs) {
+                   u.avgPercentile = cs.avgPercentile || 0;
+                   u.totalTests = cs.totalTests || 0;
+                   u.avgAccuracy = cs.avgAccuracy || 0;
+                   u.avgQuantPercentile = cs.avgQuantPercentile || 0;
+                   u.avgReasoningPercentile = cs.avgReasoningPercentile || 0;
+                   u.avgEnglishPercentile = cs.avgEnglishPercentile || 0;
+                   u.avgGaPercentile = cs.avgGaPercentile || 0;
+               } else {
+                   u.avgPercentile = 0;
+                   u.totalTests = 0;
+                   u.avgAccuracy = 0;
+                   u.avgQuantPercentile = 0;
+                   u.avgReasoningPercentile = 0;
+                   u.avgEnglishPercentile = 0;
+                   u.avgGaPercentile = 0;
+               }
+           } else if (u.categoryId === categoryId || (!u.categoryId && categoryId === 'banking')) {
+               // Keep global
+           } else {
+               u.avgPercentile = 0;
+               u.totalTests = 0;
+               u.avgAccuracy = 0;
+               u.avgQuantPercentile = 0;
+               u.avgReasoningPercentile = 0;
+               u.avgEnglishPercentile = 0;
+               u.avgGaPercentile = 0;
+           }
+        });
+
+        users.sort((a, b) => (b.avgPercentile || 0) - (a.avgPercentile || 0));
+        
+        let visibleUsers = users.filter((u) => !u.isBanned && !u.isMuted);
+        
+        visibleUsers = visibleUsers.filter(u => u.categoryId === categoryId || (!u.categoryId && categoryId === 'banking') || (u.categoryStats && u.categoryStats[categoryId] && u.categoryStats[categoryId].allTime.totalTests > 0));
+        visibleUsers = visibleUsers.filter(u => u.totalTests > 0);
+
+        // Deduplicate by email
+        const emailMap = new Map<string, UserProfile>();
+        const finalVisibleUsers: UserProfile[] = [];
+        for (const u of visibleUsers) {
+           if (u.email) {
+               if (!emailMap.has(u.email)) {
+                   emailMap.set(u.email, u);
+               } else {
+                   const existing = emailMap.get(u.email)!;
+                   if ((u.totalTests || 0) > (existing.totalTests || 0)) {
+                       emailMap.set(u.email, u);
+                   }
+               }
+           } else {
+               finalVisibleUsers.push(u);
+           }
+        }
+        for (const u of emailMap.values()) {
+            finalVisibleUsers.push(u);
+        }
+        
+        finalVisibleUsers.sort((a, b) => (b.avgPercentile || 0) - (a.avgPercentile || 0));
+
+        const rank = finalVisibleUsers.findIndex(u => u.userId === profile.userId) + 1;
         if (rank > 0) {
           setLeaderboardRank(rank);
+        } else {
+          setLeaderboardRank(null);
         }
       } catch (e) {
         console.error("Error fetching rank", e);
       }
     };
     fetchRank();
-  }, [profile]);
+  }, [profile?.userId, activeCategory?.id]);
 
   // reset subfilters when main exam changes
   React.useEffect(() => {
@@ -345,15 +287,17 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
   const allGlobalPhases = useMemo(() => {
     const phases = Array.from(new Set(mocks.map(m => m.examPhase).filter(Boolean)));
+    const catPhases = activeCategory?.phases || [];
     phases.sort((a, b) => {
-      if (a === 'Prelims') return -1;
-      if (b === 'Prelims') return 1;
-      if (a === 'Mains') return -1;
-      if (b === 'Mains') return 1;
+      const idxA = catPhases.indexOf(a);
+      const idxB = catPhases.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
       return mocks.findIndex(m => m.examPhase === a) - mocks.findIndex(m => m.examPhase === b);
     });
     return ['All', ...phases];
-  }, [mocks]);
+  }, [mocks, activeCategory]);
 
   const [goalPercentileStr, setGoalPercentileStr] = useState<string>(() => localStorage.getItem('goalPercentile') || '95');
   const [statsCountRange, setStatsCountRange] = useState<number | 'all'>('all');
@@ -390,20 +334,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
       if (activeTrendId === 'overall') return true;
       if (activeTrendId === 'full') return (!m.examScope || m.examScope === 'Full');
       
-      if (m.examScope === 'Sectional') {
-          const nameLower = (m.mockName || '').toLowerCase();
-          const isQuantName = nameLower.includes('quant') || nameLower.includes('math');
-          const isEngName = nameLower.includes('english') || nameLower.includes('eng');
-          const isReasName = nameLower.includes('reasoning') || nameLower.includes('lr') || nameLower.includes('logic');
-          const isGaName = nameLower.includes('ga') || nameLower.includes('general') || nameLower.includes('gk') || nameLower.includes('awareness');
-
-          if (activeTrendId === 'quant' && (isEngName || isReasName || isGaName) && !isQuantName) return false;
-          if (activeTrendId === 'english' && (isQuantName || isReasName || isGaName) && !isEngName) return false;
-          if (activeTrendId === 'reasoning' && (isQuantName || isEngName || isGaName) && !isReasName) return false;
-          if (activeTrendId === 'ga' && (isQuantName || isEngName || isReasName) && !isGaName) return false;
-      }
-
-      const val = m[activeTrendId as keyof typeof m] as any;
+      const val = getSub(m, activeTrendId);
       return val != null && ((val.percentile != null && val.percentile !== '') || (val.score != null && val.score !== ''));
     });
   }, [displayedMocks, activeTrendId]);
@@ -459,7 +390,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
       if (activeTrendId === 'overall' || activeTrendId === 'full') {
         return m[fieldName];
       } else {
-        return m[activeTrendId]?.[fieldName];
+        return getSub(m, activeTrendId)?.[fieldName];
       }
     };
 
@@ -481,17 +412,14 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
     const targetDescLength = statsCountRange === 'all' ? displayedMocks.length : Math.max(statsCountRange as number, 5); 
     const recentDescending = displayedMocks.slice(0, targetDescLength);
 
-    const quantMocks = recentDescending.filter(m => m.quant?.percentile != null && m.quant.percentile > 0);
-    const avgQuantPercentile = quantMocks.length ? quantMocks.reduce((acc, m) => acc + m.quant!.percentile!, 0) / quantMocks.length : 0;
-
-    const resMocks = recentDescending.filter(m => m.reasoning?.percentile != null && m.reasoning.percentile > 0);
-    const avgReasoningPercentile = resMocks.length ? resMocks.reduce((acc, m) => acc + m.reasoning!.percentile!, 0) / resMocks.length : 0;
-
-    const engMocks = recentDescending.filter(m => m.english?.percentile != null && m.english.percentile > 0);
-    const avgEnglishPercentile = engMocks.length ? engMocks.reduce((acc, m) => acc + m.english!.percentile!, 0) / engMocks.length : 0;
-
-    const gaMocks = recentDescending.filter(m => m.ga?.percentile != null && m.ga.percentile > 0);
-    const avgGaPercentile = gaMocks.length ? gaMocks.reduce((acc, m) => acc + m.ga!.percentile!, 0) / gaMocks.length : 0;
+    const subjectAverages: Record<string, number> = {};
+    subjects.forEach(s => {
+      const sMocks = recentDescending.filter(m => {
+        const perc = getSub(m, s.id)?.percentile;
+        return perc != null && perc > 0;
+      });
+      subjectAverages[s.id] = sMocks.length ? sMocks.reduce((acc, m) => acc + getSub(m, s.id)!.percentile!, 0) / sMocks.length : 0;
+    });
 
     // Recent trend
     const recentValue = activeTrendFilteredMocks.length > 0 ? getField(activeTrendFilteredMocks[0], 'score') : null;
@@ -507,40 +435,30 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
     return { 
       avgScore, avgPercentile, avgAccuracy, totalTests, scoreDiff, isScoreUp, recent,
-      avgQuantPercentile, avgReasoningPercentile, avgEnglishPercentile, avgGaPercentile 
+      subjectAverages
     };
-  }, [displayedMocks, statsCountRange, activeTrendFilteredMocks, activeTrendId]);
-
-  const chartData = useMemo(() => {
-    const hasQuant = displayedMocks.some(m => m.quant?.score != null && m.quant.score !== 0);
-    const hasReasoning = displayedMocks.some(m => m.reasoning?.score != null && m.reasoning.score !== 0);
-    const hasEnglish = displayedMocks.some(m => m.english?.score != null && m.english.score !== 0);
-    const hasGA = displayedMocks.some(m => m.ga?.score != null && m.ga.score !== 0);
-    return { hasQuant, hasReasoning, hasEnglish, hasGA };
-  }, [displayedMocks]);
+  }, [displayedMocks, statsCountRange, activeTrendFilteredMocks, activeTrendId, subjects]);
 
   const chartDataReversed = useMemo(() => {
     return [...activeTrendFilteredChronologicalMocks].reverse().map(m => {
-      const scores = [
-        m.quant?.score || 0,
-        m.reasoning?.score || 0,
-        m.english?.score || 0,
-        m.ga?.score || 0
-      ];
+      const scores = subjects.map(s => getSub(m, s.id)?.score || 0);
       const maxSectionScore = Math.max(...scores, 0);
       return { ...m, maxSectionScore };
     });
-  }, [activeTrendFilteredChronologicalMocks]);
+  }, [activeTrendFilteredChronologicalMocks, subjects]);
 
   const flattenedData = useMemo(() => {
     const data: any[] = [];
     let index = 0;
+    const colors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
     chartDataReversed.forEach((mock) => {
       const bars: any[] = [];
-      if ((activeTrendId === 'overall' || activeTrendId === 'full' || activeTrendId === 'quant') && chartData.hasQuant && mock.quant?.score) bars.push({ ...mock, cellSub: 'Quant', cellScore: mock.quant.score, fill: '#3b82f6' });
-      if ((activeTrendId === 'overall' || activeTrendId === 'full' || activeTrendId === 'reasoning') && chartData.hasReasoning && mock.reasoning?.score) bars.push({ ...mock, cellSub: 'Reasoning', cellScore: mock.reasoning.score, fill: '#8b5cf6' });
-      if ((activeTrendId === 'overall' || activeTrendId === 'full' || activeTrendId === 'english') && chartData.hasEnglish && mock.english?.score) bars.push({ ...mock, cellSub: 'English', cellScore: mock.english.score, fill: '#f59e0b' });
-      if ((activeTrendId === 'overall' || activeTrendId === 'full' || activeTrendId === 'ga') && chartData.hasGA && mock.ga?.score) bars.push({ ...mock, cellSub: 'GA', cellScore: mock.ga.score, fill: '#10b981' });
+      subjects.forEach((s, sIdx) => {
+        const score = getSub(mock, s.id)?.score;
+        if ((activeTrendId === 'overall' || activeTrendId === 'full' || activeTrendId === s.id) && score != null && score !== 0) {
+          bars.push({ ...mock, cellSub: s.short || s.name, cellScore: score, fill: colors[sIdx % colors.length] });
+        }
+      });
       
       const n = bars.length;
       if (n === 0) return;
@@ -563,7 +481,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
       data.pop(); // remove trailing gap
     }
     return data;
-  }, [chartDataReversed, chartData]);
+  }, [chartDataReversed, activeTrendId, subjects]);
 
   const renderCustomTick = (props: any) => {
     const { x, y, payload } = props;
@@ -714,7 +632,10 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
       {stats && (
         <>
-          {/* Quick Stats Cards */}
+          
+  
+  
+    {/* Quick Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             
             {/* 1. Streak */}
@@ -805,7 +726,13 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart: Percentile Trend */}
+  
+
+
+            
+  
+  
+    {/* Chart: Percentile Trend */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col min-h-[325px] sm:h-[325px] lg:col-span-2 relative mt-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-4">
                 <div className="flex items-center gap-4">
@@ -824,29 +751,29 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   </div>
                 </div>
                 <div className="flex flex-row overflow-x-auto custom-scrollbar gap-1.5 sm:gap-2 pb-1 sm:pb-0 w-full sm:w-auto">
-                  {['overall', 'full', 'quant', 'reasoning', 'english', 'ga'].map(key => (
+                  {[{ id: 'overall', name: 'Overall' }, { id: 'full', name: 'Full' }, ...subjects].map(s => (
                     <button 
-                      key={key} 
-                      onClick={() => setActiveTrendId(key)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap ${activeTrendId === key ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                      key={s.id} 
+                      onClick={() => setActiveTrendId(s.id)}
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap ${activeTrendId === s.id ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                     >
-                      {key.charAt(0).toUpperCase() + key.slice(1)}
+                      {s.name}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="flex-1 w-full mt-4 overflow-hidden relative min-h-[200px] sm:min-h-[250px]">
                 <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
-                  <ResponsiveContainer width="99%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <LineChart key={`line-${activeTrendId}`} data={activeTrendFilteredChronologicalMocks} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
-                    <RechartsTooltip content={<CustomTooltip chartRefBox={lineChartRefInner} activeTrendId={activeTrendId} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
+                    <RechartsTooltip content={<CustomTooltip chartRefBox={lineChartRefInner} activeTrendId={activeTrendId} subjects={subjects} getSub={getSub} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                     <ReferenceLine y={90} stroke="#10b981" strokeDasharray="3 3" opacity={0.5} />
                     <Line connectNulls={true} type="monotone" dataKey={(m: any) => {
                         if (activeTrendId === 'overall' || activeTrendId === 'full') return m.percentile || m.score;
-                        const v = m[activeTrendId];
+                        const v = getSub(m, activeTrendId);
                         if (!v) return null;
                         return v.percentile || v.score;
                     }} name={(activeTrendId === 'overall' || activeTrendId === 'full') ? 'Percentile/Score' : `${activeTrendId} %ile/Score`} stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
@@ -855,8 +782,14 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
               </div>
               </div>
             </div>
+  
+
+
             
-            {/* Chart: Sectional Scores */}
+            
+  
+  
+    {/* Chart: Sectional Scores */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col min-h-[325px] sm:h-[325px] lg:col-span-2">
               <div className="flex flex-row items-center justify-between gap-2 sm:gap-4 mb-6">
                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center text-sm sm:text-base whitespace-nowrap">
@@ -882,12 +815,12 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                 <>
                   <div className="w-full flex-1 overflow-x-auto overflow-y-hidden touch-pan-x touch-pan-y [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     <div style={{ height: '100%', minWidth: Math.max(flattenedData.length * 28, 400) }} ref={barChartRefInner}>
-                      <ResponsiveContainer width="99%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         <BarChart key={`bar-${activeTrendId}`} style={{ touchAction: 'pan-x' }} data={flattenedData} margin={{ top: 30, right: 20, left: -20, bottom: 5 }} barCategoryGap="0%">
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                           <XAxis dataKey="flatIndex" axisLine={false} tickLine={false} interval={0} height={30} tick={renderCustomTick} />
                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                          <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} activeTrendId={activeTrendId} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
+                          <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} activeTrendId={activeTrendId} subjects={subjects} getSub={getSub} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                           
                           <Bar dataKey="cellScore" barSize={26} radius={[4, 4, 0, 0]}>
                             {flattenedData.map((entry, index) => (
@@ -910,32 +843,36 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                   </div>
                   {/* Custom Legend to prevent scrolling and control order */}
                   <div className="flex flex-wrap justify-center gap-4 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                     {chartData.hasQuant && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#3b82f6] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">Quant</span></div>}
-                     {chartData.hasReasoning && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#8b5cf6] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">Reasoning</span></div>}
-                     {chartData.hasEnglish && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#f59e0b] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">English</span></div>}
-                     {chartData.hasGA && <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-[#10b981] rounded-sm"></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">GA</span></div>}
+                    {subjects.map((s: any, idx: number) => {
+                       const colors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
+                       const hasSub = displayedMocks.some(m => getSub(m, s.id)?.score != null && getSub(m, s.id)?.score !== 0);
+                       if (!hasSub) return null;
+                       return (
+                         <div key={s.id} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors[idx % colors.length] }}></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">{s.short || s.name}</span></div>
+                       );
+                    })}
                   </div>
                 </>
                 ) : (
                 <div className="w-full h-full relative min-h-[200px] sm:min-h-[250px]">
                 <div className="absolute inset-0 w-full h-full" ref={radarChartRefInner}>
-                <ResponsiveContainer width="99%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   {(() => {
-                    const radarData = [
-                      ...(chartData.hasQuant ? [{ subject: 'Quant', value: Number(stats?.avgQuantPercentile || 0).toFixed(1), fullMark: 100, color: '#3b82f6' }] : []),
-                      ...(chartData.hasReasoning ? [{ subject: 'Reasoning', value: Number(stats?.avgReasoningPercentile || 0).toFixed(1), fullMark: 100, color: '#8b5cf6' }] : []),
-                      ...(chartData.hasEnglish ? [{ subject: 'English', value: Number(stats?.avgEnglishPercentile || 0).toFixed(1), fullMark: 100, color: '#f59e0b' }] : []),
-                      ...(chartData.hasGA ? [{ subject: 'GA', value: Number(stats?.avgGaPercentile || 0).toFixed(1), fullMark: 100, color: '#10b981' }] : [])
-                    ];
+                    const colors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
+                    const radarData = subjects.filter((s: any) => displayedMocks.some(m => getSub(m, s.id)?.score != null && getSub(m, s.id)?.score !== 0)).map((s: any, idx: number) => ({
+                      subject: s.short || s.name,
+                      value: Number(stats?.subjectAverages?.[s.id] || 0).toFixed(1),
+                      fullMark: 100,
+                      color: colors[idx % colors.length]
+                    }));
                     return (
                       <RadarChart key={`radar-${activeTrendId}`} cx="50%" cy="50%" outerRadius="65%" margin={{ top: 20, right: 30, bottom: 20, left: 30 }} data={radarData}>
                         <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                         <PolarAngleAxis dataKey="subject" tick={(props: any) => { 
-                          const { payload, x, y, textAnchor } = props; 
-                          const colorMap: any = { 'Quant': '#3b82f6', 'Reasoning': '#8b5cf6', 'English': '#f59e0b', 'GA': '#10b981' }; 
+                          const { payload, x, y, textAnchor, index } = props; 
                           // Apply vertical offset based on position to avoid chart overlap
                           const dy = y < 150 ? -14 : 24;
-                          return <text x={x} y={y} dy={dy} fill={colorMap[payload.value] || '#64748b'} fontSize={13} fontWeight={600} textAnchor={textAnchor}>{payload.value}</text>; 
+                          return <text x={x} y={y} dy={dy} fill={radarData[index]?.color || '#64748b'} fontSize={13} fontWeight={600} textAnchor={textAnchor}>{payload.value}</text>; 
                         }} />
                         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={6} />
                         <Radar name="Percentile" dataKey="value" stroke="#ec4899" strokeWidth={2} fill="#ec4899" fillOpacity={0.3} dot={{ r: 3, fill: '#ec4899' }} activeDot={{ r: 5 }} label={(props: any) => { 
@@ -944,7 +881,7 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                           const dyVal = y < 150 ? 12 : -8;
                           return <text x={x} y={y} dy={dyVal} fill={radarData[index]?.color || "#ec4899"} fontSize={11} fontWeight={700} textAnchor="middle">{value}%</text>; 
                         }} />
-                        <RechartsTooltip content={<CustomTooltip chartRefBox={radarChartRefInner} activeTrendId={activeTrendId} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
+                        <RechartsTooltip content={<CustomTooltip chartRefBox={radarChartRefInner} activeTrendId={activeTrendId} subjects={subjects} getSub={getSub} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
                       </RadarChart>
                     );
                   })()}
@@ -955,6 +892,8 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
               </div>
             </div>
           </div>
+  
+
 
           {/* Smart Insights */}
           <div className="mt-8 mb-4 flex items-center gap-2">
@@ -983,19 +922,23 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
 
                 // 2. Strongest / Weakest Sections by Percentile
                 type SectionScore = { name: string, percentile: number };
-                const secStats: Record<string, number[]> = { Quant: [], Reasoning: [], English: [], GA: [] };
+                const secStats: Record<string, number[]> = {};
+                subjects.forEach((s: any) => secStats[s.id] = []);
                 
                 recentMocks.forEach(m => {
-                   if (m.quant?.percentile) secStats.Quant.push(m.quant.percentile);
-                   if (m.reasoning?.percentile) secStats.Reasoning.push(m.reasoning.percentile);
-                   if (m.english?.percentile) secStats.English.push(m.english.percentile);
-                   if (m.ga?.percentile) secStats.GA.push(m.ga.percentile);
+                   subjects.forEach((s: any) => {
+                     const perc = getSub(m, s.id)?.percentile;
+                     if (perc != null && perc > 0) secStats[s.id].push(perc);
+                   });
                 });
 
-                const sectionAverages = Object.entries(secStats).map(([name, scores]) => ({
-                   name,
-                   avg: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
-                })).filter(s => s.avg > 0).sort((a, b) => b.avg - a.avg);
+                const sectionAverages = Object.entries(secStats).map(([id, scores]) => {
+                   const subj = subjects.find((s: any) => s.id === id);
+                   return {
+                     name: subj?.name || id,
+                     avg: scores.length > 0 ? scores.reduce((a, b) => a + Number(b), 0) / scores.length : 0
+                   };
+                }).filter(s => s.avg > 0).sort((a, b) => b.avg - a.avg);
 
                 const strongest = sectionAverages.length > 0 ? sectionAverages[0] : null;
                 const weakest = sectionAverages.length > 1 ? sectionAverages[sectionAverages.length - 1] : null;
@@ -1115,10 +1058,9 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                     <th className="px-4 py-3 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('mockName')}>Mock Name {getSortConfig('mockName')}</th>
                     <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('score')}>Score {getSortConfig('score')}</th>
                     <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('percentile')}>Percentile {getSortConfig('percentile')}</th>
-                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('quant.score')}>Quant {getSortConfig('quant.score')}</th>
-                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('reasoning.score')}>Reasoning {getSortConfig('reasoning.score')}</th>
-                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('english.score')}>English {getSortConfig('english.score')}</th>
-                    <th className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort('ga.score')}>GA {getSortConfig('ga.score')}</th>
+                    {subjects.map((s: any) => (
+                      <th key={s.id} className="px-4 py-3 font-semibold text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSort(`${s.id}.score`)}>{s.name} {getSortConfig(`${s.id}.score`)}</th>
+                    ))}
                     {(onDeleteMock || onEditMock || showRecycleBin) && <th className="px-4 py-3"></th>}
                   </tr>
                 </thead>
@@ -1184,42 +1126,20 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                      <div className="flex flex-col items-center">
-                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.quant?.score != null && mock.quant.score !== 0 ? mock.quant.score : '-'}</span>
-                        <div className="flex flex-col gap-0.5 mt-1 items-center">
-                          {mock.quant?.percentile != null && mock.quant.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.quant.percentile)}`}>{mock.quant.percentile}%P</span>}
-                          {mock.quant?.accuracy != null && mock.quant.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.quant.accuracy)}`}>{mock.quant.accuracy}%A</span>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                      <div className="flex flex-col items-center">
-                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.reasoning?.score != null && mock.reasoning.score !== 0 ? mock.reasoning.score : '-'}</span>
-                        <div className="flex flex-col gap-0.5 mt-1 items-center">
-                          {mock.reasoning?.percentile != null && mock.reasoning.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.reasoning.percentile)}`}>{mock.reasoning.percentile}%P</span>}
-                          {mock.reasoning?.accuracy != null && mock.reasoning.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.reasoning.accuracy)}`}>{mock.reasoning.accuracy}%A</span>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                       <div className="flex flex-col items-center">
-                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.english?.score != null && mock.english.score !== 0 ? mock.english.score : '-'}</span>
-                        <div className="flex flex-col gap-0.5 mt-1 items-center">
-                          {mock.english?.percentile != null && mock.english.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.english.percentile)}`}>{mock.english.percentile}%P</span>}
-                          {mock.english?.accuracy != null && mock.english.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.english.accuracy)}`}>{mock.english.accuracy}%A</span>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center align-middle">
-                       <div className="flex flex-col items-center">
-                        <span className="font-mono text-slate-600 dark:text-slate-300">{mock.ga?.score != null && mock.ga.score !== 0 ? mock.ga.score : '-'}</span>
-                        <div className="flex flex-col gap-0.5 mt-1 items-center">
-                          {mock.ga?.percentile != null && mock.ga.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.ga.percentile)}`}>{mock.ga.percentile}%P</span>}
-                          {mock.ga?.accuracy != null && mock.ga.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(mock.ga.accuracy)}`}>{mock.ga.accuracy}%A</span>}
-                        </div>
-                      </div>
-                    </td>
+                    {subjects.map((s: any) => {
+                      const sub = getSub(mock, s.id);
+                      return (
+                        <td key={s.id} className="px-4 py-3 text-center align-middle">
+                          <div className="flex flex-col items-center">
+                            <span className="font-mono text-slate-600 dark:text-slate-300">{sub?.score != null && sub.score !== 0 ? sub.score : '-'}</span>
+                            <div className="flex flex-col gap-0.5 mt-1 items-center">
+                              {sub?.percentile != null && sub.percentile !== 0 && <span className={`text-xs font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(sub.percentile)}`}>{sub.percentile}%P</span>}
+                              {sub?.accuracy != null && sub.accuracy !== 0 && <span className={`text-[9px] font-medium px-1.5 rounded whitespace-nowrap ${getHeatmapColor(sub.accuracy)}`}>{sub.accuracy}%A</span>}
+                            </div>
+                          </div>
+                        </td>
+                      );
+                    })}
                     {(onDeleteMock || onEditMock || showRecycleBin) && (
                       <td className="pr-4 py-3 align-middle text-right w-[120px]">
                         <div className="flex items-center justify-end gap-3 text-right">
@@ -1384,7 +1304,14 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
               if (sortField && sortDirection) {
                 // Sorting currently active, display in one list
                 data.sort((a, b) => {
-                  const getNestedVal = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+                  const getNestedVal = (obj: any, path: string) => {
+                    const parts = path.split('.');
+                    if (['score', 'percentile', 'accuracy'].includes(parts[1]) && parts.length === 2 && !['examType', 'mockName'].includes(parts[0])) {
+                      const sub = getSub(obj, parts[0]);
+                      return sub ? sub[parts[1]] : null;
+                    }
+                    return parts.reduce((acc, part) => acc && acc[part], obj);
+                  };
                   let valA = getNestedVal(a, sortField);
                   let valB = getNestedVal(b, sortField);
                   
@@ -1462,382 +1389,16 @@ export default function Dashboard({ mocks, deletedMocks = [], profile, onDeleteM
           </div>
 
           {/* Action Items Modal */}
-          {showTasksModal && createPortal(
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-50 dark:bg-slate-950 backdrop-blur-sm">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.98, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="bg-white dark:bg-slate-900 w-full h-full flex flex-col overflow-hidden"
-              >
-                <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 sm:p-2.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                      <CheckSquare className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-slate-800 dark:text-white">Action Items</h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Your pending tasks</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-4">
-                    <button
-                      onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-                      className={`font-medium px-3 py-1.5 rounded-lg transition-colors text-[10px] sm:text-sm select-none flex items-center gap-2 ${
-                        showCompletedTasks 
-                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/70' 
-                        : 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      Completed
-                    </button>
-                    <button
-                      onClick={() => setShowTasksModal(false)}
-                      className="p-1.5 sm:p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg sm:rounded-xl transition-all hover:scale-105"
-                      title="Close window"
-                    >
-                      <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 bg-slate-50/30 dark:bg-slate-950/20 custom-scrollbar relative z-0">
-                  {(() => {
-                    const mocksWithTasks = mocks.filter(m => m.tasks && m.tasks.length > 0 && (showCompletedTasks || m.tasks.some(t => !t.completed)));
-                    const globalTasks = (profile?.tasks || []).filter(t => showCompletedTasks || !t.completed).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-                    
-                    const handleAddGlobalTask = () => {
-                        if (!newTaskText.trim() || !onUpdateProfileTasks || !profile) return;
-                        const newTasks = [...(profile.tasks || []), { id: Math.random().toString(36).substr(2, 9), text: newTaskText.trim(), completed: false, createdAt: new Date().toISOString() }];
-                        onUpdateProfileTasks(newTasks);
-                        setNewTaskText('');
-                    };
-                    const handleToggleGlobalTask = (taskId: string, completed: boolean) => {
-                        if (!onUpdateProfileTasks || !profile) return;
-                        const newTasks = (profile.tasks || []).map(t => t.id === taskId ? { ...t, completed } : t);
-                        onUpdateProfileTasks(newTasks);
-                    };
-                    const handleDeleteGlobalTask = (taskId: string) => {
-                        if (!onUpdateProfileTasks || !profile) return;
-                        const newTasks = (profile.tasks || []).filter(t => t.id !== taskId);
-                        onUpdateProfileTasks(newTasks);
-                    };
-                    const handleSaveGlobalTaskEdit = () => {
-                        if (!onUpdateProfileTasks || !profile || !editingGlobalTaskId) return;
-                        if (!editGlobalTaskText.trim()) { handleDeleteGlobalTask(editingGlobalTaskId); setEditingGlobalTaskId(null); return; }
-                        const newTasks = (profile.tasks || []).map(t => t.id === editingGlobalTaskId ? { ...t, text: editGlobalTaskText.trim() } : t);
-                        onUpdateProfileTasks(newTasks);
-                        setEditingGlobalTaskId(null);
-                    };
-                    const handleUpdateGlobalTaskParts = (taskId: string, completedParts: number | undefined, totalParts: number | undefined) => {
-                        if (!onUpdateProfileTasks || !profile) return;
-                        const newTasks = (profile.tasks || []).map(t => {
-                           if (t.id === taskId) {
-                              const { completedParts: _cp, totalParts: _tp, ...rest } = t;
-                              if (completedParts === undefined) return rest;
-                              return { ...rest, completedParts, totalParts };
-                           }
-                           return t;
-                        });
-                        onUpdateProfileTasks(newTasks);
-                    };
-
-                    const caughtUp = mocksWithTasks.length === 0 && globalTasks.length === 0;
-
-                    return (
-                      <div className="space-y-6 flex flex-col h-full">
-                        {/* Global Tasks section */}
-                        <div className="flex flex-col gap-4 mb-4">
-                           <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow">
-                             <input 
-                               type="text" 
-                               value={newTaskText} 
-                               onChange={e => setNewTaskText(e.target.value)} 
-                               onKeyDown={e => e.key === 'Enter' && handleAddGlobalTask()}
-                               placeholder="Add a new general task..."
-                               className="flex-1 px-4 py-3 bg-transparent focus:outline-none text-slate-800 dark:text-slate-200 text-sm placeholder:text-slate-400"
-                             />
-                             <button onClick={handleAddGlobalTask} disabled={!newTaskText.trim()} className="px-5 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Add</button>
-                           </div>
-                           
-                           {globalTasks.length > 0 && (
-                             <div className="space-y-2">
-                                {globalTasks.map(task => (
-                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
-                                      <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-5 h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
-                                        {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
-                                      </button>
-                                      <div className="flex-1 min-w-0">
-                                         {editingGlobalTaskId === task.id ? (
-                                           <InlineTaskEditor 
-                                             initialText={task.text}
-                                             onSave={(newText) => {
-                                               if (!newText.trim()) { handleDeleteGlobalTask(editingGlobalTaskId); setEditingGlobalTaskId(null); return; }
-                                               if (onUpdateProfileTasks && profile) {
-                                                 const newTasks = (profile.tasks || []).map(t => t.id === editingGlobalTaskId ? { ...t, text: newText.trim() } : t);
-                                                 onUpdateProfileTasks(newTasks);
-                                               }
-                                               setEditingGlobalTaskId(null);
-                                             }}
-                                             onCancel={() => setEditingGlobalTaskId(null)}
-                                           />
-                                         ) : (
-                                           <div className="flex items-start justify-between gap-3">
-                                              <span className={`text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
-                                              <div className="flex items-center">
-                                                <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-                                                   <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
-                                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
-                                                </div>
-                                                <TaskProgressDisk 
-                                                  task={task} 
-                                                  variant="inline"
-                                                  onUpdateParts={(cp, tp) => handleUpdateGlobalTaskParts(task.id, cp, tp)} 
-                                                />
-                                              </div>
-                                           </div>
-                                         )}
-                                      </div>
-                                   </div>
-                                ))}
-                             </div>
-                           )}
-                        </div>
-
-                        {caughtUp ? (
-                          <div className="flex flex-col items-center justify-center py-10 flex-1 text-center">
-                            <motion.div 
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              className="w-20 h-20 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mb-4 border-4 border-white dark:border-slate-900 shadow-xl"
-                            >
-                              <CheckSquare className="w-8 h-8 text-emerald-500 dark:text-emerald-400" />
-                            </motion.div>
-                            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">All Caught Up!</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-base max-w-sm">
-                              You don't have any pending action items. Great job staying on top of your mock reflections.
-                            </p>
-                          </div>
-                        ) : (
-                          <div>
-                            {(() => {
-                              // Group by date
-                    const groupedByDate: Record<string, typeof mocksWithTasks> = {};
-                    mocksWithTasks.forEach(mock => {
-                      const dateStr = parseLocalDate(mock.date)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) || 'Unknown Date';
-                      if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
-                      groupedByDate[dateStr].push(mock);
-                    });
-
-                    // Sort dates (we'll just use the first mock's natural date string to sort the keys)
-                    const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
-                       const dA = new Date(groupedByDate[a][0].date).getTime();
-                       const dB = new Date(groupedByDate[b][0].date).getTime();
-                       return dB - dA;
-                    });
-                    
-                    return sortedDates.map(dateLabel => (
-                      <div key={dateLabel} className="mb-6 last:mb-2">
-                        <div className="flex items-center gap-4 mb-3 py-1 -mx-4 px-4 sm:mx-0 sm:px-0">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 tracking-wider uppercase flex items-center gap-2">
-
-                            <CalendarDays className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
-                            {dateLabel}
-                          </h3>
-                          <div className="flex-1 border-b border-slate-200 dark:border-slate-800"></div>
-                        </div>
-                        <div className="space-y-4">
-                          {groupedByDate[dateLabel].sort((a, b) => new Date(b.createdAt||0).getTime() - new Date(a.createdAt||0).getTime()).map(mock => {
-                            const tasksToShow = mock.tasks?.filter(t => showCompletedTasks || !t.completed) || [];
-                            if (tasksToShow.length === 0) return null;
-                            
-                            const isExpanded = expandedActionMocks[mock.id];
-                            
-                            return (
-                              <div key={mock.id} className="bg-white dark:bg-slate-800 sm:rounded-2xl border-y sm:border-x border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm hover:shadow-md transition-shadow -mx-4 sm:mx-0">
-                                <div 
-                                  className="px-4 py-2.5 sm:py-3 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/80 flex flex-col gap-2 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors group"
-                                  onClick={() => setExpandedActionMocks(prev => ({ ...prev, [mock.id]: !prev[mock.id] }))}
-                                >
-                                  <div className="flex items-start sm:items-center justify-between">
-                                    <div className="flex items-start sm:items-center gap-2 flex-1 min-w-0 overflow-hidden sm:flex-wrap pt-0 pb-[2px]">
-                                      <h4 className="font-bold text-slate-800 dark:text-slate-100 truncate max-w-[220px] sm:max-w-none text-lg leading-[24px]">
-                                        {mock.mockName}
-                                      </h4>
-                                      
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 shrink-0">
-                                        <div className="flex items-center gap-1">
-                                          <span className="font-semibold text-slate-700 dark:text-slate-200 bg-slate-200/60 dark:bg-slate-700 px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded text-[6px] sm:text-[10px] leading-none uppercase tracking-wide">{mock.examType}</span>
-                                          {mock.examRole && <span className="font-semibold text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 leading-none tracking-wide">{mock.examRole}</span>}
-                                        </div>
-                                        {(mock.examPhase || mock.examScope) && (
-                                          <div className="flex items-center gap-1">
-                                            {mock.examPhase && <span className="font-semibold text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 leading-none tracking-wide">{mock.examPhase}</span>}
-                                            {mock.examScope && <span className="font-semibold text-[6px] sm:text-[10px] px-1 sm:px-1.5 py-[2px] sm:py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 leading-none tracking-wide">{mock.examScope}</span>}
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {isExpanded && mock.tags && mock.tags.length > 0 && (
-                                        <div className="flex items-center gap-1 flex-wrap border-l border-slate-200 dark:border-slate-700 pl-1.5 ml-0.5 sm:border-none sm:pl-0 sm:ml-0">
-                                          {mock.tags.map((t: string) => (
-                                            <span key={t} className="px-1 sm:px-1.5 py-[2px] sm:py-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 text-[6px] sm:text-[10px] rounded font-bold uppercase tracking-wider flex items-center shrink-0 leading-none">#{t}</span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                    {isExpanded && <span className="font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-[8px] sm:text-[10px] px-1.5 py-0.5 rounded-md shadow-sm shrink-0 ml-2 hidden sm:inline-block">{getPlatformShort(mock.platform)}</span>}
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); setAddingTaskToMockId(addingTaskToMockId === mock.id ? null : mock.id); setNewMockTaskText(''); if (!isExpanded) setExpandedActionMocks(prev => ({ ...prev, [mock.id]: true })); }}
-                                      className="p-1 sm:p-1.5 ml-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-md transition-colors"
-                                      title="Add Task for this Mock"
-                                    >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                    </button>
-                                  </div>
-                                  {isExpanded && (mock.difficulty || mock.focus || mock.timeState || mock.energy || mock.nervousness) && (
-                                    <div className="flex flex-nowrap items-center justify-start gap-1 sm:gap-2 w-full -mt-2 overflow-x-auto scrollbar-hide pb-[2px] leading-6">
-                                      {mock.difficulty && (
-                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-purple-50 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
-                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-purple-600 dark:text-purple-400 font-bold opacity-90 leading-none">Diff:</span>
-                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-purple-900 dark:text-purple-100 leading-none">{mock.difficulty}</span>
-                                        </div>
-                                      )}
-                                      {mock.nervousness && (
-                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-amber-50 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
-                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400 font-bold opacity-90 leading-none">Nervous:</span>
-                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-100 leading-none">{mock.nervousness}</span>
-                                        </div>
-                                      )}
-                                      {mock.focus && (
-                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
-                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400 font-bold opacity-90 leading-none">Focus:</span>
-                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-100 leading-none">{mock.focus}</span>
-                                        </div>
-                                      )}
-                                      {mock.energy && (
-                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
-                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400 font-bold opacity-90 leading-none">Energy:</span>
-                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-100 leading-none">{mock.energy}</span>
-                                        </div>
-                                      )}
-                                      {mock.timeState && (
-                                        <div style={{ height: '13.0833px' }} className="flex items-center gap-[2px] sm:gap-1 px-1 sm:px-2 py-[2px] sm:py-1 bg-orange-50 dark:bg-orange-900/40 border border-orange-200 dark:border-orange-800/50 rounded shadow-sm shrink-0 whitespace-nowrap">
-                                          <span className="text-[6px] sm:text-[10px] uppercase tracking-wide text-orange-600 dark:text-orange-400 font-bold opacity-90 leading-none">Time:</span>
-                                          <span className="text-[6px] sm:text-[10px] font-bold uppercase tracking-wider text-orange-900 dark:text-orange-100 leading-none">{mock.timeState}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="px-4 py-2.5 sm:p-4 -mt-1.5 sm:mt-0 space-y-2 bg-white dark:bg-slate-800">
-                                  {tasksToShow.map((task) => (
-                                    <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="flex items-start gap-2 group cursor-pointer p-1 -ml-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                                      <input 
-                                        type="checkbox" 
-                                        checked={task.completed} 
-                                        onChange={async (e) => {
-                                          e.stopPropagation();
-                                          if (onUpdateReflection) {
-                                            const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, completed: !task.completed } : t) || [];
-                                            await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                          }
-                                        }}
-                                        className="mt-0.5 w-3.5 h-3.5 text-indigo-600 rounded-sm border-slate-300 focus:ring-0 dark:border-slate-600 dark:bg-slate-800 mb-auto cursor-pointer"
-                                        style={{ opacity: task.completed ? 0.7 : 1 }}
-                                      />
-                                      <div className="flex-1 min-w-0">
-                                        {editingMockTaskId === task.id && mockIdOfEditingTask === mock.id ? (
-                                           <InlineTaskEditor 
-                                              initialText={task.text}
-                                              onSave={async (newText) => {
-                                                if (!newText.trim()) {
-                                                    const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || [];
-                                                    if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                } else {
-                                                    const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, text: newText.trim() } : t) || [];
-                                                    if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                }
-                                                setEditingMockTaskId(null);
-                                                setMockIdOfEditingTask(null);
-                                              }}
-                                              onCancel={() => {
-                                                setEditingMockTaskId(null);
-                                                setMockIdOfEditingTask(null);
-                                              }}
-                                           />
-                                        ) : (
-                                           <div className="flex items-start justify-between gap-2">
-                                              <span className={`text-sm select-none ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                {task.text}
-                                              </span>
-                                              <div className="flex items-center">
-                                                <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
-                                                   <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(task.id); setMockIdOfEditingTask(mock.id); setActiveActionsTaskId(null); }} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
-                                                   <button onClick={async (e) => { e.stopPropagation(); if (onUpdateReflection) { const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || []; await onUpdateReflection(mock.id, { tasks: updatedTasks }); setActiveActionsTaskId(null); } }} className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                                                </div>
-                                                <TaskProgressDisk 
-                                                  task={task} 
-                                                  variant="inline"
-                                                  onUpdateParts={async (cp, tp) => {
-                                                    if (!onUpdateReflection) return;
-                                                    const updatedTasks = mock.tasks?.map(t => {
-                                                      if (t.id === task.id) {
-                                                        const { completedParts: _cp, totalParts: _tp, ...rest } = t;
-                                                        if (cp === undefined) return rest;
-                                                        return { ...rest, completedParts: cp, totalParts: tp };
-                                                      }
-                                                      return t;
-                                                    }) || [];
-                                                    await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                  }} 
-                                                />
-                                              </div>
-                                           </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {addingTaskToMockId === mock.id && (
-                                    <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                                      <input autoFocus type="text" value={newMockTaskText} onChange={e => setNewMockTaskText(e.target.value)} onKeyDown={async e => {
-                                        if (e.key === 'Enter') {
-                                          if (newMockTaskText.trim()) {
-                                              const newTasks = [...(mock.tasks||[]), { id: Math.random().toString(36).substr(2, 9), text: newMockTaskText.trim(), completed: false }];
-                                              if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: newTasks });
-                                              setNewMockTaskText('');
-                                          } else {
-                                              setAddingTaskToMockId(null);
-                                          }
-                                        }
-                                      }} placeholder="New task text..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                                      <div className="flex gap-2">
-                                        <button disabled={!newMockTaskText.trim()} onClick={async () => {
-                                          if (newMockTaskText.trim()) {
-                                              const newTasks = [...(mock.tasks||[]), { id: Math.random().toString(36).substr(2, 9), text: newMockTaskText.trim(), completed: false }];
-                                              if (onUpdateReflection) await onUpdateReflection(mock.id, { tasks: newTasks });
-                                              setNewMockTaskText('');
-                                          }
-                                        }} className="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors disabled:opacity-50">Add</button>
-                                        <button onClick={() => setAddingTaskToMockId(null)} className="text-xs font-medium px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Done</button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      </motion.div>
-    </div>, document.body)}
+          <ActionItemsModal 
+            showTasksModal={showTasksModal}
+            setShowTasksModal={setShowTasksModal}
+            mocks={mocks}
+            profile={profile}
+            onUpdateProfileTasks={onUpdateProfileTasks}
+            onUpdateReflection={onUpdateReflection}
+          />
     </div>
   );
 }
+
+

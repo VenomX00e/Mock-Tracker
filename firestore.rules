@@ -23,7 +23,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isSignedIn() && request.auth.token.email == 'mrityunjoyk29@gmail.com';
+      return isSignedIn() && request.auth.token.email == 'mrityunjoyk29@gmail.com' && request.auth.token.email_verified == true;
     }
 
     function isAnyAdmin() {
@@ -73,7 +73,9 @@ service cloud.firestore {
         && (!data.keys().hasAny(['energy']) || data.energy is string || data.energy == null)
         && (!data.keys().hasAny(['timeState']) || data.timeState is string || data.timeState == null)
         && (!data.keys().hasAny(['tasks']) || data.tasks is list || data.tasks == null)
-        && (!data.keys().hasAny(['isDeleted']) || data.isDeleted is bool);
+        && (!data.keys().hasAny(['isDeleted']) || data.isDeleted is bool)
+        && (!data.keys().hasAny(['categoryId']) || data.categoryId is string)
+        && (!data.keys().hasAny(['dynamicSubjects']) || data.dynamicSubjects is map);
     }
 
     function isValidUserProfile(data) {
@@ -94,12 +96,19 @@ service cloud.firestore {
         && (!data.keys().hasAny(['isBanned']) || data.isBanned is bool)
         && (!data.keys().hasAny(['isMuted']) || data.isMuted is bool)
         && (!data.keys().hasAny(['lastMockDate']) || data.lastMockDate is string)
-        && (!data.keys().hasAny(['role']) || data.role is string);
+        && (!data.keys().hasAny(['role']) || data.role is string)
+        && (!data.keys().hasAny(['categoryId']) || data.categoryId is string)
+        && (!data.keys().hasAny(['dynamicSubjects']) || data.dynamicSubjects is map)
+        && (!data.keys().hasAny(['streakActive']) || data.streakActive is bool)
+        && (!data.keys().hasAny(['dynamicAverages']) || data.dynamicAverages is map)
+        && (!data.keys().hasAny(['stats30D']) || data.stats30D is map)
+        && (!data.keys().hasAny(['stats7D']) || data.stats7D is map)
+        && (!data.keys().hasAny(['categoryStats']) || data.categoryStats is map);
     }
 
     function isValidChatMessage(data) {
       return data.keys().hasAll(['userId', 'userName', 'userPhoto', 'text', 'createdAt'])
-        && data.keys().size() >= 5 && data.keys().size() <= 9
+        && data.keys().size() >= 5 && data.keys().size() <= 10
         && data.userId is string && data.userId == request.auth.uid
         && data.userName is string && data.userName.size() <= 100
         && data.userPhoto is string && data.userPhoto.size() <= 500
@@ -108,26 +117,88 @@ service cloud.firestore {
         && (!data.keys().hasAny(['replyTo']) || (data.replyTo is map && data.replyTo.keys().hasAll(['id', 'text', 'userName'])))
         && (!data.keys().hasAny(['reactions']) || data.reactions is map)
         && (!data.keys().hasAny(['poll']) || data.poll is map)
+        && (!data.keys().hasAny(['isPinned']) || data.isPinned is bool)
         && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is number);
     }
 
+    function isValidChallenge(data) {
+      return data.keys().hasAll(['title', 'startDate', 'endDate'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && (!data.keys().hasAny(['description']) || (data.description is string && data.description.size() <= 2000))
+        && (!data.keys().hasAny(['challengeType']) || (data.challengeType is string && data.challengeType.size() <= 50))
+        && (!data.keys().hasAny(['todoFrequency']) || (data.todoFrequency is string && data.todoFrequency.size() <= 50))
+        && (!data.keys().hasAny(['visibility']) || (data.visibility is string && data.visibility.size() <= 50))
+        && (!data.keys().hasAny(['startDate']) || (data.startDate is string && data.startDate.size() <= 50))
+        && (!data.keys().hasAny(['endDate']) || (data.endDate is string && data.endDate.size() <= 50))
+        && (!data.keys().hasAny(['status']) || (data.status is string && data.status.size() <= 50))
+        && (!data.keys().hasAny(['approvalStatus']) || (data.approvalStatus is string && data.approvalStatus.size() <= 50))
+        && (!data.keys().hasAny(['categoryId']) || (data.categoryId is string && data.categoryId.size() <= 128))
+        && (!data.keys().hasAny(['creatorId']) || (data.creatorId is string && data.creatorId.size() <= 128))
+        && (!data.keys().hasAny(['id']) || (data.id is string && data.id.size() <= 128))
+        && (!data.keys().hasAny(['durationDays']) || data.durationDays is number)
+        && (!data.keys().hasAny(['createdAt']) || data.createdAt is string || data.createdAt is timestamp)
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is string || data.updatedAt is timestamp)
+        && (!data.keys().hasAny(['deletedByAdmin']) || data.deletedByAdmin is bool)
+        && (!data.keys().hasAny(['deletedByCreator']) || data.deletedByCreator is bool)
+        && (!data.keys().hasAny(['permanentlyDeletedByAdmin']) || data.permanentlyDeletedByAdmin is bool)
+        && (!data.keys().hasAny(['permanentlyDeletedByCreator']) || data.permanentlyDeletedByCreator is bool)
+        && (!data.keys().hasAny(['tasks']) || (data.tasks is list && data.tasks.size() <= 100));
+    }
+
+    function isValidChallengeParticipant(data) {
+      return (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 100))
+        && (!data.keys().hasAny(['photoURL']) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && (!data.keys().hasAny(['streak']) || data.streak is number)
+        && (!data.keys().hasAny(['totalMocks']) || data.totalMocks is number)
+        && (!data.keys().hasAny(['dailyMocks']) || data.dailyMocks is number)
+        && (!data.keys().hasAny(['lastCheckInDate']) || (data.lastCheckInDate is string && data.lastCheckInDate.size() <= 50))
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is string || data.updatedAt is timestamp)
+        && (!data.keys().hasAny(['checkInDates']) || (data.checkInDates is list && data.checkInDates.size() <= 500))
+        && (!data.keys().hasAny(['checkInTimes']) || (data.checkInTimes is list && data.checkInTimes.size() <= 500))
+        && (!data.keys().hasAny(['completedTasks']) || data.completedTasks is map)
+        && (!data.keys().hasAny(['activities']) || (data.activities is list && data.activities.size() <= 500));
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAnyAdmin();
+    }
+
     match /system/{docId} {
-      allow read: if isSignedIn() || docId == 'settings';
+      allow get: if isSignedIn() || docId == 'settings';
+      allow list: if isSignedIn();
       allow create: if isAnyAdmin() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
-      allow update: if isAnyAdmin() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock') || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
+      allow update: if isAnyAdmin() 
+        || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'link', 'createdAt', 'createdBy', 'type', 'updatedAt', 'color', 'icon', 'categoryId']) && (!incoming().keys().hasAny(['createdBy']) || incoming().createdBy == existing().createdBy) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
+        || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
       allow delete: if isAnyAdmin() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid);
     }
 
     match /challenges/{challengeId} {
       allow read: if isSignedIn();
-      allow create: if isAnyAdmin() || (isSignedIn() && incoming().keys().hasAll(['creatorId']) && incoming().creatorId == request.auth.uid);
-      allow update: if isAnyAdmin() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid && (!incoming().keys().hasAny(['creatorId']) || incoming().creatorId == existing().creatorId));
+      allow create: if isAnyAdmin() || (isSignedIn() && incoming().keys().hasAll(['creatorId']) && incoming().creatorId == request.auth.uid && isValidChallenge(incoming()));
+      allow update: if isAnyAdmin() || (
+        isSignedIn() 
+        && existing().keys().hasAll(['creatorId']) 
+        && existing().creatorId == request.auth.uid 
+        && (!incoming().keys().hasAny(['creatorId']) || incoming().creatorId == existing().creatorId)
+        && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)
+        && isValidChallenge(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'challengeType', 'todoFrequency', 'visibility', 'tasks', 'startDate', 'endDate', 'durationDays', 'status', 'updatedAt', 'categoryId', 'deletedByCreator', 'permanentlyDeletedByCreator', 'approvalStatus', 'id', 'createdAt'])
+        && (!(existing().visibility == 'personal' && incoming().visibility == 'global') || incoming().approvalStatus == 'pending')
+        && (!(existing().visibility == 'global' && existing().approvalStatus == 'pending' && incoming().approvalStatus == 'approved'))
+      );
       allow delete: if isAnyAdmin() || (isSignedIn() && existing().keys().hasAll(['creatorId']) && existing().creatorId == request.auth.uid);
       
       match /participants/{userId} {
         allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.auth.uid == userId;
-        allow update: if (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks'])) || isAnyAdmin();
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidChallengeParticipant(incoming());
+        allow update: if isAnyAdmin() || (
+          isSignedIn() 
+          && request.auth.uid == userId 
+          && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks'])
+          && isValidChallengeParticipant(incoming())
+        );
         allow delete: if isAnyAdmin() || (isSignedIn() && request.auth.uid == userId);
       }
     }
@@ -141,19 +212,28 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidChatMessage(incoming());
       allow update: if isAnyAdmin() 
-        || (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isEdited', 'updatedAt']) && incoming().text is string && incoming().text.size() <= 2000)
-        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']))
-        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['poll']))
-        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'poll']));
+        || (isSignedIn() && existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isEdited', 'updatedAt']) && incoming().text is string && incoming().text.size() <= 2000 && incoming().updatedAt is number)
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']) && incoming().reactions is map)
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['poll']) && incoming().poll is map)
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'poll']) && incoming().reactions is map && incoming().poll is map);
       allow delete: if isAnyAdmin() || (isSignedIn() && existing().userId == request.auth.uid);
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming());
-      allow update: if (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && (
-        !incoming().diff(existing()).affectedKeys().hasAny(['isBanned', 'isMuted', 'role', 'permissions'])
-      )) || isSuperAdmin() || (isAnyAdmin() && !incoming().diff(existing()).affectedKeys().hasAny(['role', 'permissions']));
+      allow update: if isSuperAdmin() 
+        || (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
+          'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 'totalTests', 'streak', 
+          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats'
+        ]) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
+        || (isAnyAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+          'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
+          'avgAccuracy', 'avgQuantPercentile', 'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 
+          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats'
+        ]));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
     }
 
@@ -177,9 +257,10 @@ service cloud.firestore {
         && request.auth.uid == userId
         && isValidId(mockId)
         && isValidMockScore(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'updatedAt', 'streakAtTime', 'note', 'tags', 'difficulty', 'nervousness', 'focus', 'energy', 'timeState', 'tasks', 'isDeleted'])
+        && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'userId', 'userName', 'examType', 'examRole', 'examPhase', 'examScope', 'platform', 'customPlatform', 'mockName', 'date', 'score', 'percentile', 'percentage', 'accuracy', 'quant', 'reasoning', 'english', 'ga', 'createdAt', 'updatedAt', 'streakAtTime', 'note', 'tags', 'difficulty', 'nervousness', 'focus', 'energy', 'timeState', 'tasks', 'isDeleted', 'categoryId', 'dynamicSubjects'])
         && incoming().id == existing().id
-        && incoming().userId == existing().userId) || isAnyAdmin();
+        && incoming().userId == existing().userId
+        && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) || isAnyAdmin();
         
       allow delete: if (isSignedIn() && request.auth.uid == userId && isValidId(mockId)) || isAnyAdmin();
     }

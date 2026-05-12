@@ -1,10 +1,16 @@
 import { MockScore } from "../types";
+import { auth } from "./firebase";
 
 export async function parseMockAnnouncementImage(images: { base64: string, mimeType: string }[]): Promise<any> {
   const customKey = localStorage.getItem('geminiApiKey');
+  const token = await auth.currentUser?.getIdToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   const response = await fetch('/api/extract-mock', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ images, customApiKey: customKey || null })
   });
   
@@ -20,12 +26,26 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
   return await response.json();
 }
 
-export async function parseScorecardImage(images: { base64: string, mimeType: string }[]): Promise<Partial<MockScore>> {
+
+function extractNum(val: any): number | null {
+  if (val == null || val === '') return null;
+  const str = String(val).trim();
+  const match = str.match(/(?:\b|^)-?\d+(?:\.\d+)?/);
+  if (match) return Number(match[0]);
+  return null;
+}
+
+export async function parseScorecardImage(images: { base64: string, mimeType: string }[], subjects?: { id: string, name: string }[]): Promise<Partial<MockScore>> {
   const customKey = localStorage.getItem('geminiApiKey');
+  const token = await auth.currentUser?.getIdToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   const response = await fetch('/api/extract-scorecard', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images, customApiKey: customKey || null })
+    headers,
+    body: JSON.stringify({ images, customApiKey: customKey || null, subjects })
   });
   
   if (!response.ok) {
@@ -44,7 +64,7 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
     return String(val);
   };
 
-  return {
+  const returnObj = {
     examType: cleanStr(parsed.examType),
     examRole: cleanStr(parsed.examRole),
     examPhase: cleanStr(parsed.examPhase),
@@ -53,29 +73,32 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
     platform: cleanStr(parsed.platform),
     detectedSubject: parsed.detectedSubject || null,
     date: parsed.date || new Date().toISOString().split('T')[0],
-    score: parsed.score != null ? Number(parsed.score) : null,
-    percentile: parsed.percentile != null ? Number(parsed.percentile) : null,
-    percentage: parsed.percentage != null ? Number(parsed.percentage) : null,
-    accuracy: parsed.accuracy != null ? Number(parsed.accuracy) : null,
-    quant: {
-      score: parsed.quant?.score != null ? Number(parsed.quant.score) : null,
-      percentile: parsed.quant?.percentile != null ? Number(parsed.quant.percentile) : null,
-      accuracy: parsed.quant?.accuracy != null ? Number(parsed.quant.accuracy) : null,
-    },
-    reasoning: {
-      score: parsed.reasoning?.score != null ? Number(parsed.reasoning.score) : null,
-      percentile: parsed.reasoning?.percentile != null ? Number(parsed.reasoning.percentile) : null,
-      accuracy: parsed.reasoning?.accuracy != null ? Number(parsed.reasoning.accuracy) : null,
-    },
-    english: {
-      score: parsed.english?.score != null ? Number(parsed.english.score) : null,
-      percentile: parsed.english?.percentile != null ? Number(parsed.english.percentile) : null,
-      accuracy: parsed.english?.accuracy != null ? Number(parsed.english.accuracy) : null,
-    },
-    ga: {
-      score: parsed.ga?.score != null ? Number(parsed.ga.score) : null,
-      percentile: parsed.ga?.percentile != null ? Number(parsed.ga.percentile) : null,
-      accuracy: parsed.ga?.accuracy != null ? Number(parsed.ga.accuracy) : null,
-    }
+    score: parsed.score != null ? extractNum(parsed.score) : null,
+    percentile: parsed.percentile != null ? extractNum(parsed.percentile) : null,
+    percentage: parsed.percentage != null ? extractNum(parsed.percentage) : null,
+    accuracy: parsed.accuracy != null ? extractNum(parsed.accuracy) : null,
   } as any;
+
+  if (subjects) {
+    subjects.forEach(s => {
+      if (parsed[s.id]) {
+        (returnObj as any)[s.id] = {
+          score: parsed[s.id]?.score != null ? extractNum(parsed[s.id].score) : null,
+          percentile: parsed[s.id]?.percentile != null ? extractNum(parsed[s.id].percentile) : null,
+          accuracy: parsed[s.id]?.accuracy != null ? extractNum(parsed[s.id].accuracy) : null,
+        }
+      }
+    });
+  } else {
+    ['quant', 'reasoning', 'english', 'ga'].forEach(s => {
+      if (parsed[s]) {
+        (returnObj as any)[s] = {
+          score: parsed[s]?.score != null ? extractNum(parsed[s].score) : null,
+          percentile: parsed[s]?.percentile != null ? extractNum(parsed[s].percentile) : null,
+          accuracy: parsed[s]?.accuracy != null ? extractNum(parsed[s].accuracy) : null,
+        }
+      }
+    });
+  }
+  return returnObj;
 }
