@@ -186,8 +186,8 @@ export default function Dashboard() {
 
   // get unique exam types
   const examTypes = useMemo(() => {
-    const types = new Set(mocks.map(m => m.examType).filter(Boolean));
-    return ['All', ...Array.from(types).sort()];
+    const types = new Set<string>(mocks.map(m => m.examType).filter((t): t is string => !!t));
+    return ['All', ...Array.from<string>(types).sort()];
   }, [mocks]);
 
   const [leaderboardRank, setLeaderboardRank] = useState<number | null>(null);
@@ -286,7 +286,7 @@ export default function Dashboard() {
   }, [selectedExam]);
 
   const allGlobalPhases = useMemo(() => {
-    const phases = Array.from(new Set(mocks.map(m => m.examPhase).filter(Boolean)));
+    const phases = Array.from<string>(new Set<string>(mocks.map(m => m.examPhase).filter((t): t is string => !!t)));
     const catPhases = activeCategory?.phases || [];
     phases.sort((a, b) => {
       const idxA = catPhases.indexOf(a);
@@ -347,8 +347,8 @@ export default function Dashboard() {
   const availableRoles = useMemo(() => {
     if (selectedExam === 'All') return [];
     const baseSelected = mocks.filter(m => m.examType === selectedExam);
-    const roles = new Set(baseSelected.map(m => m.examRole).filter(Boolean));
-    return roles.size > 0 ? ['All', ...Array.from(roles).sort()] : [];
+    const roles = new Set<string>(baseSelected.map(m => m.examRole).filter((t): t is string => !!t));
+    return roles.size > 0 ? ['All', ...Array.from<string>(roles).sort()] : [];
   }, [mocks, selectedExam]);
 
   const availablePhases = useMemo(() => {
@@ -357,8 +357,8 @@ export default function Dashboard() {
     if (selectedRole !== 'All') {
       baseSelected = baseSelected.filter(m => m.examRole === selectedRole);
     }
-    const phases = new Set(baseSelected.map(m => m.examPhase).filter(Boolean));
-    return phases.size > 0 ? ['All', ...Array.from(phases).sort()] : [];
+    const phases = new Set<string>(baseSelected.map(m => m.examPhase).filter((t): t is string => !!t));
+    return phases.size > 0 ? ['All', ...Array.from<string>(phases).sort()] : [];
   }, [mocks, selectedExam, selectedRole]);
 
   const availableScopes = useMemo(() => {
@@ -370,8 +370,8 @@ export default function Dashboard() {
     if (selectedPhase !== 'All') {
       baseSelected = baseSelected.filter(m => m.examPhase === selectedPhase);
     }
-    const scopes = new Set(baseSelected.map(m => m.examScope).filter(Boolean));
-    return scopes.size > 0 ? ['All', ...Array.from(scopes).sort()] : [];
+    const scopes = new Set<string>(baseSelected.map(m => m.examScope).filter((t): t is string => !!t));
+    return scopes.size > 0 ? ['All', ...Array.from<string>(scopes).sort()] : [];
   }, [mocks, selectedExam, selectedRole, selectedPhase]);
 
   // Overview stats calculation
@@ -742,7 +742,7 @@ export default function Dashboard() {
                   <div className="w-24 sm:w-28 mt-1 sm:mt-0">
                     <CustomDropdown
                       value={selectedPhase}
-                      options={selectedExam === 'All' ? allGlobalPhases : (availablePhases.length > 0 ? availablePhases.map(p => typeof p === 'string' ? p : p) : allGlobalPhases)}
+                      options={selectedExam === 'All' || availablePhases.length === 0 ? allGlobalPhases : availablePhases}
                       onChange={(val) => setSelectedPhase(val)}
                       placeholder="Phase"
                       buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700/50 border-transparent rounded-lg"

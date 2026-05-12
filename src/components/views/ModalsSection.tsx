@@ -179,7 +179,7 @@ export function ModalsSection() {
             setAdminEditNotice(null);
             setAdminEditCountdown(null);
           }}
-          initialTab={adminTab}
+          initialTab={adminTab as any}
           editNoticeData={adminEditNotice}
           editCountdownData={adminEditCountdown}
           categories={categories}

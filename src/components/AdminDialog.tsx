@@ -1001,16 +1001,12 @@ export default function AdminDialog({
               setEditingLiveMockId(null);
               setLiveMockData({
                 examType: "",
-                role: "",
-                phase: "",
+                examRole: "",
+                examPhase: "Prelims",
+                examScope: "Full",
+                mockName: "",
                 platform: "",
-                scope: "",
-                isFree: false,
                 date: "",
-                customExam: "",
-                customRole: "",
-                customPhase: "",
-                customPlatform: "",
               });
               setIsCustomExam(false);
               setIsCustomRole(false);
