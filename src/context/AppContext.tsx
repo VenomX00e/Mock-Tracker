@@ -108,7 +108,17 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
   };
 
   const systemDataVal = useSystemData(user, profile, adminPermissions);
-  const { pinnedChallenges, fetchAnnouncement, notices, setNotices } = systemDataVal;
+  const { pinnedChallenges, fetchAnnouncement, notices, setNotices, categories } = systemDataVal;
+
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      const exists = categories.find((c: any) => c.id === localCategory);
+      if (!exists) {
+        const fallback = categories.find((c: any) => c.id === 'banking') ? 'banking' : categories[0].id;
+        setLocalCategory(fallback);
+      }
+    }
+  }, [categories, localCategory]);
 
   const challengesManagerVal = useChallengesManager(user, adminPermissions, pinnedChallenges, systemDataVal.setPinnedChallenges, fetchAnnouncement);
   const inlineEditNoticeVal = useInlineEditNotice(user, isAdmin, notices, setNotices);

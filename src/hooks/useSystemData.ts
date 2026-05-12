@@ -18,6 +18,17 @@ export function useSystemData(user: any, profile: any, adminPermissions: any) {
     }
   }, [profile?.categoryId]);
 
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      const exists = categories.find(c => c.id === selectedCategory);
+      if (!exists) {
+        // Fallback to banking or the first available category if banking isn't there
+        const fallback = categories.find(c => c.id === 'banking') ? 'banking' : categories[0].id;
+        setSelectedCategory(fallback);
+      }
+    }
+  }, [categories, selectedCategory]);
+
   const fetchAnnouncement = useCallback(async () => {
     await Promise.all([
       mutateChallenges(),

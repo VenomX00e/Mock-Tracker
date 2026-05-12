@@ -229,6 +229,41 @@ export function AdminCategoriesTab({
       return;
     }
     try {
+      // Also delete related global data (system documents like notices, countdowns, liveMocks and challenges)
+      const { collection, collectionGroup, query, where, getDocs, writeBatch } = await import('firebase/firestore');
+      
+      const systemQ = query(collection(db, 'system'), where('categoryId', '==', deleteConfirmId));
+      const systemSnap = await getDocs(systemQ);
+      
+      const challengeQ = query(collection(db, 'challenges'), where('categoryId', '==', deleteConfirmId));
+      const challengeSnap = await getDocs(challengeQ);
+
+      const mocksQ = query(collectionGroup(db, 'mocks'), where('categoryId', '==', deleteConfirmId));
+      const mocksSnap = await getDocs(mocksQ);
+      
+      // Note: we could chunk batches if > 500 but normally this is fine for this app
+      const batches = [];
+      let currentBatch = writeBatch(db);
+      let opCount = 0;
+
+      const queueDelete = (ref: any) => {
+        currentBatch.delete(ref);
+        opCount++;
+        if (opCount === 500) {
+          batches.push(currentBatch);
+          currentBatch = writeBatch(db);
+          opCount = 0;
+        }
+      };
+
+      systemSnap.forEach(snap => queueDelete(snap.ref));
+      challengeSnap.forEach(snap => queueDelete(snap.ref));
+      mocksSnap.forEach(snap => queueDelete(snap.ref));
+
+      if (opCount > 0) batches.push(currentBatch);
+
+      await Promise.all(batches.map(b => b.commit()));
+
       await deleteDoc(doc(db, "categories", deleteConfirmId));
       if (selectedId === deleteConfirmId) {
         setSelectedId(null);
