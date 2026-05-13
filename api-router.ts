@@ -1,5 +1,12 @@
 import express from "express";
 import { GoogleGenAI, Type } from "@google/genai";
+import admin from "firebase-admin";
+import firebaseConfig from "./firebase-applet-config.json";
+
+if (!admin.apps.length) {
+   admin.initializeApp({ projectId: firebaseConfig.projectId });
+}
+
 
 const app = express();
 app.use(express.json({ limit: "50mb" }));
@@ -55,25 +62,13 @@ app.post("/api/extract-mock", async (req, res) => {
     }
     const token = authHeader.split('Bearer ')[1];
     
-    // Lazy initialize admin if needed, or rely on cron.ts initializing it
-    const admin = await import("firebase-admin");
-    if (!admin.default.apps.length) {
-      try {
-         const fs = await import("fs");
-         const path = await import("path");
-         const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
-         const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-         admin.default.initializeApp({ projectId: config.projectId });
-      } catch (e) {
-         console.warn("Could not lazily initialize firebase-admin", e);
-      }
-    }
+
 
     try {
-      await admin.default.auth().verifyIdToken(token);
-    } catch (authErr) {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res.status(403).json({ error: "Forbidden: Invalid token" });
+      return res.status(403).json({ error: "Forbidden: Invalid token. " + (authErr?.message || "") });
     }
 
     const { images, customApiKey } = req.body;
@@ -137,25 +132,13 @@ app.post("/api/extract-scorecard", async (req, res) => {
     }
     const token = authHeader.split('Bearer ')[1];
     
-    // Lazy initialize admin if needed, or rely on cron.ts initializing it
-    const admin = await import("firebase-admin");
-    if (!admin.default.apps.length) {
-      try {
-         const fs = await import("fs");
-         const path = await import("path");
-         const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
-         const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-         admin.default.initializeApp({ projectId: config.projectId });
-      } catch (e) {
-         console.warn("Could not lazily initialize firebase-admin", e);
-      }
-    }
+
 
     try {
-      await admin.default.auth().verifyIdToken(token);
-    } catch (authErr) {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res.status(403).json({ error: "Forbidden: Invalid token" });
+      return res.status(403).json({ error: "Forbidden: Invalid token. " + (authErr?.message || "") });
     }
 
     const { images, customApiKey, subjects } = req.body;
@@ -269,24 +252,13 @@ app.post("/api/generate-badge", async (req, res) => {
     }
     const token = authHeader.split('Bearer ')[1];
     
-    const admin = await import("firebase-admin");
-    if (!admin.default.apps.length) {
-      try {
-         const fs = await import("fs");
-         const path = await import("path");
-         const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
-         const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-         admin.default.initializeApp({ projectId: config.projectId });
-      } catch (e) {
-         console.warn("Could not lazily initialize firebase-admin", e);
-      }
-    }
+
 
     try {
-       await admin.default.auth().verifyIdToken(token);
-    } catch (authErr) {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res.status(403).json({ error: "Forbidden: Invalid token" });
+      return res.status(403).json({ error: "Forbidden: Invalid token. " + (authErr?.message || "") });
     }
 
     const { promptText, customApiKey } = req.body;
