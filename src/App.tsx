@@ -16,6 +16,7 @@ import { ModalsSection } from './components/views/ModalsSection';
 import { DatabaseZap } from 'lucide-react';
 import Navigation from './components/Navigation';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PwaPrompt } from './components/PwaPrompt';
 
 function AppContent() {
   const { activeTab, adminTab, adminEditNotice, adminEditCountdown, isAdminModalOpen, darkMode } = useUIStore();
@@ -124,6 +125,7 @@ function AppContent() {
       </main>
 
       <ModalsSection />
+      <PwaPrompt />
     </div>
   );
 }
