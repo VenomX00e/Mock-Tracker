@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Image as ImageIcon, Target, Edit2, LogOut, Sun, Moon } from 'lucide-react';
+import { X, User, Image as ImageIcon, Target, Edit2, LogOut, Sun, Moon, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { useAuth } from '../services/AuthContext';
@@ -56,6 +56,7 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingAvatar, setIsPickingAvatar] = useState(false);
+  const [selectedBadge, setSelectedBadge] = useState<any>(null);
 
   useEffect(() => {
     if (profile) {
@@ -282,6 +283,35 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
                   )}
                 </div>
 
+                {profile?.badges && profile.badges.length > 0 && (
+                  <div className="pt-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+                      <Target className="w-4 h-4 text-slate-400" /> Achievement Badges
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                       {profile.badges.map((badge: any, i: number) => (
+                         <button 
+                           key={i} 
+                           onClick={() => setSelectedBadge(badge)}
+                           title={`Awarded on ${badge.awardedAt ? new Date(badge.awardedAt).toLocaleDateString() : 'Unknown'}`} 
+                           className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-sm font-bold shadow-sm hover:-translate-y-0.5 transition-transform ${badge.imageBase64 ? 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700' : (badge.color || 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300')}`}
+                         >
+                           {badge.imageBase64 ? (
+                             <>
+                               <img src={badge.imageBase64} alt={badge.name} className="w-8 h-8 rounded-full shadow border-2 border-white dark:border-slate-700 object-cover" />
+                               <span className="pr-1">{badge.name}</span>
+                             </>
+                           ) : (
+                             <>
+                               <span>{badge.icon}</span> <span>{badge.name}</span>
+                             </>
+                           )}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="pt-6 flex gap-3">
                   <button
                     onClick={onClose}
@@ -302,6 +332,39 @@ export default function ProfileDialog({ isOpen, onClose, darkMode, setDarkMode, 
           </div>
         )}
       </motion.div>
+      
+      {selectedBadge && (
+         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-[2px] z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedBadge(null)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-xs shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+               <div className="flex justify-end -mt-2 -mr-2">
+                 <button onClick={() => setSelectedBadge(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
+                    <X className="w-4 h-4" />
+                 </button>
+               </div>
+               
+               <div className="flex justify-center mb-4">
+                  {selectedBadge.imageBase64 ? (
+                     <img src={selectedBadge.imageBase64} alt={selectedBadge.name} className="w-24 h-24 rounded-full shadow-lg border-4 border-slate-50 dark:border-slate-700 object-cover" />
+                  ) : (
+                     <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-white dark:border-slate-800 ${selectedBadge.color}`}>
+                       {selectedBadge.icon}
+                     </div>
+                  )}
+               </div>
+               
+               <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">{selectedBadge.name}</h3>
+               {selectedBadge.challengeTitle && (
+                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">
+                   Earned from completing: <span className="text-indigo-600 dark:text-indigo-400">{selectedBadge.challengeTitle}</span>
+                 </p>
+               )}
+               <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+                 <Calendar className="w-3.5 h-3.5" />
+                 Awarded {selectedBadge.awardedAt ? new Date(selectedBadge.awardedAt).toLocaleDateString() : 'recently'}
+               </div>
+            </div>
+         </div>
+      )}
     </div>
   )}
 </AnimatePresence>

@@ -31,6 +31,7 @@ export interface UserProfile {
   adminCategories?: string[];
   categoryId?: string; // Add categoryId
   bio?: string;
+  badges?: any[];
   permissions?: {
     canManageUsers?: boolean;
     canManageNotices?: boolean;

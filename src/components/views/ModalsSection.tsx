@@ -163,7 +163,10 @@ export function ModalsSection() {
         <HiddenChallengesDialog
           isOpen={isHiddenChallengesModalOpen}
           onClose={() => setIsHiddenChallengesModalOpen(false)}
-          hiddenChallenges={challenges.filter((c: any) => dismissedChallenges.includes(c.id))}
+          hiddenChallenges={challenges.filter((c: any) => {
+            const categoryMatch = c.categoryId === selectedCategory || (!c.categoryId && selectedCategory === 'banking');
+            return categoryMatch && dismissedChallenges.includes(c.id);
+          })}
           onRestore={unhideChallenge}
         />
       )}
@@ -212,6 +215,8 @@ export function ModalsSection() {
           initialData={editingChallenge}
           categoryId={selectedCategory}
           categories={categories}
+          isAdmin={isAdmin}
+          isOwner={isOwner}
         />
       )}
 

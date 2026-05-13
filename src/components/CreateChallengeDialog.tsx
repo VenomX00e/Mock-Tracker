@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Globe, Lock, Trash2 } from 'lucide-react';
+import { X, Globe, Lock, Trash2, Sparkles, Loader2, RefreshCcw } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { db } from '../services/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteField } from 'firebase/firestore';
+import { generateBadge as generateBadgeService } from '../services/geminiService';
 
 interface CreateChallengeDialogProps {
   isOpen: boolean;
@@ -11,9 +12,11 @@ interface CreateChallengeDialogProps {
   initialData?: any;
   categoryId?: string;
   categories?: any[];
+  isAdmin?: boolean;
+  isOwner?: boolean;
 }
 
-export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categoryId, categories }: CreateChallengeDialogProps) {
+export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categoryId, categories, isAdmin, isOwner }: CreateChallengeDialogProps) {
   const [title, setTitle] = useState(initialData?.title || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [challengeType, setChallengeType] = useState(initialData?.challengeType || 'streak');
@@ -23,6 +26,10 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
   const [endDate, setEndDate] = useState(initialData?.endDate || '');
   const [duration, setDuration] = useState(initialData?.durationDays ? String(initialData.durationDays) : '');
   const [visibility, setVisibility] = useState<'global' | 'personal'>(initialData?.visibility || 'personal');
+  const [generateBadge, setGenerateBadge] = useState(false);
+  const [customBadge, setCustomBadge] = useState<any>(null);
+  const [badgePrompt, setBadgePrompt] = useState('');
+  const [isGeneratingBadge, setIsGeneratingBadge] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   React.useEffect(() => {
@@ -36,10 +43,51 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
       setEndDate(initialData.endDate || '');
       setDuration(initialData.durationDays ? String(initialData.durationDays) : '');
       setVisibility(initialData.visibility || 'personal');
+      setGenerateBadge(!!initialData.badge);
+      setCustomBadge(initialData.badge || null);
+    } else if (isOpen && !initialData) {
+      setGenerateBadge(false);
+      setCustomBadge(null);
+      setBadgePrompt('');
     }
   }, [isOpen, initialData]);
 
   if (!isOpen) return null;
+
+  const BADGE_ICONS = ['🏅', '🏆', '🎖️', '🥇', '🌟', '💎', '🔥', '🎯', '⚡', '👑'];
+  const BADGE_COLORS = [
+    'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20',
+    'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20',
+    'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20',
+    'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20',
+    'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20',
+    'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
+  ];
+
+  const handleGenerateBadge = async () => {
+    try {
+      if (typeof window !== 'undefined' && (window as any).aistudio && typeof (window as any).aistudio.hasSelectedApiKey === 'function') {
+        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+        if (!hasKey) {
+           await (window as any).aistudio.openSelectKey();
+           return; 
+        }
+      }
+    } catch(e) {
+      console.warn("AI Studio key check failed", e);
+    }
+
+    setIsGeneratingBadge(true);
+    try {
+       const badge = await generateBadgeService(badgePrompt || (title ? `A badge for a challenge named ${title}` : 'random'));
+       setCustomBadge(badge);
+    } catch (e: any) {
+       console.error("Failed to generate badge", e);
+       alert(e.message || "Failed to generate badge. Image generation requires billing enabled / paid tier API Key in this region. You can go to Settings > Secrets in AI Studio to provide a custom key.");
+    } finally {
+       setIsGeneratingBadge(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!title || !startDate || !endDate) {
@@ -72,10 +120,25 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
         endDate: endDate,
         durationDays,
         status: initialData?.status || 'active',
-        // User created global challenge goes to pending, personal goes to approved
-        approvalStatus: isGlobal ? (initialData?.approvalStatus || 'pending') : 'approved',
+        // User created global challenge goes to pending, personal goes to approved.
+        // If switching from personal to global, MUST go to pending
+        approvalStatus: isGlobal ? (initialData?.visibility === 'personal' ? 'pending' : (initialData?.approvalStatus || 'pending')) : 'approved',
         updatedAt: new Date().toISOString()
       };
+
+      if (isOwner && isGlobal && generateBadge) {
+        if (customBadge) {
+          payload.badge = { ...customBadge };
+        } else {
+          payload.badge = {
+            icon: BADGE_ICONS[Math.floor(Math.random() * BADGE_ICONS.length)],
+            color: BADGE_COLORS[Math.floor(Math.random() * BADGE_COLORS.length)],
+            name: `${title} Finisher`
+          };
+        }
+      } else if (initialData?.badge && !generateBadge) {
+        payload.badge = deleteField();
+      }
 
       if (!initialData) {
         payload.creatorId = uid;
@@ -159,6 +222,60 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
                />
              </div>
            </div>
+
+           {isOwner && visibility === 'global' && (
+             <div className="space-y-3">
+               <div className="flex items-center gap-4">
+                 <label className="flex items-center gap-2 cursor-pointer w-fit select-none">
+                   <input type="checkbox" checked={generateBadge} onChange={(e) => setGenerateBadge(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Award Badge on Completion</span>
+                 </label>
+                 {generateBadge && customBadge && customBadge.imageBase64 && (
+                   <div className={`px-2 py-1 rounded text-xs border font-bold flex items-center gap-2 bg-slate-50 dark:bg-slate-800`}>
+                     <img src={customBadge.imageBase64} alt="Badge Preview" className="w-8 h-8 rounded-full shadow border-2 border-white dark:border-slate-700 object-cover" />
+                     <span>{customBadge.name}</span>
+                   </div>
+                 )}
+               </div>
+               {generateBadge && (
+                  <div className="flex flex-col gap-2 p-3 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl border border-indigo-100 dark:border-indigo-500/20">
+                     <div className="flex gap-2">
+                       <input 
+                         type="text" 
+                         value={badgePrompt} 
+                         onChange={(e) => setBadgePrompt(e.target.value)} 
+                         placeholder="Describe badge (e.g. 'Golden fire for 50 days')"
+                         className="flex-1 px-3 py-1.5 text-sm bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700" 
+                         onKeyDown={(e) => {
+                           if (e.key === 'Enter') {
+                             e.preventDefault();
+                             handleGenerateBadge();
+                           }
+                         }}
+                       />
+                       <button 
+                         onClick={handleGenerateBadge}
+                         disabled={isGeneratingBadge}
+                         className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50 h-8"
+                       >
+                         {isGeneratingBadge ? <Loader2 className="w-4 h-4 animate-spin" /> : (customBadge ? <RefreshCcw className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />)}
+                         {customBadge ? 'Regenerate' : 'Generate'}
+                       </button>
+                     </div>
+                     {customBadge && (
+                       <div className="flex items-center justify-end pt-1">
+                          <button onClick={() => setCustomBadge(null)} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"><Trash2 className="w-3 h-3"/> Clear badge</button>
+                       </div>
+                     )}
+                     {!customBadge && (
+                       <div className="text-xs text-slate-500 dark:text-slate-400">
+                         If you don't generate, a random badge will be assigned automatically on save.
+                       </div>
+                     )}
+                  </div>
+               )}
+             </div>
+           )}
 
            <div className="grid grid-cols-3 gap-2">
              <div>

@@ -103,7 +103,10 @@ service cloud.firestore {
         && (!data.keys().hasAny(['dynamicAverages']) || data.dynamicAverages is map)
         && (!data.keys().hasAny(['stats30D']) || data.stats30D is map)
         && (!data.keys().hasAny(['stats7D']) || data.stats7D is map)
-        && (!data.keys().hasAny(['categoryStats']) || data.categoryStats is map);
+        && (!data.keys().hasAny(['categoryStats']) || data.categoryStats is map)
+        && (!data.keys().hasAny(['badges']) || data.badges is list)
+        && (!data.keys().hasAny(['bio']) || data.bio is string)
+        && (!data.keys().hasAny(['tasks']) || data.tasks is list);
     }
 
     function isValidChatMessage(data) {
@@ -142,7 +145,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(['deletedByCreator']) || data.deletedByCreator is bool)
         && (!data.keys().hasAny(['permanentlyDeletedByAdmin']) || data.permanentlyDeletedByAdmin is bool)
         && (!data.keys().hasAny(['permanentlyDeletedByCreator']) || data.permanentlyDeletedByCreator is bool)
-        && (!data.keys().hasAny(['tasks']) || (data.tasks is list && data.tasks.size() <= 100));
+        && (!data.keys().hasAny(['tasks']) || (data.tasks is list && data.tasks.size() <= 100))
+        && (!data.keys().hasAny(['badge']) || data.badge is map);
     }
 
     function isValidChallengeParticipant(data) {
@@ -156,7 +160,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(['checkInDates']) || (data.checkInDates is list && data.checkInDates.size() <= 500))
         && (!data.keys().hasAny(['checkInTimes']) || (data.checkInTimes is list && data.checkInTimes.size() <= 500))
         && (!data.keys().hasAny(['completedTasks']) || data.completedTasks is map)
-        && (!data.keys().hasAny(['activities']) || (data.activities is list && data.activities.size() <= 500));
+        && (!data.keys().hasAny(['activities']) || (data.activities is list && data.activities.size() <= 500))
+        && (!data.keys().hasAny(['awardedBadge']) || data.awardedBadge is bool);
     }
 
     match /categories/{categoryId} {
@@ -184,7 +189,7 @@ service cloud.firestore {
         && (!incoming().keys().hasAny(['creatorId']) || incoming().creatorId == existing().creatorId)
         && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)
         && isValidChallenge(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'challengeType', 'todoFrequency', 'visibility', 'tasks', 'startDate', 'endDate', 'durationDays', 'status', 'updatedAt', 'categoryId', 'deletedByCreator', 'permanentlyDeletedByCreator', 'approvalStatus', 'id', 'createdAt'])
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'challengeType', 'todoFrequency', 'visibility', 'tasks', 'startDate', 'endDate', 'durationDays', 'status', 'updatedAt', 'categoryId', 'deletedByCreator', 'permanentlyDeletedByCreator', 'approvalStatus', 'id', 'createdAt', 'badge'])
         && (!(existing().visibility == 'personal' && incoming().visibility == 'global') || incoming().approvalStatus == 'pending')
         && (!(existing().visibility == 'global' && existing().approvalStatus == 'pending' && incoming().approvalStatus == 'approved'))
       );
@@ -196,7 +201,7 @@ service cloud.firestore {
         allow update: if isAnyAdmin() || (
           isSignedIn() 
           && request.auth.uid == userId 
-          && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks'])
+          && incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastCheckInDate', 'checkInDates', 'checkInTimes', 'updatedAt', 'displayName', 'photoURL', 'completedTasks', 'activities', 'totalMocks', 'dailyMocks', 'awardedBadge'])
           && isValidChallengeParticipant(incoming())
         );
         allow delete: if isAnyAdmin() || (isSignedIn() && request.auth.uid == userId);
@@ -227,12 +232,12 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
           'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
           'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 'totalTests', 'streak', 
-          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats'
+          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks'
         ]) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
         || (isAnyAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
           'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
           'avgAccuracy', 'avgQuantPercentile', 'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 
-          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats'
+          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks'
         ]));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
     }

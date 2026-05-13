@@ -110,6 +110,65 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
     }
   };
 
+  const checkCompletion = async (participantState: any) => {
+   if (!challenge.badge) return;
+   if (participantState.awardedBadge) return;
+   if (!user) return;
+   
+   let isCompleted = false;
+   if (challenge.challengeType === 'streak') {
+     if (participantState.streak >= challenge.durationDays || (participantState.checkInDates && participantState.checkInDates.length >= challenge.durationDays)) {
+        isCompleted = true;
+     }
+   } else if (challenge.challengeType === 'uploadMock') {
+     if (participantState.totalMocks >= challenge.durationDays) {
+        isCompleted = true;
+     }
+   } else if (challenge.challengeType === 'todo') {
+     const hasTasks = challenge.tasks && challenge.tasks.length > 0;
+     if (hasTasks) {
+       if (challenge.todoFrequency === 'oneTime') {
+         if (participantState.completedTasks && participantState.completedTasks.length >= challenge.tasks.length) {
+            isCompleted = true;
+         }
+       } else { 
+         if (participantState.streak >= challenge.durationDays || (participantState.checkInDates && participantState.checkInDates.length >= challenge.durationDays)) {
+            isCompleted = true;
+         }
+       }
+     }
+   }
+
+   if (isCompleted) {
+       try {
+           const userDocRef = doc(db, 'users', user.uid);
+           const pDocRef = doc(db, 'challenges', challenge.id, 'participants', user.uid);
+           
+           const snapshot = await getDoc(userDocRef);
+           if (snapshot.exists()) {
+              const data = snapshot.data();
+              const existingBadges = data.badges || [];
+              const badgeId = `${challenge.id}_badge`;
+              
+              if (!existingBadges.some((b:any) => b.id === badgeId)) {
+                  const newBadge = {
+                      id: badgeId,
+                      ...challenge.badge,
+                      awardedAt: new Date().toISOString(),
+                      challengeId: challenge.id,
+                      challengeTitle: challenge.title
+                  };
+                  await updateDoc(userDocRef, { badges: [...existingBadges, newBadge] });
+              }
+           }
+           await updateDoc(pDocRef, { awardedBadge: true });
+           setParticipant((prev:any) => prev ? { ...prev, awardedBadge: true } : prev);
+       } catch(e) {
+           console.error("Failed to grant badge", e);
+       }
+   }
+  };
+
   const checkIn = async () => {
     if (!user || !participant) return;
     try {
@@ -146,7 +205,9 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
       };
       
       await updateDoc(doc(db, 'challenges', challenge.id, 'participants', user.uid), payload);
-      setParticipant({ ...participant, ...payload });
+      const newState = { ...participant, ...payload };
+      setParticipant(newState);
+      checkCompletion(newState);
       fetchParticipantsCount();
     } catch (e) {
       console.error("Error check in", e);
@@ -189,7 +250,9 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
             totalMocks: total,
             dailyMocks: daily
          }).then(() => {
-            setParticipant(prev => prev ? { ...prev, totalMocks: total, dailyMocks: daily } : null);
+            const newState = { ...participant, totalMocks: total, dailyMocks: daily };
+            setParticipant(newState);
+            checkCompletion(newState);
             setParticipants(prev => prev.map(p => p.userId === user.uid ? { ...p, totalMocks: total, dailyMocks: daily } : p));
          }).catch(console.error);
       }
@@ -462,6 +525,7 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
                        try {
                          await updateDoc(doc(db, 'challenges', challenge.id, 'participants', user.uid), payloadToUpdate);
                          setParticipant(newParticipantState);
+                         checkCompletion(newParticipantState);
                        } catch(err) {
                          console.error(err);
                        }

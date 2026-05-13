@@ -926,7 +926,7 @@ function CommunityLeaderboard(props: any) {
                <div className="w-24 flex-shrink-0 sm:hidden">
                  <CustomDropdown
                    value={selectedPhase}
-                   options={availablePhases.map(p => typeof p === 'string' ? p : p)}
+                   options={availablePhases.map((p: any) => typeof p === 'string' ? p : p)}
                    onChange={(val) => setSelectedPhase(val)}
                    placeholder="Phase"
                    buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg w-full font-medium text-left"
@@ -936,19 +936,19 @@ function CommunityLeaderboard(props: any) {
              </div>
              
              {isAdmin && (
-               <div className="w-[140px] sm:hidden -ml-2">
+               <div className="w-[140px] sm:hidden">
                  <CustomDropdown 
                     value={sortConfig.key || ''}
                     onChange={handleAdminChangeGlobalSort}
                     options={['avgPercentile', 'avgAccuracy', 'totalTests', 'streak']}
                     placeholder="Sort Default"
-                    buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-transparent rounded-lg w-full"
+                    buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg w-full font-medium"
                  />
                </div>
              )}
           </div>
           
-          <div className="hidden sm:flex items-center justify-end gap-3 sm:gap-4">
+          <div className="hidden sm:flex items-center justify-end gap-3 sm:gap-4 w-full sm:w-auto">
              {isAdmin && (
                <div className="flex items-center justify-end gap-2 border-r border-slate-200 dark:border-slate-700 pr-3">
                  <div className="w-[180px]">
@@ -957,7 +957,7 @@ function CommunityLeaderboard(props: any) {
                       onChange={handleAdminChangeGlobalSort}
                       options={['avgPercentile', 'avgAccuracy', 'totalTests', 'streak']}
                       placeholder="Select default sort"
-                      buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
+                      buttonClassName="px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full font-medium"
                    />
                  </div>
                </div>
@@ -965,10 +965,10 @@ function CommunityLeaderboard(props: any) {
              <div className="w-32 flex-shrink-0">
                <CustomDropdown
                  value={selectedPhase}
-                 options={availablePhases.map(p => typeof p === 'string' ? p : p)}
+                 options={availablePhases.map((p: any) => typeof p === 'string' ? p : p)}
                  onChange={(val) => setSelectedPhase(val)}
                  placeholder="Phase"
-                 buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700/50 rounded-lg w-full"
+                 buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg w-full font-medium text-left"
                  optionClassName="px-3 py-1.5 text-xs"
                />
              </div>
@@ -1032,7 +1032,25 @@ function CommunityLeaderboard(props: any) {
                       >
                         <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700" />
                         <div>
-                          <div className="font-semibold text-slate-800 dark:text-slate-200">{user.displayName}</div>
+                          <div className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            {user.displayName}
+                            {user.badges && user.badges.length > 0 && (
+                              <div className="flex items-center gap-0.5">
+                                {user.badges.slice(0, 3).map((b: any, bi: number) => (
+                                  <span key={bi} title={b.name} className={`flex items-center justify-center w-[18px] h-[18px] rounded border ${b.imageBase64 ? 'bg-slate-50 dark:bg-slate-800' : (b.color || 'bg-slate-50 text-slate-700')} text-[10px] leading-none overflow-hidden`}>
+                                    {b.imageBase64 ? (
+                                       <img src={b.imageBase64} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                       b.icon
+                                    )}
+                                  </span>
+                                ))}
+                                {user.badges.length > 3 && (
+                                  <span className="text-[10px] text-slate-400 font-medium ml-0.5">+{user.badges.length - 3}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           <div className="text-[10px] text-slate-500 dark:text-slate-400">{user.targetedExam}</div>
                         </div>
                       </div>

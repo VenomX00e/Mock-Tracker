@@ -27,7 +27,33 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
 }
 
 
+export async function generateBadge(promptText: string): Promise<{ name: string, imageBase64: string }> {
+  const customKey = localStorage.getItem('geminiApiKey');
+  const token = await auth.currentUser?.getIdToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch('/api/generate-badge', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ promptText, customApiKey: customKey || null })
+  });
+  
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const msg = err.error || '';
+    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID')) {
+       throw new Error("API Key missing or invalid. Click the app logo in the top left to configure your free key.");
+    }
+    throw new Error(msg || 'Failed to generate badge');
+  }
+
+  return await response.json();
+}
+
 function extractNum(val: any): number | null {
+
   if (val == null || val === '') return null;
   const str = String(val).trim();
   const match = str.match(/(?:\b|^)-?\d+(?:\.\d+)?/);

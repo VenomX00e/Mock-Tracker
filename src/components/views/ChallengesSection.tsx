@@ -43,6 +43,12 @@ export function ChallengesSection() {
     setIsCreateChallengeOpen(true);
   };
 
+  const categoryHiddenChallenges = challenges.filter(c => {
+    const categoryMatch = c.categoryId === selectedCategory || (!c.categoryId && selectedCategory === 'banking');
+    const isVisibleToUserInitially = c.creatorId === user?.uid || !(c.visibility === 'global' && (c.approvalStatus === 'pending' || c.approvalStatus === 'rejected'));
+    return categoryMatch && isVisibleToUserInitially && dismissedChallenges.includes(c.id);
+  });
+
   const visibleChallenges = challenges
     .filter(c => {
       const categoryMatch = c.categoryId === selectedCategory || (!c.categoryId && selectedCategory === 'banking');
@@ -79,15 +85,15 @@ export function ChallengesSection() {
           </button>
         )}
         <div className="ml-auto flex items-center gap-1.5 sm:gap-3 shrink-0">
-          {dismissedChallenges.length > 0 && (
+          {categoryHiddenChallenges.length > 0 && (
             <button 
               onClick={() => setIsHiddenChallengesModalOpen(true)} 
               className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0 relative"
-              title={`Hidden Challenges (${dismissedChallenges.length})`}
+              title={`Hidden Challenges (${categoryHiddenChallenges.length})`}
             >
               <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="absolute -top-1 -right-1 bg-slate-500 text-white text-[9px] sm:text-[10px] w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center rounded-full font-bold">
-                {dismissedChallenges.length}
+                {categoryHiddenChallenges.length}
               </span>
             </button>
           )}
