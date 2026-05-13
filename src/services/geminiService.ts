@@ -76,8 +76,13 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
   
   if (!response.ok) {
     let err = {};
-    try { err = await response.json(); } catch (e) {}
-    const msg = (err as any).error || response.statusText || 'Unknown Server Error';
+    let rawText = '';
+    try { 
+      rawText = await response.text();
+      err = JSON.parse(rawText); 
+    } catch (e) {}
+    
+    const msg = (err as any).error || response.statusText || (rawText ? rawText.substring(0, 50) : '') || 'Unknown Server Error';
     const status = response.status;
     
     if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID')) {
@@ -90,7 +95,7 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
       throw new Error('Server timeout while analyzing image. Please try again later.');
     }
 
-    throw new Error(msg || 'Failed to extract scorecard details from server');
+    throw new Error(`Error ${status}: ${msg}`);
   }
 
   const parsed = await response.json();

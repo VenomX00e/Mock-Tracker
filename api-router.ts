@@ -9,6 +9,13 @@ if (!admin.apps.length) {
 
 
 const app = express();
+app.use((req, res, next) => {
+  if (req.body && Object.keys(req.body).length > 0) {
+    // Vercel already parsed the body. Tell body-parser to skip.
+    (req as any)._body = true;
+  }
+  next();
+});
 app.use(express.json({ limit: "50mb" }));
 
 // Helper
@@ -117,7 +124,7 @@ app.post("/api/extract-mock", async (req, res) => {
     res.json(parsed);
     
   } catch (error: any) {
-    import("fs").then(fs => fs.writeFileSync("last-error", String(error) + " | " + String(error.message)));
+    
     console.error("Gemini Error:", error);
     res.status(500).json({ error: String(error.message || error) });
   }
@@ -238,7 +245,7 @@ app.post("/api/extract-scorecard", async (req, res) => {
     res.json(parsed);
     
   } catch (error: any) {
-    import("fs").then(fs => fs.writeFileSync("last-error", String(error) + " | " + String(error.message)));
+    
     console.error("Gemini Error:", error);
     res.status(500).json({ error: String(error.message || error) });
   }
