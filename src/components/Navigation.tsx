@@ -1,12 +1,14 @@
 import React from 'react';
-import { Shield, LayoutDashboard, Users, Plus, LogIn, Sun, Moon } from 'lucide-react';
+import { Shield, LayoutDashboard, Users, Plus, LogIn, Sun, Moon, Download } from 'lucide-react';
 import { useAuthCtx, useUserProfileCtx, useAppStateCtx } from '../context/AppContext';
 import { useUIStore } from '../store/uiStore';
+import { usePwaInstall } from '../hooks/usePwaInstall';
 
 export default function Navigation() {
   const { user, signInWithGoogle } = useAuthCtx();
   const { profile } = useUserProfileCtx();
   const { isOwner, isAdmin, adminPermissions } = useAppStateCtx();
+  const { isInstallable, installApp } = usePwaInstall();
   const {
       activeTab,
       setActiveTab,
@@ -131,6 +133,16 @@ export default function Navigation() {
                     title="Control Panel"
                   >
                     <Shield className="w-5 h-5" />
+                  </button>
+                )}
+
+                {isInstallable && (
+                  <button
+                    onClick={installApp}
+                    className="p-1.5 md:p-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border border-transparent rounded-lg transition-colors hidden sm:flex"
+                    title="Install App"
+                  >
+                    <Download className="w-5 h-5" />
                   </button>
                 )}
 

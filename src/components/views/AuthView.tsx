@@ -1,11 +1,13 @@
 import React from 'react';
-import { DatabaseZap, BrainCircuit, LineChart, Timer, MessageSquare, LogIn } from 'lucide-react';
+import { DatabaseZap, BrainCircuit, LineChart, Timer, MessageSquare, LogIn, Download } from 'lucide-react';
 import { useAuth } from '../../services/AuthContext';
 import { usePublicSettingsCtx } from '../../context/AppContext';
+import { usePwaInstall } from '../../hooks/usePwaInstall';
 
 export function AuthView() {
   const { signInWithGoogle } = useAuth();
   const { telegramLink, telegramText } = usePublicSettingsCtx();
+  const { isInstallable, installApp } = usePwaInstall();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-140px)] text-center max-w-6xl mx-auto px-4 lg:overflow-hidden lg:-mt-4">
@@ -15,10 +17,14 @@ export function AuthView() {
       <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 mb-4">
         Track Your Mock Exams Intelligently
       </h2>
-      <p className="text-base md:text-lg text-slate-500 dark:text-slate-400 mb-8 max-w-2xl leading-relaxed">
-        Upload your mock test scorecard images. Our AI will automatically extract your scores and percentiles. 
-        Safely store your historical data across all sessions and track your sectional weak points.
+      <p className="text-base md:text-lg text-slate-500 dark:text-slate-400 mb-4 max-w-2xl leading-relaxed">
+        Upload scorecards • AI extraction of your scores • track your Progress
       </p>
+
+      <div className="text-sm md:text-base text-indigo-600 dark:text-indigo-400 font-medium mb-8 flex flex-col items-center gap-1">
+        <p>✨ For the best experience, use a larger screen (PC/Tablet).</p>
+        <p>✨ Tap your browser's 3-dot menu and select "Install app" for quick access.</p>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 text-left w-full">
         <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
@@ -59,6 +65,16 @@ export function AuthView() {
           <LogIn className="w-5 h-5 mr-2" />
           Sign In to Start Tracking
         </button>
+
+        {isInstallable && (
+          <button
+            onClick={installApp}
+            className="inline-flex items-center justify-center px-6 py-2 border-2 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-xl transition-all font-medium"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Install as Desktop/Mobile App
+          </button>
+        )}
 
           <a
             href={telegramLink || '#'}

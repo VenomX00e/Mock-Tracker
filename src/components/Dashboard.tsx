@@ -981,8 +981,38 @@ export default function Dashboard() {
                 const daysSinceLast = Math.max(0, Math.floor(msSinceLast / (1000 * 60 * 60 * 24)));
                 const streakMessage = daysSinceLast === 0 ? "You took a mock today! 🔥" : daysSinceLast === 1 ? "You took a mock yesterday. Keep it up!" : `It's been ${daysSinceLast} days since your last mock.`;
 
+                let taskCardBg = "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600";
+                let taskHeaderColor = "text-emerald-700 dark:text-emerald-400";
+                let taskIcon = "🎉";
+                let taskMessage = "Wow, 0 pending tasks! You actually did your job. Keep it that way.";
+
+                if (pendingTasksCount > 8) {
+                    taskCardBg = "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 hover:border-red-400 dark:hover:border-red-600";
+                    taskHeaderColor = "text-red-700 dark:text-red-400";
+                    taskIcon = "🚨";
+                    taskMessage = `Stop procrastinating! You have ${pendingTasksCount} pending tasks piling up. Get them done now!`;
+                } else if (pendingTasksCount >= 5) {
+                    taskCardBg = "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600";
+                    taskHeaderColor = "text-amber-700 dark:text-amber-400";
+                    taskIcon = "⚠️";
+                    taskMessage = `You have ${pendingTasksCount} pending tasks. They are piling up, start clearing them soon.`;
+                } else if (pendingTasksCount > 0) {
+                    taskCardBg = "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600";
+                    taskHeaderColor = "text-blue-700 dark:text-blue-400";
+                    taskIcon = "📝";
+                    taskMessage = `You have ${pendingTasksCount} pending tasks. Try to complete them when you can.`;
+                }
+
                 return (
                    <>
+                      <div className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden group transition-colors ${taskCardBg}`}>
+                         <div className="text-3xl mb-2">{taskIcon}</div>
+                         <h4 className={`text-sm font-semibold ${taskHeaderColor}`}>Action Required</h4>
+                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium">
+                            {taskMessage}
+                         </p>
+                      </div>
+
                       <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors">
                          <div className="text-3xl mb-2">{trendIcon}</div>
                          <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Recent Trend (Last 5)</h4>
@@ -991,20 +1021,13 @@ export default function Dashboard() {
                          </p>
                       </div>
 
-                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors">
-                         <div className="text-3xl mb-2">💪</div>
-                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Strongest Section</h4>
-                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium whitespace-nowrap">
-                            {strongest ? `${strongest.name} (~${Math.round(strongest.avg)}%ile)` : "Need more data"}
-                         </p>
-                      </div>
-
-                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-rose-300 dark:hover:border-rose-600 transition-colors">
-                         <div className="text-3xl mb-2">🎯</div>
-                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Area of Focus</h4>
-                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium whitespace-nowrap">
-                            {weakest ? `${weakest.name} (~${Math.round(weakest.avg)}%ile)` : "Need more data"}
-                         </p>
+                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-fuchsia-300 dark:hover:border-fuchsia-600 transition-colors">
+                         <div className="text-3xl mb-2">⚖️</div>
+                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Section Balance</h4>
+                         <div className="mt-1 text-sm text-slate-800 dark:text-slate-100 font-medium truncate">
+                             <div><span className="font-semibold text-emerald-600 dark:text-emerald-400">💪 Best:</span> {strongest ? `${strongest.name} (~${Math.round(strongest.avg)}%ile)` : "N/A"}</div>
+                             <div className="mt-1"><span className="font-semibold text-rose-600 dark:text-rose-400">🎯 Focus:</span> {weakest ? `${weakest.name} (~${Math.round(weakest.avg)}%ile)` : "N/A"}</div>
+                         </div>
                       </div>
                       
                       <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-amber-300 dark:hover:border-amber-600 transition-colors">
