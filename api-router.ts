@@ -1,17 +1,26 @@
 import express from "express";
 import { GoogleGenAI, Type } from "@google/genai";
 import admin from "firebase-admin";
-import firebaseConfig from "./firebase-applet-config.json";
+import { createRequire } from "module";
 
-if (!admin.apps.length) {
+const require = createRequire(import.meta.url);
+
+let firebaseConfig: any = {};
+try {
+  firebaseConfig = require("./firebase-applet-config.json");
+} catch (e: any) {
+  console.warn("Could not lazily read firebase config:", e.message);
+}
+
+if (!admin.apps.length && firebaseConfig.projectId) {
    admin.initializeApp({ projectId: firebaseConfig.projectId });
 }
 
 
 const app = express();
 app.use((req, res, next) => {
-  if (req.body && Object.keys(req.body).length > 0) {
-    // Vercel already parsed the body. Tell body-parser to skip.
+  // If Vercel already parsed it into an object that is not a Buffer
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
     (req as any)._body = true;
   }
   next();
