@@ -57,6 +57,18 @@ app.post("/api/extract-mock", async (req, res) => {
     
     // Lazy initialize admin if needed, or rely on cron.ts initializing it
     const admin = await import("firebase-admin");
+    if (!admin.default.apps.length) {
+      try {
+         const fs = await import("fs");
+         const path = await import("path");
+         const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+         const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+         admin.default.initializeApp({ projectId: config.projectId });
+      } catch (e) {
+         console.warn("Could not lazily initialize firebase-admin", e);
+      }
+    }
+
     try {
       await admin.default.auth().verifyIdToken(token);
     } catch (authErr) {
@@ -127,6 +139,18 @@ app.post("/api/extract-scorecard", async (req, res) => {
     
     // Lazy initialize admin if needed, or rely on cron.ts initializing it
     const admin = await import("firebase-admin");
+    if (!admin.default.apps.length) {
+      try {
+         const fs = await import("fs");
+         const path = await import("path");
+         const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+         const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+         admin.default.initializeApp({ projectId: config.projectId });
+      } catch (e) {
+         console.warn("Could not lazily initialize firebase-admin", e);
+      }
+    }
+
     try {
       await admin.default.auth().verifyIdToken(token);
     } catch (authErr) {
@@ -246,6 +270,18 @@ app.post("/api/generate-badge", async (req, res) => {
     const token = authHeader.split('Bearer ')[1];
     
     const admin = await import("firebase-admin");
+    if (!admin.default.apps.length) {
+      try {
+         const fs = await import("fs");
+         const path = await import("path");
+         const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+         const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+         admin.default.initializeApp({ projectId: config.projectId });
+      } catch (e) {
+         console.warn("Could not lazily initialize firebase-admin", e);
+      }
+    }
+
     try {
        await admin.default.auth().verifyIdToken(token);
     } catch (authErr) {
