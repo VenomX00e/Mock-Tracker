@@ -16,7 +16,7 @@ import { useUIStore } from '../store/uiStore';
 export default function CommunityHub() {
 
   const { user } = useAuthCtx();
-  const { adminPermissions, setMockToEdit, setEditingChallenge, localCategory: categoryId } = useAppStateCtx();
+  const { adminPermissions, isOwner, setMockToEdit, setEditingChallenge, localCategory: categoryId } = useAppStateCtx();
   const { challenges, categories, pinnedChallenges } = useSystemDataCtx();
   const { setActivePublicProfile, setIsCreateChallengeOpen, setIsRequestsModalOpen, setIsAddModalOpen } = useUIStore();
   const { handlePinChallenge, handleDeleteChallenge, dismissChallenge } = useChallengesManagerCtx();
@@ -117,7 +117,7 @@ export default function CommunityHub() {
   }, []);
 
   const handleAdminChangeGlobalSort = async (key: string) => {
-     if (!isAdmin) return;
+     if (!isOwner) return;
      const direction = 'desc'; // Assuming desc by default for simplicity when changing
      setSortConfig({ key, direction });
      try {
@@ -870,7 +870,7 @@ export default function CommunityHub() {
 
   return (
     <div className="space-y-8 mt-6 lg:mt-8 mb-4">
-      <CommunityLeaderboard Trophy={Trophy} CustomDropdown={CustomDropdown} selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod} isAdmin={isAdmin} sortConfig={sortConfig} handleAdminChangeGlobalSort={handleAdminChangeGlobalSort} selectedPhase={selectedPhase} availablePhases={availablePhases} setSelectedPhase={setSelectedPhase} setDoc={setDoc} doc={doc} db={db} loadingTop={loadingTop} handleSort={handleSort} subjects={subjects} sortedLeaderboard={sortedLeaderboard} parseLocalDate={parseLocalDate} onUserClick={onUserClick} getHeatmapColor={getHeatmapColor} Flame={Flame} />
+      <CommunityLeaderboard Trophy={Trophy} CustomDropdown={CustomDropdown} selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod} isAdmin={isAdmin} isOwner={isOwner} sortConfig={sortConfig} handleAdminChangeGlobalSort={handleAdminChangeGlobalSort} selectedPhase={selectedPhase} availablePhases={availablePhases} setSelectedPhase={setSelectedPhase} setDoc={setDoc} doc={doc} db={db} loadingTop={loadingTop} handleSort={handleSort} subjects={subjects} sortedLeaderboard={sortedLeaderboard} parseLocalDate={parseLocalDate} onUserClick={onUserClick} getHeatmapColor={getHeatmapColor} Flame={Flame} />
 
       <CommunityFeed Users={Users} loadingFeed={loadingFeed} filteredFeedLogs={filteredFeedLogs} daysVisible={daysVisible} feedSort={feedSort} handleFeedSort={handleFeedSort} getFeedSortConfig={getFeedSortConfig} subjects={subjects} onCopyMock={onCopyMock} sortedLeaderboard={sortedLeaderboard} onUserClick={onUserClick} Flame={Flame} getPlatformShort={getPlatformShort} getHeatmapColor={getHeatmapColor} getSub={getSub} handleReact={handleReact} reactions={reactions} Calendar={Calendar} setDaysVisible={setDaysVisible} ArrowRight={ArrowRight} />
       
@@ -896,7 +896,7 @@ export default function CommunityHub() {
 // ==========================================
 
 function CommunityLeaderboard(props: any) {
-  const { Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isAdmin, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame } = props;
+  const { Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isOwner, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame } = props;
   return <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-3 sm:flex-row sm:items-center justify-between rounded-t-2xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
@@ -935,7 +935,7 @@ function CommunityLeaderboard(props: any) {
                </div>
              </div>
              
-             {isAdmin && (
+             {isOwner && (
                <div className="w-[140px] sm:hidden">
                  <CustomDropdown 
                     value={sortConfig.key || ''}
@@ -949,7 +949,7 @@ function CommunityLeaderboard(props: any) {
           </div>
           
           <div className="hidden sm:flex items-center justify-end gap-3 sm:gap-4 w-full sm:w-auto">
-             {isAdmin && (
+             {isOwner && (
                <div className="flex items-center justify-end gap-2 border-r border-slate-200 dark:border-slate-700 pr-3">
                  <div className="w-[180px]">
                    <CustomDropdown 
