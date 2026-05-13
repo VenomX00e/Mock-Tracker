@@ -194,7 +194,9 @@ export function AdminCategoriesTab({
         subjects: processedSubjects,
       };
 
-      await setDoc(doc(db, "categories", id), payload);
+      const cleanPayload = JSON.parse(JSON.stringify(payload));
+
+      await setDoc(doc(db, "categories", id), cleanPayload);
       await fetchCategories();
 
       const updatedCat = { id, ...payload };

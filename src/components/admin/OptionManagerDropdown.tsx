@@ -1,5 +1,124 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, Save, X, Edit2, ChevronRight, ChevronDown, Check } from "lucide-react";
+import { Plus, Trash2, Save, X, Edit2, ChevronRight, ChevronDown, Check, GripVertical } from "lucide-react";
+import { Reorder, useDragControls } from "motion/react";
+
+function SortableOptionItem({
+  opt,
+  i,
+  editingIndex,
+  editVal,
+  setEditVal,
+  handleEditSave,
+  setEditingIndex,
+  handleDelete,
+}: any) {
+  const controls = useDragControls();
+  const [isTapped, setIsTapped] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const itemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isTapped) return;
+    const handleClick = (e: MouseEvent | TouchEvent) => {
+      if (itemRef.current && !itemRef.current.contains(e.target as Node)) {
+        setIsTapped(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("touchstart", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("touchstart", handleClick);
+    };
+  }, [isTapped]);
+
+  const isVisible = isTapped || isHovered;
+
+  return (
+    <Reorder.Item
+      value={opt}
+      dragListener={false}
+      dragControls={controls}
+      className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/30 relative"
+      ref={itemRef}
+      onClick={() => setIsTapped(true)}
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") setIsHovered(true);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setIsHovered(false);
+      }}
+    >
+      <div 
+        className="flex items-center gap-2 flex-1 min-w-0"
+      >
+        <div
+          onPointerDown={(e) => controls.start(e)}
+          className="cursor-grab active:cursor-grabbing shrink-0 flex items-center justify-center -ml-1 p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg touch-none"
+        >
+          <GripVertical className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+        </div>
+        {editingIndex === i ? (
+          <div className="flex flex-1 gap-1">
+            <input
+              type="text"
+              autoFocus
+              value={editVal}
+              onChange={(e) => setEditVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleEditSave(i);
+                else if (e.key === "Escape") setEditingIndex(null);
+              }}
+              className="flex-1 min-w-0 bg-white dark:bg-slate-800 border-none rounded py-0.5 px-1 text-sm focus:ring-1 focus:ring-indigo-500"
+            />
+            <button
+              onClick={() => handleEditSave(i)}
+              className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setEditingIndex(null)}
+              className="p-1 text-slate-400 hover:bg-slate-200 rounded"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {opt}
+            </span>
+            <div className={`flex gap-1 transition-all shrink-0 ${isTapped ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto'}`}>
+              <button
+                onClick={(e) => {
+                  if (!isTapped && !isHovered) return;
+                  e.stopPropagation();
+                  setEditVal(opt);
+                  setEditingIndex(i);
+                }}
+                className="p-1 text-slate-400 hover:text-blue-500"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  if (!isTapped && !isHovered) return;
+                  e.stopPropagation();
+                  handleDelete(i);
+                }}
+                className="p-1 text-slate-400 hover:text-red-500"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Reorder.Item>
+  );
+}
+
 export function OptionManagerDropdown({
   title,
   options,
@@ -68,75 +187,27 @@ export function OptionManagerDropdown({
           <div className="p-2 border-b border-slate-100 dark:border-slate-700 mb-2 font-medium text-xs text-slate-500 uppercase tracking-wider text-center">
             Manage {title}s
           </div>
-          <div className="overflow-y-auto flex-1 space-y-1 mb-2 pr-1 custom-scrollbar">
+          <Reorder.Group axis="y" values={options || []} onReorder={onChange} className="overflow-y-auto flex-1 space-y-1 mb-2 pr-1 custom-scrollbar">
             {!options || options.length === 0 ? (
               <p className="text-center text-slate-400 text-sm py-4">
                 No options yet
               </p>
             ) : (
               options.map((opt, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/30 group"
-                >
-                  {editingIndex === i ? (
-                    <div className="flex flex-1 gap-1">
-                      <input
-                        type="text"
-                        autoFocus
-                        value={editVal}
-                        onChange={(e) => setEditVal(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleEditSave(i);
-                          else if (e.key === "Escape") setEditingIndex(null);
-                        }}
-                        className="flex-1 min-w-0 bg-white dark:bg-slate-800 border-none rounded py-0.5 px-1 text-sm focus:ring-1 focus:ring-indigo-500"
-                      />
-                      <button
-                        onClick={() => handleEditSave(i)}
-                        className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setEditingIndex(null)}
-                        className="p-1 text-slate-400 hover:bg-slate-200 rounded"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                        {opt}
-                      </span>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditVal(opt);
-                            setEditingIndex(i);
-                          }}
-                          className="p-1 text-slate-400 hover:text-blue-500"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(i);
-                          }}
-                          className="p-1 text-slate-400 hover:text-red-500"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <SortableOptionItem
+                  key={opt}
+                  opt={opt}
+                  i={i}
+                  editingIndex={editingIndex}
+                  editVal={editVal}
+                  setEditVal={setEditVal}
+                  handleEditSave={handleEditSave}
+                  setEditingIndex={setEditingIndex}
+                  handleDelete={handleDelete}
+                />
               ))
             )}
-          </div>
+          </Reorder.Group>
           <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex gap-2">
             <input
               type="text"

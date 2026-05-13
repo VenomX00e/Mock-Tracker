@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuthCtx, useUserProfileCtx, useSystemDataCtx, useAppStateCtx, useChallengesManagerCtx } from '../../context/AppContext';
 import { useUIStore } from '../../store/uiStore';
 import { useMocks } from '../../hooks/useMocks';
+import { AnimatePresence } from 'motion/react';
 import AddMockDialog from '../AddMockDialog';
 import ProfileDialog from '../ProfileDialog';
 import { PublicProfileDialog } from '../PublicProfileDialog';
@@ -123,19 +124,21 @@ export function ModalsSection() {
         />
       )}
 
-      {activePublicProfile && (
-         <PublicProfileDialog
-            isOpen={true}
-            onClose={() => setActivePublicProfile(null)}
-            profile={activePublicProfile}
-            isCurrentUser={user?.uid === activePublicProfile.userId}
-            onEditProfile={() => setIsProfileModalOpen(true)}
-            isAdmin={adminPermissions?.canManageUsers}
-            isViewerOwner={isOwner}
-            onMuteUser={handleMuteUser}
-            onBanUser={handleBanUser}
-         />
-      )}
+      <AnimatePresence>
+        {activePublicProfile && (
+           <PublicProfileDialog
+              isOpen={true}
+              onClose={() => setActivePublicProfile(null)}
+              profile={activePublicProfile}
+              isCurrentUser={user?.uid === activePublicProfile.userId}
+              onEditProfile={() => setIsProfileModalOpen(true)}
+              isAdmin={adminPermissions?.canManageUsers}
+              isViewerOwner={isOwner}
+              onMuteUser={handleMuteUser}
+              onBanUser={handleBanUser}
+           />
+        )}
+      </AnimatePresence>
 
       {adminPermissions?.canManageChallenges && (
         <ChallengeRequestsDialog

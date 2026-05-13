@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, X } from 'lucide-react';
 import { CountdownCard } from '../CountdownCard';
+import { motion } from 'motion/react';
 
 interface AllCountdownsModalProps {
   countdowns: any[];
@@ -62,7 +63,13 @@ export function AllCountdownsModal({
   }, [countdowns]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[100] flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden"
+    >
       <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="flex items-center gap-3">
           <button 
@@ -114,7 +121,7 @@ export function AllCountdownsModal({
           )}
         </div>
       </div>
-    </div>,
+    </motion.div>,
     document.body
   );
 }

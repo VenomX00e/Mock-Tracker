@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import Dashboard from './components/Dashboard';
 import CommunityHub from './components/CommunityHub';
 import AdminDialog from './components/AdminDialog';
@@ -85,30 +86,38 @@ function AppContent() {
             <LiveMocksSection />
 
             <section className="w-full">
+              <motion.div
+                 key={activeTab}
+                 initial={{ opacity: 0, scale: 0.95 }}
+                 animate={{ opacity: 1, scale: 1 }}
+                 transition={{ duration: 0.2 }}
+                 className="w-full"
+              >
                 {activeTab === 'admin' && isAdmin ? (
-                  <AdminDialog
-                    isOpen={true}
-                    isOwner={isOwner}
-                    adminPermissions={adminPermissions}
-                    currentCategory={selectedCategory}
-                    asPage={true}
-                    initialTab={adminTab || ((!isOwner && adminPermissions) ? (
-                         adminPermissions.canManageUsers ? 'users' :
-                         adminPermissions.canManageLiveMocks ? 'liveMock' :
-                         adminPermissions.canManageNotices ? 'notice' :
-                         adminPermissions.canManageCountdowns ? 'countdown' :
-                         adminPermissions.canManageChallenges ? 'challenge' :
-                         adminPermissions.canManageSettings ? 'settings' : 'users'
-                    ) : 'users') as any}
-                    editNoticeData={adminEditNotice}
-                    editCountdownData={adminEditCountdown}
-                    categories={categories}
-                  />
-                ) : activeTab === 'dashboard' ? (
-                  <Dashboard />
-                ) : (
-                  <CommunityHub />
-                )}
+                    <AdminDialog
+                      isOpen={true}
+                      isOwner={isOwner}
+                      adminPermissions={adminPermissions}
+                      currentCategory={selectedCategory}
+                      asPage={true}
+                      initialTab={adminTab || ((!isOwner && adminPermissions) ? (
+                           adminPermissions.canManageUsers ? 'users' :
+                           adminPermissions.canManageLiveMocks ? 'liveMock' :
+                           adminPermissions.canManageNotices ? 'notice' :
+                           adminPermissions.canManageCountdowns ? 'countdown' :
+                           adminPermissions.canManageChallenges ? 'challenge' :
+                           adminPermissions.canManageSettings ? 'settings' : 'users'
+                      ) : 'users') as any}
+                      editNoticeData={adminEditNotice}
+                      editCountdownData={adminEditCountdown}
+                      categories={categories}
+                    />
+                  ) : activeTab === 'dashboard' ? (
+                    <Dashboard />
+                  ) : (
+                    <CommunityHub />
+                  )}
+                </motion.div>
             </section>
           </>
         )}

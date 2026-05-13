@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { CountdownCard } from '../CountdownCard';
 import { ChevronRight } from 'lucide-react';
 import { AllCountdownsModal } from './AllCountdownsModal';
+import { AnimatePresence } from 'motion/react';
 
 export function CountdownsSection() {
   const { countdowns, pinnedCountdowns, selectedCategory, togglePin } = useSystemDataCtx();
@@ -90,21 +91,23 @@ export function CountdownsSection() {
         ))}
       </div>
 
-      {isAllOpen && (
-        <AllCountdownsModal 
-          countdowns={filteredCountdowns}
-          now={now}
-          onClose={() => setIsAllOpen(false)}
-          tappedCountdownId={tappedCountdownId}
-          setTappedCountdownId={setTappedCountdownId}
-          pinnedCountdowns={pinnedCountdowns}
-          canManageCountdowns={adminPermissions?.canManageCountdowns || false}
-          togglePin={togglePin}
-          setAdminEditCountdown={setAdminEditCountdown}
-          setAdminTab={setAdminTab}
-          setIsAdminModalOpen={setIsAdminModalOpen}
-        />
-      )}
+      <AnimatePresence>
+        {isAllOpen && (
+          <AllCountdownsModal 
+            countdowns={filteredCountdowns}
+            now={now}
+            onClose={() => setIsAllOpen(false)}
+            tappedCountdownId={tappedCountdownId}
+            setTappedCountdownId={setTappedCountdownId}
+            pinnedCountdowns={pinnedCountdowns}
+            canManageCountdowns={adminPermissions?.canManageCountdowns || false}
+            togglePin={togglePin}
+            setAdminEditCountdown={setAdminEditCountdown}
+            setAdminTab={setAdminTab}
+            setIsAdminModalOpen={setIsAdminModalOpen}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

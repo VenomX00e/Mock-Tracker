@@ -4,6 +4,7 @@ import { UserProfile, MockScore } from '../types';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { getDocs, query, collection, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface PublicProfileDialogProps {
   isOpen: boolean;
@@ -39,13 +40,26 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
     }
   }, [isOpen, profile?.userId]);
 
-  if (!isOpen || !profile) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pb-20 sm:pb-6">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
+    <>
+      {isOpen && profile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pb-20 sm:pb-6">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            onClick={onClose} 
+          />
+          
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800"
+          >
         <div className="h-32 bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-800 relative">
            <button onClick={onClose} className="absolute top-4 right-4 text-white hover:bg-white/20 p-1 rounded-full transition-colors">
               <X className="w-5 h-5" />
@@ -221,40 +235,56 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
              </div>
           )}
         </div>
-      </div>
-      
-      {selectedBadge && (
-         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-[2px] z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedBadge(null)}>
-            <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-xs shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-end -mt-2 -mr-2">
-                 <button onClick={() => setSelectedBadge(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
-                    <X className="w-4 h-4" />
-                 </button>
-               </div>
-               
-               <div className="flex justify-center mb-4">
-                  {selectedBadge.imageBase64 ? (
-                     <img src={selectedBadge.imageBase64} alt={selectedBadge.name} className="w-24 h-24 rounded-full shadow-lg border-4 border-slate-50 dark:border-slate-700 object-cover" />
-                  ) : (
-                     <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-white dark:border-slate-800 ${selectedBadge.color}`}>
-                       {selectedBadge.icon}
-                     </div>
-                  )}
-               </div>
-               
-               <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">{selectedBadge.name}</h3>
-               {selectedBadge.challengeTitle && (
-                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">
-                   Earned from completing: <span className="text-indigo-600 dark:text-indigo-400">{selectedBadge.challengeTitle}</span>
-                 </p>
-               )}
-               <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-                 <Calendar className="w-3.5 h-3.5" />
-                 Awarded {selectedBadge.awardedAt ? new Date(selectedBadge.awardedAt).toLocaleDateString() : 'recently'}
-               </div>
-            </div>
-         </div>
-      )}
+      </motion.div>
     </div>
+  )}
+
+  <AnimatePresence>
+    {selectedBadge && (
+      <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-slate-900/30 backdrop-blur-[2px] z-[60] flex items-center justify-center p-4 transition-all duration-200" 
+        onClick={() => setSelectedBadge(null)}
+      >
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-xs shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col p-6 text-center" 
+          onClick={e => e.stopPropagation()}
+        >
+         <div className="flex justify-end -mt-2 -mr-2">
+           <button onClick={() => setSelectedBadge(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
+              <X className="w-4 h-4" />
+           </button>
+         </div>
+         
+         <div className="flex justify-center mb-4">
+            {selectedBadge.imageBase64 ? (
+               <img src={selectedBadge.imageBase64} alt={selectedBadge.name} className="w-24 h-24 rounded-full shadow-lg border-4 border-slate-50 dark:border-slate-700 object-cover" />
+            ) : (
+               <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-white dark:border-slate-800 ${selectedBadge.color}`}>
+                 {selectedBadge.icon}
+               </div>
+            )}
+         </div>
+         
+         <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">{selectedBadge.name}</h3>
+         {selectedBadge.challengeTitle && (
+           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">
+             Earned from completing: <span className="text-indigo-600 dark:text-indigo-400">{selectedBadge.challengeTitle}</span>
+           </p>
+         )}
+         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+           <Calendar className="w-3.5 h-3.5" />
+           Awarded {selectedBadge.awardedAt ? new Date(selectedBadge.awardedAt).toLocaleDateString() : 'recently'}
+         </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+  </>
   );
 }
