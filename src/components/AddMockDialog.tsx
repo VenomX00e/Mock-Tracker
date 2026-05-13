@@ -122,17 +122,49 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
       const imagesPayload: { base64: string, mimeType: string }[] = [];
       
       for (const file of files) {
+        // Compress image before upload to avoid Vercel 4.5MB payload limit and speed up Gemini processing
         const base64Data = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
-             const result = reader.result?.toString().split(',')[1];
-             if (result) resolve(result);
-             else reject(new Error("Failed to read file"));
+             const img = new Image();
+             img.onload = () => {
+               const canvas = document.createElement('canvas');
+               let width = img.width;
+               let height = img.height;
+               const maxDim = 1200; // Resizing avoids payload issues
+               if (width > maxDim || height > maxDim) {
+                 if (width > height) {
+                   height = Math.round((height * maxDim) / width);
+                   width = maxDim;
+                 } else {
+                   width = Math.round((width * maxDim) / height);
+                   height = maxDim;
+                 }
+               }
+               canvas.width = width;
+               canvas.height = height;
+               const ctx = canvas.getContext('2d');
+               if (ctx) {
+                 ctx.drawImage(img, 0, 0, width, height);
+                 const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                 const result = dataUrl.split(',')[1];
+                 if (result) resolve(result);
+                 else reject(new Error("Failed to compress image"));
+               } else {
+                 const result = reader.result?.toString().split(',')[1];
+                 resolve(result || '');
+               }
+             };
+             img.onerror = () => {
+                const result = reader.result?.toString().split(',')[1];
+                resolve(result || '');
+             };
+             img.src = reader.result?.toString() || '';
           };
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        imagesPayload.push({ base64: base64Data, mimeType: file.type });
+        imagesPayload.push({ base64: base64Data, mimeType: 'image/jpeg' });
       }
 
       if (imagesPayload.length > 0) {

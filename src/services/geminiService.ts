@@ -75,11 +75,21 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
   });
   
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const msg = err.error || '';
+    let err = {};
+    try { err = await response.json(); } catch (e) {}
+    const msg = (err as any).error || response.statusText || 'Unknown Server Error';
+    const status = response.status;
+    
     if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID')) {
        throw new Error("API Key missing or invalid. Click the app logo in the top left to configure your free key.");
     }
+    
+    if (status === 413) {
+      throw new Error('Image too large. Please upload a smaller image.');
+    } else if (status === 504) {
+      throw new Error('Server timeout while analyzing image. Please try again later.');
+    }
+
     throw new Error(msg || 'Failed to extract scorecard details from server');
   }
 
