@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import Dashboard from './components/Dashboard';
 import CommunityHub from './components/CommunityHub';
 import AdminDialog from './components/AdminDialog';
@@ -134,6 +135,7 @@ export default function App() {
       <AppProvider>
         <AppContent />
       </AppProvider>
+      <SpeedInsights />
     </ErrorBoundary>
   );
 }
