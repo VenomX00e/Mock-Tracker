@@ -92,7 +92,7 @@ export default function Dashboard() {
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
   const [selectedScope, setSelectedScope] = useState<string>('All');
-  const [selectedTrendPeriod, setSelectedTrendPeriod] = useState<string>('All');
+  const [selectedTrendPeriod, setSelectedTrendPeriod] = useState<string>('15 Days');
   const [activeTrendId, setActiveTrendId] = useState<string>('overall');
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
 
@@ -836,7 +836,7 @@ export default function Dashboard() {
                       <div className="-mt-1.5 ml-1">
                         <CustomDropdown
                           value={selectedTrendPeriod === 'All' ? 'All' : selectedTrendPeriod.replace(' Days', '')}
-                          options={['All', '7', '30', 'Custom']}
+                          options={['All', '7', '15', '30', 'Custom']}
                           onChange={(val) => {
                              if (val === 'Custom') setSelectedTrendPeriod('60');
                              else if (val === 'All') setSelectedTrendPeriod('All');
@@ -846,7 +846,7 @@ export default function Dashboard() {
                           buttonClassName="px-0.5 py-0 text-[10.5px] font-bold text-indigo-500 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700/50 border-none rounded whitespace-nowrap leading-none shadow-none"
                           optionClassName="px-2 py-1 text-xs text-center"
                           hideArrow={true}
-                          editable={!['All', '7 Days', '30 Days'].includes(selectedTrendPeriod)}
+                          editable={!['All', '7 Days', '15 Days', '30 Days'].includes(selectedTrendPeriod)}
                         />
                       </div>
                     </div>
@@ -1339,10 +1339,10 @@ export default function Dashboard() {
                          <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 -mb-1">
                            <span className="whitespace-nowrap shrink-0 max-w-[120px] sm:max-w-[250px] truncate">{mock.mockName}</span>
                          </div>
-                         <div className="flex gap-1.5 mt-1 overflow-x-auto scrollbar-hide flex-nowrap md:flex-wrap pb-1">
-                           {mock.platform && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">{getPlatformShort(mock.platform)}</span>}
-                           {mock.examPhase && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-medium whitespace-nowrap">{mock.examPhase}</span>}
-                           {mock.examScope && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap">{mock.examScope}</span>}
+                         <div className="flex items-center gap-1.5 mt-1 overflow-x-auto scrollbar-hide flex-nowrap pb-1 w-full max-w-full">
+                           {mock.platform && <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded-sm bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">{getPlatformShort(mock.platform)}</span>}
+                           {mock.examPhase && <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded-sm bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-medium whitespace-nowrap">{mock.examPhase}</span>}
+                           {mock.examScope && <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap">{mock.examScope}</span>}
                          </div>
                        </div>
                     </td>
@@ -1421,7 +1421,7 @@ export default function Dashboard() {
                     {(activeRowId === mock.id && (mock.note || (mock.tags && mock.tags.length > 0) || mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState || editingReflectionId === mock.id)) && (
                      <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
                         <td colSpan={onDeleteMock || onEditMock ? 10 : 9} className="p-0">
-                          <div className="sticky left-0 w-[calc(100vw-1.5rem)] max-w-full sm:w-auto sm:max-w-none px-4 sm:px-6 py-4">
+                          <div className="sticky left-0 w-[calc(100vw-30px)] sm:w-[calc(100vw-48px)] lg:w-auto max-w-full lg:max-w-none px-4 sm:px-6 py-4 whitespace-normal">
                             <div className="flex flex-col gap-2 relative">
                                <div className="absolute left-[2px] sm:left-[-24px] top-0 bottom-0 w-1 bg-indigo-200 dark:bg-indigo-800 rounded-full"></div>
                                

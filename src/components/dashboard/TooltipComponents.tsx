@@ -138,7 +138,7 @@ export const CustomTooltip = ({ active, payload, coordinate, chartRefBox, active
                 if (!subData?.score) return null;
                 return (
                   <div key={s.id} className="flex justify-between items-center gap-4">
-                    <span className="text-slate-300 text-xs">{s.short || s.name}</span>
+                    <span className="text-slate-300 text-xs">{s.name}</span>
                     <span className="font-mono text-slate-100 font-medium text-xs">
                       <span className={`text-[9px] font-bold px-1 rounded-sm mr-2 ${getHeatmapColor(subData.percentile || 0)}`}>{subData.percentile || '-'}%</span>
                       {subData.score}
