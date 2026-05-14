@@ -95,23 +95,24 @@ export function AllCountdownsModal({
               <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4 py-2">
                 {monthStr}
               </h3>
-              <div className="flex flex-wrap gap-4">
-                {grouped.groups[monthStr].map(c => (
-                  <CountdownCard
-                    key={c.id}
-                    countdown={c}
-                    now={now}
-                    tappedCountdownId={tappedCountdownId}
-                    setTappedCountdownId={setTappedCountdownId}
-                    isPinned={pinnedCountdowns.includes(c.id)}
-                    canManageCountdowns={canManageCountdowns}
-                    togglePin={togglePin}
-                    setAdminEditCountdown={setAdminEditCountdown}
-                    setAdminTab={setAdminTab}
-                    setIsAdminModalOpen={setIsAdminModalOpen}
-                  />
-                ))}
-              </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+            {grouped.groups[monthStr].map(c => (
+              <CountdownCard
+                key={c.id}
+                countdown={c}
+                now={now}
+                tappedCountdownId={tappedCountdownId}
+                setTappedCountdownId={setTappedCountdownId}
+                isPinned={pinnedCountdowns.includes(c.id)}
+                canManageCountdowns={canManageCountdowns}
+                togglePin={togglePin}
+                setAdminEditCountdown={setAdminEditCountdown}
+                setAdminTab={setAdminTab}
+                setIsAdminModalOpen={setIsAdminModalOpen}
+                isModal={true}
+              />
+            ))}
+          </div>
             </div>
           ))}
           {grouped.sortedKeys.length === 0 && (

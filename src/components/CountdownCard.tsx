@@ -12,6 +12,7 @@ export interface CountdownCardProps {
   setAdminEditCountdown: (countdown: any) => void;
   setAdminTab: (tab: any) => void;
   setIsAdminModalOpen: (isOpen: boolean) => void;
+  isModal?: boolean;
 }
 
 export const CountdownCard: React.FC<CountdownCardProps> = ({
@@ -25,6 +26,7 @@ export const CountdownCard: React.FC<CountdownCardProps> = ({
   setAdminEditCountdown,
   setAdminTab,
   setIsAdminModalOpen,
+  isModal = false,
 }) => {
   const getCountdownFormat = (targetDate: string) => {
     const diff = new Date(targetDate).getTime() - now;
@@ -65,26 +67,26 @@ export const CountdownCard: React.FC<CountdownCardProps> = ({
     <div 
       key={c.id} 
       onClick={() => setTappedCountdownId(tappedCountdownId === c.id ? null : c.id)}
-      className={`flex-shrink-0 w-[205px] sm:w-[225px] p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start cursor-pointer transition-transform active:scale-[0.98]`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}
+      className={`flex-shrink-0 ${isModal ? 'w-full' : 'w-[205px] sm:w-[225px]'} p-3 sm:p-4 rounded-xl ${theme.bg} border ${theme.border} flex flex-col justify-between overflow-hidden relative shadow-sm snap-start cursor-pointer transition-transform active:scale-[0.98]`} style={{ marginBottom: '0px', marginTop: '0px', paddingBottom: '16px', marginRight: '0px' }}
     >
       <div className="mb-3 relative z-10 flex justify-between items-start gap-2">
-         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate flex-1 animate-subtle-float text-lg sm:text-[21px]`} style={{ lineHeight: '1.2', fontFamily: '"Times New Roman", Times, serif', marginTop: '-4px', paddingLeft: '0px', paddingRight: '0px', marginLeft: '-4px', marginRight: '-22px', textAlign: 'left' }} title={c.title}>{c.title}</h3>
+         <h3 className={`font-black text-slate-800 dark:text-slate-100 truncate flex-1 animate-subtle-float text-md sm:text-[21px]`} style={{ lineHeight: '1.2', fontFamily: '"Times New Roman", Times, serif', marginTop: '-4px', paddingLeft: '0px', paddingRight: '1px', paddingTop: '2px', marginLeft: '-4px', marginRight: '-22px', textAlign: 'left' }} title={c.title}>{c.title}</h3>
       </div>
       
       <div className="flex flex-col relative z-10" style={{ paddingLeft: '0px', paddingTop: '0px', marginTop: '-14px' }}>
         <div className="flex items-center justify-between" style={{ paddingTop: '0px', marginTop: '14px', marginBottom: '5px' }}>
-          <div className="flex items-center gap-3">
-            <span className={`text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider`}>IN</span>
-            <div className="flex items-baseline gap-2">
-              <div className="flex flex-col items-center">
-                <span className={`text-2xl font-black ${theme.text} leading-none`}>{days}</span>
-                <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Days</span>
-              </div>
-              <span className={`text-lg font-bold ${theme.label} opacity-50`}>:</span>
-              <div className="flex flex-col items-center">
-                <span className={`text-2xl font-black ${theme.text} leading-none`}>{hours}</span>
-                <span className={`text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Hrs</span>
-              </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className={`text-sm sm:text-base font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider`}>IN</span>
+            <div className="flex items-baseline gap-1.5 sm:gap-2">
+          <div className="flex flex-col items-center">
+            <span className={`text-xl sm:text-2xl font-black ${theme.text} leading-none`}>{days}</span>
+            <span className={`text-[8px] sm:text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Days</span>
+          </div>
+          <span className={`text-base sm:text-lg font-bold ${theme.label} opacity-50`}>:</span>
+          <div className="flex flex-col items-center">
+            <span className={`text-xl sm:text-2xl font-black ${theme.text} leading-none`}>{hours}</span>
+            <span className={`text-[8px] sm:text-[9px] uppercase font-bold ${theme.label} tracking-wider mt-0.5`}>Hrs</span>
+          </div>
             </div>
           </div>
           

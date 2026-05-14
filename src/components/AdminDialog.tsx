@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { collection, query, getDocs, doc, setDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
 import { UserProfile } from "../types";
@@ -754,8 +755,6 @@ export default function AdminDialog({
       e.target.value = "";
     }
   };
-
-  if (!isOpen && !asPage) return null;
 
   const renderLiveMockContent = () => (
     <div className="space-y-6 max-w-2xl mx-auto mt-6">
@@ -1787,7 +1786,7 @@ export default function AdminDialog({
         </div>
       )}
       <div
-        className={`bg-white dark:bg-slate-900 ${asPage ? "min-h-[calc(100vh-140px)] shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col md:flex-row ${!asPage ? "animate-in zoom-in-95 duration-200" : ""}`}
+        className={`bg-white dark:bg-slate-900 ${asPage ? "min-h-[calc(100vh-140px)] shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col md:flex-row`}
       >
         {/* Sidebar Nav */}
         {activeTab !== "categories" && (
@@ -2853,8 +2852,26 @@ export default function AdminDialog({
   if (asPage) return content;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      {content}
-    </div>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm pointer-events-auto" 
+            onClick={onClose} 
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="relative z-10 w-full flex items-center justify-center pointer-events-auto"
+          >
+            {content}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }
