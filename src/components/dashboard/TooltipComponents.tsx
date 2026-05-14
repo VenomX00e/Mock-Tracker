@@ -15,15 +15,34 @@ export const PortalContent = ({ chartRefBox, coordinate, content, screenX, scree
     const updatePosition = () => {
        if (chartRefBox.current && tooltipRef.current && coordinate) {
           const r = chartRefBox.current.getBoundingClientRect();
-          const currentScreenX = r.left + coordinate.x;
-          const currentScreenY = r.top + coordinate.y;
+          const pointX = r.left + coordinate.x;
+          const pointY = r.top + coordinate.y;
           
-          const rightHalf = currentScreenX > window.innerWidth / 2;
-          const bottomHalf = currentScreenY > window.innerHeight / 2;
+          const w = tooltipRef.current.offsetWidth;
+          const h = tooltipRef.current.offsetHeight;
           
-          tooltipRef.current.style.left = `${currentScreenX}px`;
-          tooltipRef.current.style.top = `${currentScreenY}px`;
-          tooltipRef.current.style.transform = `translate(${rightHalf ? '-110%' : '10%'}, ${bottomHalf ? '-110%' : '10%'})`;
+          let leftPos = pointX + 10;
+          let topPos = pointY + 10;
+
+          if (leftPos + w > window.innerWidth - 10) {
+             leftPos = pointX - w - 10;
+          }
+          if (leftPos < 10) {
+             leftPos = 10;
+          }
+          
+          if (topPos + h > window.innerHeight - 10) {
+             topPos = pointY - h - 10;
+          }
+          const minTop = document.querySelector('header')?.getBoundingClientRect().height || 64;
+          if (topPos < minTop + 10) {
+             topPos = minTop + 10;
+          }
+          
+          tooltipRef.current.style.left = `${leftPos}px`;
+          tooltipRef.current.style.top = `${topPos}px`;
+          tooltipRef.current.style.transform = `none`;
+          tooltipRef.current.style.opacity = '1';
        }
        animationFrameId = requestAnimationFrame(updatePosition);
     };
@@ -39,11 +58,7 @@ export const PortalContent = ({ chartRefBox, coordinate, content, screenX, scree
     <div 
       ref={tooltipRef}
       className="fixed z-40 pointer-events-none transition-opacity duration-75 ease-out opacity-100"
-      style={{ 
-        left: screenX, 
-        top: screenY,
-        transform: `translate(${isRight ? '-110%' : '10%'}, ${isBottom ? '-110%' : '10%'})`
-      }}
+      style={{ left: screenX, top: screenY, opacity: 0 }} // Start invisible until first JS update
     >
       {content}
     </div>,
@@ -94,7 +109,7 @@ export const CustomTooltip = ({ active, payload, coordinate, chartRefBox, active
     
     const content = (
       <div 
-        className="bg-slate-900 border border-slate-700 text-white p-4 rounded-xl shadow-2xl text-sm min-w-[220px] max-w-[320px] relative z-40 pointer-events-auto"
+        className="bg-slate-900 border border-slate-700 text-white p-3 sm:p-4 rounded-xl shadow-2xl text-[13px] sm:text-sm min-w-[200px] sm:min-w-[220px] max-w-[calc(100vw-20px)] sm:max-w-[320px] overflow-hidden relative z-40 pointer-events-auto"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >

@@ -39,7 +39,7 @@ export default function Dashboard() {
   const { profile } = useUserProfileCtx();
   const { mocks: rawMocks, deletedMocks: rawDeletedMocks = [], deleteMock, restoreDeletedMock, permanentlyDeleteMock, updateMock } = useMocks();
   const { categories } = useSystemDataCtx();
-  const { setIsAddModalOpen, showTasksModal: controlledShowTasksModal, setShowTasksModal: controlledSetShowTasksModal } = useUIStore();
+  const { setIsAddModalOpen, showTasksModal: controlledShowTasksModal, setShowTasksModal: controlledSetShowTasksModal, darkMode } = useUIStore();
   const { handleUpdateProfileTasks: onUpdateProfileTasks, setMockToEdit } = useAppStateCtx();
 
   const onDeleteMock = deleteMock;
@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [selectedRole, setSelectedRole] = useState<string>('All');
   const [selectedPhase, setSelectedPhase] = useState<string>('All');
   const [selectedScope, setSelectedScope] = useState<string>('All');
+  const [selectedTrendPeriod, setSelectedTrendPeriod] = useState<string>('All');
   const [activeTrendId, setActiveTrendId] = useState<string>('overall');
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
 
@@ -308,6 +309,12 @@ export default function Dashboard() {
     localStorage.setItem('goalPercentile', goalPercentileStr);
   }, [goalPercentileStr]);
   
+  useEffect(() => {
+    if (selectedTrendPeriod !== 'All' && selectedTrendPeriod !== 'All Time') {
+       setStatsCountRange('all');
+    }
+  }, [selectedTrendPeriod]);
+
   const goalPercentile = Number(goalPercentileStr) || 0;
 
   // filter
@@ -325,9 +332,29 @@ export default function Dashboard() {
     if (selectedScope !== 'All') {
       filtered = filtered.filter(m => m.examScope === selectedScope);
     }
+    
+    if (selectedTrendPeriod !== 'All' && selectedTrendPeriod !== 'All Time') {
+       let cutoffTime = 0;
+       const is30D = selectedTrendPeriod === '30 Days' || selectedTrendPeriod === 'Last 30 Days';
+       const is7D = selectedTrendPeriod === '7 Days' || selectedTrendPeriod === 'Last 7 Days';
+       if (is30D) {
+          const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 30); cutoffTime = d.getTime();
+       } else if (is7D) {
+          const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 7); cutoffTime = d.getTime();
+       } else {
+          const parsed = parseInt(selectedTrendPeriod);
+          if (!isNaN(parsed) && parsed > 0) {
+            const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - parsed); cutoffTime = d.getTime();
+          }
+       }
+       if (cutoffTime > 0) {
+         filtered = filtered.filter(m => parseLocalDate(m.date).getTime() >= cutoffTime);
+       }
+    }
+    
     // sort by date asc for charts
     return [...filtered].sort((a, b) => parseLocalDate(a.date).getTime() - parseLocalDate(b.date).getTime());
-  }, [mocks, selectedExam, selectedRole, selectedPhase, selectedScope]);
+  }, [mocks, selectedExam, selectedRole, selectedPhase, selectedScope, selectedTrendPeriod]);
 
   const activeTrendFilteredMocks = useMemo(() => {
     return displayedMocks.filter(m => {
@@ -361,6 +388,53 @@ export default function Dashboard() {
     });
     return count > 0 ? Number((sum / count).toFixed(1)) : undefined;
   }, [activeTrendFilteredChronologicalMocks, activeTrendId]);
+
+  const overallTrendAveragesData = useMemo(() => {
+    if (activeTrendId !== 'overall') return { original: [], displayMap: {} };
+    
+    const avgs = [{ id: 'full', name: 'Full' }, ...subjects].map(s => {
+      let sum = 0;
+      let count = 0;
+      activeTrendFilteredChronologicalMocks.forEach(m => {
+        let val: any = null;
+        if (s.id === 'full') {
+          if (!m.examScope || m.examScope === 'Full') val = m.percentile || m.score;
+        } else {
+          const v = getSub(m, s.id);
+          if (v) val = v.percentile || v.score;
+        }
+        const numVal = Number(val);
+        if (val != null && val !== '' && !isNaN(numVal)) {
+          sum += numVal;
+          count++;
+        }
+      });
+      const avg = count > 0 ? Number((sum / count).toFixed(1)) : undefined;
+      return { id: s.id, avg };
+    }).filter((x): x is { id: string, avg: number } => x.avg !== undefined) as { id: string, avg: number }[];
+
+    const original = avgs.map(a => a.avg);
+
+    const sorted = [...avgs].sort((a, b) => b.avg - a.avg).map(x => ({ ...x, displayAvg: x.avg }));
+    const minGap = 5;
+    for (let iter = 0; iter < 10; iter++) {
+        for (let i = 1; i < sorted.length; i++) {
+            const diff = sorted[i-1].displayAvg - sorted[i].displayAvg;
+            if (diff < minGap) {
+                const push = (minGap - diff) / 2;
+                sorted[i-1].displayAvg += push;
+                sorted[i].displayAvg -= push;
+            }
+        }
+    }
+    
+    const displayMap: Record<string, { original: number, display: number }> = {};
+    sorted.forEach(s => {
+       displayMap[s.id] = { original: s.avg, display: s.displayAvg };
+    });
+
+    return { original, displayMap };
+  }, [activeTrendId, activeTrendFilteredChronologicalMocks, subjects]);
 
   // Derive unique roles and scopes for the current selection
   const availableRoles = useMemo(() => {
@@ -414,9 +488,9 @@ export default function Dashboard() {
     };
 
     // Depending on activeTrendId, pick the relevant mocks range (we need newest first)
-    // activeTrendFilteredMocks is already filtered and is newest-first
-    const targetMocksLength = statsCountRange === 'all' ? activeTrendFilteredMocks.length : statsCountRange;
-    const lastN = activeTrendFilteredMocks.slice(0, targetMocksLength);
+    // activeTrendFilteredMocks is already filtered and is oldest-first
+    const targetMocksLength = (statsCountRange === 'all' || (selectedTrendPeriod !== 'All' && selectedTrendPeriod !== 'All Time')) ? activeTrendFilteredMocks.length : statsCountRange;
+    const lastN = activeTrendFilteredMocks.slice(-targetMocksLength);
     
     const scores = lastN.map(m => getField(m, 'score')).filter(v => v != null && !isNaN(parseFloat(v as string))) as number[];
     const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + Number(b), 0) / scores.length).toFixed(1) : '-';
@@ -428,8 +502,8 @@ export default function Dashboard() {
     const avgAccuracy = accuracies.length > 0 ? (accuracies.reduce((a, b) => a + Number(b), 0) / accuracies.length).toFixed(1) : '-';
 
     // For Radar chart - calculate average sectional percentiles off the last N generic mocks
-    const targetDescLength = statsCountRange === 'all' ? displayedMocks.length : Math.max(statsCountRange as number, 5); 
-    const recentDescending = displayedMocks.slice(0, targetDescLength);
+    const targetDescLength = (statsCountRange === 'all' || (selectedTrendPeriod !== 'All' && selectedTrendPeriod !== 'All Time')) ? displayedMocks.length : Math.max(statsCountRange as number, 5); 
+    const recentDescending = displayedMocks.slice(-targetDescLength);
 
     const subjectAverages: Record<string, number> = {};
     subjects.forEach(s => {
@@ -456,7 +530,7 @@ export default function Dashboard() {
       avgScore, avgPercentile, avgAccuracy, totalTests, scoreDiff, isScoreUp, recent,
       subjectAverages
     };
-  }, [displayedMocks, statsCountRange, activeTrendFilteredMocks, activeTrendId, subjects]);
+  }, [displayedMocks, statsCountRange, activeTrendFilteredMocks, activeTrendId, subjects, selectedTrendPeriod]);
 
   const chartDataReversed = useMemo(() => {
     return [...activeTrendFilteredChronologicalMocks].reverse().map(m => {
@@ -753,32 +827,74 @@ export default function Dashboard() {
   
     {/* Chart: Percentile Trend */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col min-h-[325px] sm:h-[325px] lg:col-span-2 relative mt-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-4">
-                <div className="flex items-center gap-4">
-                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                    <Trophy className="w-5 h-5 mr-2 text-slate-400 dark:text-slate-500" /> Performance Trend
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-3 lg:mb-2 gap-3 lg:gap-4">
+                <div className="flex items-start sm:items-center justify-between w-full lg:w-auto">
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-start whitespace-nowrap tracking-tight">
+                    <Trophy className="w-5 h-5 flex-shrink-0 mr-1.5 text-slate-400 dark:text-slate-500 mt-0.5" /> 
+                    <div className="flex items-start whitespace-nowrap">
+                      Performance Trend
+                      <div className="-mt-1.5 ml-1">
+                        <CustomDropdown
+                          value={selectedTrendPeriod === 'All' ? 'All' : selectedTrendPeriod.replace(' Days', '')}
+                          options={['All', '7', '30', 'Custom']}
+                          onChange={(val) => {
+                             if (val === 'Custom') setSelectedTrendPeriod('60');
+                             else if (val === 'All') setSelectedTrendPeriod('All');
+                             else setSelectedTrendPeriod(val + ' Days');
+                          }}
+                          placeholder="Days"
+                          buttonClassName="px-0.5 py-0 text-[10.5px] font-bold text-indigo-500 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700/50 border-none rounded whitespace-nowrap leading-none shadow-none"
+                          optionClassName="px-2 py-1 text-xs text-center"
+                          hideArrow={true}
+                          editable={!['All', '7 Days', '30 Days'].includes(selectedTrendPeriod)}
+                        />
+                      </div>
+                    </div>
                   </h3>
-                  <div className="w-24 sm:w-28 mt-1 sm:mt-0">
-                    <CustomDropdown
-                      value={selectedPhase}
-                      options={selectedExam === 'All' || availablePhases.length === 0 ? allGlobalPhases : availablePhases}
-                      onChange={(val) => setSelectedPhase(val)}
-                      placeholder="Phase"
-                      buttonClassName="px-3 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700/50 border-transparent rounded-lg"
-                      optionClassName="px-3 py-1.5 text-xs"
-                    />
+                  <div className="flex items-center gap-2 mt-0 ml-2">
+                    <div className="w-20 sm:w-28">
+                      <CustomDropdown
+                        value={selectedPhase}
+                        options={selectedExam === 'All' || availablePhases.length === 0 ? allGlobalPhases : availablePhases}
+                        onChange={(val) => setSelectedPhase(val)}
+                        placeholder="Phase"
+                        buttonClassName="px-2 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs text-indigo-700 dark:text-indigo-400 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg whitespace-nowrap"
+                        optionClassName="px-3 py-1.5 text-xs"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-row overflow-x-auto custom-scrollbar gap-1.5 sm:gap-2 pb-1 sm:pb-0 w-full sm:w-auto">
-                  {[{ id: 'overall', name: 'Overall' }, { id: 'full', name: 'Full' }, ...subjects].map(s => (
-                    <button 
-                      key={s.id} 
-                      onClick={() => setActiveTrendId(s.id)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap ${activeTrendId === s.id ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-400' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                    >
-                      {s.name}
-                    </button>
-                  ))}
+                <div className="flex flex-row overflow-x-auto custom-scrollbar gap-1.5 sm:gap-2 pb-1 sm:pb-0 w-full lg:w-auto lg:flex-1 lg:justify-end">
+                  {[{ id: 'overall', name: 'Overall' }, { id: 'full', name: 'Full' }, ...subjects].map((s) => {
+                    const isActive = activeTrendId === s.id;
+                    const getSubjectColor = (subjectId: string) => {
+                      if (subjectId === 'overall') return '#6366f1';
+                      if (subjectId === 'full') return '#ec4899';
+                      const sIdx = subjects.findIndex(sub => sub.id === subjectId);
+                      if (sIdx !== -1) {
+                        const colors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
+                        return colors[sIdx % colors.length];
+                      }
+                      return '#6366f1';
+                    };
+                    const color = getSubjectColor(s.id);
+                    
+                    return (
+                      <button 
+                        key={s.id} 
+                        onClick={() => setActiveTrendId(s.id)}
+                        style={{ 
+                          backgroundColor: isActive ? `${color}20` : `${color}10`,
+                          color: color,
+                          borderColor: isActive ? `${color}` : `${color}30`,
+                          opacity: isActive ? 1 : 0.65
+                        }}
+                        className={`text-xs px-2.5 py-1 border rounded-full font-medium transition-all whitespace-nowrap hover:opacity-100 ${isActive ? 'shadow-sm' : ''}`}
+                      >
+                        {s.name}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
               <div className="flex-1 w-full mt-4 overflow-hidden relative min-h-[200px] sm:min-h-[250px]">
@@ -788,23 +904,93 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} tickFormatter={(value) => {
-                      if (averageTrendLineValue !== undefined && Math.abs(value - averageTrendLineValue) <= 2) {
+                      if (activeTrendId === 'overall') {
+                        for (const avg of overallTrendAveragesData.original) {
+                          if (Math.abs(value - avg) <= 5) return '';
+                        }
+                      } else if (averageTrendLineValue !== undefined && Math.abs(value - averageTrendLineValue) <= 5) {
                         return '';
                       }
                       return String(Math.round(value));
                     }} />
                     <RechartsTooltip content={<CustomTooltip chartRefBox={lineChartRefInner} activeTrendId={activeTrendId} subjects={subjects} getSub={getSub} />} isAnimationActive={false} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
-                    {averageTrendLineValue !== undefined && (
-                      <ReferenceLine y={averageTrendLineValue} stroke="#10b981" strokeDasharray="3 3" opacity={0.5}>
-                        <Label value={`${Math.round(averageTrendLineValue * 10) / 10}`} position="left" fill="#10b981" fontSize={12} fontWeight="bold" />
+                    {(averageTrendLineValue !== undefined && activeTrendId !== 'overall') && (
+                      <ReferenceLine y={averageTrendLineValue} stroke="transparent">
+                        <Label value={`${Math.round(averageTrendLineValue * 10) / 10}`} position="left" fill={(() => {
+                          if (activeTrendId === 'full') return '#ec4899';
+                          if (activeTrendId === 'overall') return '#6366f1';
+                          const sIdx = subjects.findIndex(sub => sub.id === activeTrendId);
+                          if (sIdx !== -1) {
+                            return ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'][sIdx % 6];
+                          }
+                          return '#10b981';
+                        })()} fontSize={12} fontWeight="bold" />
                       </ReferenceLine>
                     )}
-                    <Line connectNulls={true} type="monotone" dataKey={(m: any) => {
-                        if (activeTrendId === 'overall' || activeTrendId === 'full') return m.percentile || m.score;
-                        const v = getSub(m, activeTrendId);
-                        if (!v) return null;
-                        return v.percentile || v.score;
-                    }} name={(activeTrendId === 'overall' || activeTrendId === 'full') ? 'Percentile/Score' : `${activeTrendId} %ile/Score`} stroke="#6366f1" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6, strokeWidth: 0, fill: '#6366f1' }} />
+                    {activeTrendId === 'overall' ? (
+                      [{ id: 'full', name: 'Full' }, ...subjects].map((s) => {
+                         const getSubjectColor = (subjectId: string) => {
+                           if (subjectId === 'full') return '#ec4899';
+                           const sIdx = subjects.findIndex(sub => sub.id === subjectId);
+                           if (sIdx !== -1) {
+                             const colors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
+                             return colors[sIdx % colors.length];
+                           }
+                           return '#6366f1';
+                         };
+                         const color = getSubjectColor(s.id);
+                         
+                         const avgData = overallTrendAveragesData.displayMap[s.id];
+
+                         return (
+                           <React.Fragment key={s.id}>
+                             {avgData !== undefined && (
+                               <ReferenceLine y={avgData.display} stroke="transparent">
+                                 <Label value={`${Math.round(avgData.original * 10) / 10}`} position="left" fill={color} fontSize={12} fontWeight="bold" />
+                               </ReferenceLine>
+                             )}
+                             <Line 
+                               connectNulls={true} 
+                               type="monotone" 
+                               dataKey={(m: any) => {
+                                 if (s.id === 'full') {
+                                   if (m.examScope && m.examScope !== 'Full') return null;
+                                   return m.percentile || m.score;
+                                 }
+                                 const v = getSub(m, s.id);
+                                 if (!v) return null;
+                                 return v.percentile || v.score;
+                               }} 
+                               name={`${s.name} %ile/Score`} 
+                               stroke={color} 
+                               strokeWidth={s.id === 'full' ? 3 : 2} 
+                               dot={{ r: s.id === 'full' ? 4 : 3, strokeWidth: 2, fill: '#fff' }} 
+                               activeDot={{ r: s.id === 'full' ? 6 : 5, strokeWidth: 0, fill: color }} 
+                             />
+                           </React.Fragment>
+                         );
+                      })
+                    ) : (
+                      <Line connectNulls={true} type="monotone" dataKey={(m: any) => {
+                          if (activeTrendId === 'full') return m.percentile || m.score;
+                          const v = getSub(m, activeTrendId);
+                          if (!v) return null;
+                          return v.percentile || v.score;
+                      }} name={activeTrendId === 'full' ? 'Percentile/Score' : `${activeTrendId} %ile/Score`} stroke={(() => {
+                          if (activeTrendId === 'full') return '#ec4899';
+                          const sIdx = subjects.findIndex(sub => sub.id === activeTrendId);
+                          if (sIdx !== -1) {
+                            const colors = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
+                            return colors[sIdx % colors.length];
+                          }
+                          return '#6366f1';
+                      })()} strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={(() => {
+                           if (activeTrendId === 'full') return { r: 6, strokeWidth: 0, fill: '#ec4899' };
+                           const sIdx = subjects.findIndex(sub => sub.id === activeTrendId);
+                           const color = sIdx !== -1 ? ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'][sIdx % 6] : '#6366f1';
+                           return { r: 6, strokeWidth: 0, fill: color };
+                      })()} />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
