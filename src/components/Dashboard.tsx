@@ -20,7 +20,6 @@ import { saveAs } from 'file-saver';
 
 import { ReflectionEditor } from './ReflectionEditor';
 
-import { ActionItemsModal } from './dashboard/ActionItemsModal';
 import { TaskProgressDisk } from './TasksTile';
 
 import { PortalContent, CustomTooltip } from './dashboard/TooltipComponents';
@@ -39,7 +38,7 @@ export default function Dashboard() {
   const { profile } = useUserProfileCtx();
   const { mocks: rawMocks, deletedMocks: rawDeletedMocks = [], deleteMock, restoreDeletedMock, permanentlyDeleteMock, updateMock } = useMocks();
   const { categories } = useSystemDataCtx();
-  const { setIsAddModalOpen, showTasksModal: controlledShowTasksModal, setShowTasksModal: controlledSetShowTasksModal, darkMode } = useUIStore();
+  const { setActiveTab, setIsAddModalOpen, showTasksModal: controlledShowTasksModal, setShowTasksModal: controlledSetShowTasksModal, darkMode } = useUIStore();
   const { handleUpdateProfileTasks: onUpdateProfileTasks, setMockToEdit } = useAppStateCtx();
 
   const onDeleteMock = deleteMock;
@@ -51,7 +50,8 @@ export default function Dashboard() {
   };
   const onEditMock = (mock: MockScore) => {
     setMockToEdit(mock);
-    setIsAddModalOpen(true);
+    setActiveTab('add-mock');
+    window.scrollTo(0, 0);
   };
 
   const activeCategory = (categories || []).find((c: any) => c.id === profile?.categoryId) || categories?.[0];
@@ -107,11 +107,7 @@ export default function Dashboard() {
 
   const [chartView, setChartView] = useState<'bar' | 'radar'>('bar');
   const [showRecycleBin, setShowRecycleBin] = useState(false);
-  const [localShowTasksModal, setLocalShowTasksModal] = useState(false);
-  const showTasksModal = controlledShowTasksModal !== undefined ? controlledShowTasksModal : localShowTasksModal;
-  const setShowTasksModal = controlledSetShowTasksModal || setLocalShowTasksModal;
   
-
   const handleExportExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Mock History');
@@ -629,16 +625,16 @@ export default function Dashboard() {
   const pendingTasksCount = mocks.reduce((acc, mock) => acc + (mock.tasks?.filter(t => !t.completed).length || 0), 0);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-8 animate-in fade-in duration-0">
       {/* Tabs */}
       {mocks.length > 0 && (
       <div className="flex overflow-x-auto mb-[6px] pb-[12px] gap-2 custom-scrollbar">
-        <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-2xl items-center flex-nowrap w-max border border-slate-200/50 dark:border-slate-700/50 backdrop-blur-md shadow-sm relative">
+        <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-2xl items-center flex-nowrap w-max border border-slate-200/50 dark:border-slate-700/50  shadow-sm relative">
           {examTypes.map(type => (
             <button
               key={type}
               onClick={() => setSelectedExam(type)}
-              className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors duration-200 z-10 ${
+              className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors duration-0 z-10 ${
                 selectedExam === type 
                   ? 'text-blue-600 dark:text-blue-400' 
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
@@ -648,7 +644,7 @@ export default function Dashboard() {
                 <motion.div
                   layoutId="activeExamTab"
                   className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-600 -z-10"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.3 }}
                 />
               )}
               <span className="relative z-10">{type}</span>
@@ -659,7 +655,7 @@ export default function Dashboard() {
       )}
 
       {selectedExam !== 'All' && (availableRoles.length > 1 || availablePhases.length > 1 || availableScopes.length > 1) && (
-        <div className="flex flex-col gap-4 mb-6 bg-slate-50/80 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-sm">
+        <div className="flex flex-col gap-4 mb-6 bg-slate-50/80 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 ">
           {availableRoles.length > 1 && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest sm:w-16">Role:</span>
@@ -741,14 +737,7 @@ export default function Dashboard() {
             </div>
 
             {/* 2. Avg Percentile */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-indigo-500 relative overflow-hidden group hover:border-indigo-300 dark:hover:border-indigo-500 transition-all cursor-pointer" onClick={() => setShowPcntOptions(!showPcntOptions)}>
-              {showPcntOptions && (
-                <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-medium animate-in slide-in-from-top-2 duration-200">
-                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(5); setShowPcntOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 5 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>5</button>
-                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(10); setShowPcntOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 10 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>10</button>
-                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange('all'); setShowPcntOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 'all' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>All</button>
-                </div>
-              )}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-indigo-500 relative overflow-hidden transition-all">
               <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-2 mt-1">
                 <Trophy className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
                 <span className="font-medium text-xs sm:text-sm truncate">Avg Percentile</span>
@@ -767,14 +756,7 @@ export default function Dashboard() {
             </div>
 
             {/* 3. Avg Accuracy */}
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-blue-500 relative overflow-hidden group hover:border-blue-300 dark:hover:border-blue-500 transition-all cursor-pointer" onClick={() => setShowAccOptions(!showAccOptions)}>
-              {showAccOptions && (
-                <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] font-medium animate-in slide-in-from-top-2 duration-200">
-                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(5); setShowAccOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 5 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>5</button>
-                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange(10); setShowAccOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 10 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>10</button>
-                  <button onClick={(e) => { e.stopPropagation(); setStatsCountRange('all'); setShowAccOptions(false); }} className={`px-2 py-0.5 rounded-full transition-colors ${statsCountRange === 'all' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>All</button>
-                </div>
-              )}
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-blue-500 relative overflow-hidden transition-all">
               <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-2 mt-1">
                 <Target className="w-5 h-5 text-blue-500 dark:text-blue-400" />
                 <span className="font-medium text-xs sm:text-sm truncate">Avg Accuracy</span>
@@ -1165,36 +1147,81 @@ export default function Dashboard() {
                 
                 const msSinceLast = today.getTime() - lastMockDate.getTime();
                 const daysSinceLast = Math.max(0, Math.floor(msSinceLast / (1000 * 60 * 60 * 24)));
-                const streakMessage = daysSinceLast === 0 ? "You took a mock today! 🔥" : daysSinceLast === 1 ? "You took a mock yesterday. Keep it up!" : `It's been ${daysSinceLast} days since your last mock.`;
+                
+                let consistCardBg = "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-600";
+                let consistHeaderColor = "text-slate-500 dark:text-slate-400";
+                let consistIcon = "⏳";
+                let streakMessage = "";
+
+                if (daysSinceLast === 0) {
+                    consistCardBg = "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600";
+                    consistHeaderColor = "text-emerald-700 dark:text-emerald-400";
+                    consistIcon = "🔥";
+                    streakMessage = "You took a mock today! Great job maintaining the streak.";
+                } else if (daysSinceLast <= 2) {
+                    consistCardBg = "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600";
+                    consistHeaderColor = "text-blue-700 dark:text-blue-400";
+                    consistIcon = "💡";
+                    streakMessage = `It's been ${daysSinceLast} ${daysSinceLast === 1 ? 'day' : 'days'}. Give a mock today to stay consistent!`;
+                } else if (daysSinceLast <= 4) {
+                    consistCardBg = "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600";
+                    consistHeaderColor = "text-amber-700 dark:text-amber-400";
+                    consistIcon = "⚠️";
+                    streakMessage = `It's been ${daysSinceLast} days without a mock. Stop slacking and give a mock today!`;
+                } else if (daysSinceLast <= 7) {
+                    consistCardBg = "bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600";
+                    consistHeaderColor = "text-orange-700 dark:text-orange-400";
+                    consistIcon = "🚨";
+                    streakMessage = `${daysSinceLast} days without practice? Your competition is getting ahead while you procrastinate. Take a mock now!`;
+                } else {
+                    consistCardBg = "bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 hover:border-rose-400 dark:hover:border-rose-600";
+                    consistHeaderColor = "text-rose-700 dark:text-rose-400";
+                    consistIcon = "💀";
+                    streakMessage = `${daysSinceLast} days?! Are you even preparing for the exam anymore? Complete a mock immediately, excuses won't clear the cutoff!`;
+                }
 
                 let taskCardBg = "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600";
                 let taskHeaderColor = "text-emerald-700 dark:text-emerald-400";
                 let taskIcon = "🎉";
-                let taskMessage = "Wow, 0 pending tasks! You actually did your job. Keep it that way.";
+                let taskMessage = "";
 
-                if (pendingTasksCount > 8) {
-                    taskCardBg = "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 hover:border-red-400 dark:hover:border-red-600";
-                    taskHeaderColor = "text-red-700 dark:text-red-400";
-                    taskIcon = "🚨";
-                    taskMessage = `Stop procrastinating! You have ${pendingTasksCount} pending tasks piling up. Get them done now!`;
-                } else if (pendingTasksCount >= 5) {
-                    taskCardBg = "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600";
-                    taskHeaderColor = "text-amber-700 dark:text-amber-400";
-                    taskIcon = "⚠️";
-                    taskMessage = `You have ${pendingTasksCount} pending tasks. They are piling up, start clearing them soon.`;
-                } else if (pendingTasksCount > 0) {
+                if (pendingTasksCount === 0) {
+                    taskCardBg = "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 dark:hover:border-emerald-600";
+                    taskHeaderColor = "text-emerald-700 dark:text-emerald-400";
+                    taskIcon = "🎉";
+                    taskMessage = "0 pending tasks! Great job maintaining a clean backlog.";
+                } else if (pendingTasksCount <= 4) {
                     taskCardBg = "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600";
                     taskHeaderColor = "text-blue-700 dark:text-blue-400";
                     taskIcon = "📝";
-                    taskMessage = `You have ${pendingTasksCount} pending tasks. Try to complete them when you can.`;
+                    taskMessage = `Only ${pendingTasksCount} pending ${pendingTasksCount === 1 ? 'task' : 'tasks'}. Finish them soon before they pile up!`;
+                } else if (pendingTasksCount <= 7) {
+                    taskCardBg = "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 hover:border-amber-400 dark:hover:border-amber-600";
+                    taskHeaderColor = "text-amber-700 dark:text-amber-400";
+                    taskIcon = "⚠️";
+                    taskMessage = `${pendingTasksCount} pending tasks. Stop pushing them to tomorrow and clear your plate!`;
+                } else if (pendingTasksCount <= 10) {
+                    taskCardBg = "bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800 hover:border-orange-400 dark:hover:border-orange-600";
+                    taskHeaderColor = "text-orange-700 dark:text-orange-400";
+                    taskIcon = "🚨";
+                    taskMessage = `${pendingTasksCount} pending tasks! Your backlog is getting out of hand. Clear them down before adding any more.`;
+                } else {
+                    taskCardBg = "bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800 hover:border-rose-400 dark:hover:border-rose-600";
+                    taskHeaderColor = "text-rose-700 dark:text-rose-400";
+                    taskIcon = "💀";
+                    taskMessage = `${pendingTasksCount} tasks pending?! Are you just collecting tasks for a museum? Complete your tasks immediately!`;
                 }
+
 
                 return (
                    <>
-                      <div className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden group transition-colors ${taskCardBg}`}>
-                         <div className="text-3xl mb-2">{taskIcon}</div>
+                      <div 
+                         onClick={() => { setActiveTab('tasks'); window.scrollTo(0, 0); }}
+                         className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden group transition-all cursor-pointer hover:shadow-md ${taskCardBg}`}
+                      >
+                         <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">{taskIcon}</div>
                          <h4 className={`text-sm font-semibold ${taskHeaderColor}`}>Action Required</h4>
-                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium">
+                         <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
                             {taskMessage}
                          </p>
                       </div>
@@ -1216,9 +1243,9 @@ export default function Dashboard() {
                          </div>
                       </div>
                       
-                      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:border-amber-300 dark:hover:border-amber-600 transition-colors">
-                         <div className="text-3xl mb-2">{daysSinceLast <= 1 ? "🔥" : "⏳"}</div>
-                         <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400">Consistency</h4>
+                      <div className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden group transition-colors ${consistCardBg}`}>
+                         <div className="text-3xl mb-2">{consistIcon}</div>
+                         <h4 className={`text-sm font-semibold ${consistHeaderColor}`}>Consistency</h4>
                          <p className="mt-1 text-slate-800 dark:text-slate-100 font-medium">
                             {streakMessage}
                          </p>
@@ -1231,7 +1258,7 @@ export default function Dashboard() {
         </>
       )}
 
-      <div className="flex flex-wrap items-center mt-12 mb-6 gap-3 sm:gap-4">
+      <div id="history-log" className="flex flex-wrap items-center mt-12 mb-6 gap-3 sm:gap-4 scroll-mt-24">
         <div className="flex items-center gap-4">
           <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2 mr-2">
             {showRecycleBin ? 'Recycle Bin' : 'History Log'}
@@ -1241,7 +1268,7 @@ export default function Dashboard() {
           </h3>
 
           <button
-            onClick={() => setShowTasksModal(true)}
+            onClick={() => { setActiveTab('tasks'); window.scrollTo(0, 0); }}
             className="px-3 py-1.5 border rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-900/60 relative shadow-sm"
             title="View Action Items"
           >
@@ -1624,16 +1651,6 @@ export default function Dashboard() {
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-amber-100 dark:bg-amber-900/50 ring-1 ring-amber-500/20 dark:ring-amber-500/50"></div> 70-80%ile</div>
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-rose-100 dark:bg-rose-900/50 ring-1 ring-rose-500/20 dark:ring-rose-500/50"></div> &lt;70%ile</div>
           </div>
-
-          {/* Action Items Modal */}
-          <ActionItemsModal 
-            showTasksModal={showTasksModal}
-            setShowTasksModal={setShowTasksModal}
-            mocks={mocks}
-            profile={profile}
-            onUpdateProfileTasks={onUpdateProfileTasks}
-            onUpdateReflection={onUpdateReflection}
-          />
     </div>
   );
 }

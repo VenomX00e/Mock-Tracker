@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckSquare, Check, Target } from 'lucide-react';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export function TaskProgressDisk({ 
   task, 
@@ -15,17 +16,10 @@ export function TaskProgressDisk({
   const [isExpanded, setIsExpanded] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
   
   const [localCp, setLocalCp] = useState<string>(task.completedParts !== undefined ? String(task.completedParts) : "0");
   const [localTp, setLocalTp] = useState<string>(task.totalParts !== undefined ? String(task.totalParts) : "10");
-
-  useEffect(() => {
-    setIsMobile(window.innerWidth < 640);
-    const handleResize = () => setIsMobile(window.innerWidth < 640);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const actualVariant = (variant === 'inline' && isMobile) ? 'floating' : variant;
 
@@ -134,7 +128,7 @@ export function TaskProgressDisk({
     <div 
       ref={contentRef}
       className={actualVariant === 'floating' 
-        ? "fixed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-[9999] p-1.5 flex gap-1 items-center min-w-max transition-opacity duration-150"
+        ? "fixed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-[9999] p-1.5 flex gap-1 items-center min-w-max transition-opacity duration-0"
         : "flex items-center gap-1 mr-1 text-xs font-semibold text-slate-600 dark:text-slate-300"
       }
       style={actualVariant === 'floating' ? { top: popoverCoords.top, left: popoverCoords.left, opacity: popoverCoords.top === 0 ? 0 : 1, pointerEvents: popoverCoords.top === 0 ? 'none' : 'auto' } : {}}

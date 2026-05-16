@@ -26,9 +26,190 @@
   z-index: 1000 !important;
 }
 
+/* Hide scrollbar for Chrome, Safari and Opera */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+* {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 input[type="search"]::-webkit-search-decoration,
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-results-button,
 input[type="search"]::-webkit-search-results-decoration {
   display: none;
+}
+
+/* Cyberpunk / Gamer Theme Overrides */
+html.cyber {
+  background-color: #0b132b !important; /* Deep rich blue */
+  color: #e0f2fe;
+}
+
+html.cyber body, 
+html.cyber #root, 
+html.cyber [class*="bg-[#0f172a]"],
+html.cyber .dark\:bg-\[\#0f172a\] {
+  background-color: transparent !important;
+}
+
+/* Background grid stays fixed */
+html.cyber::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.15) 0%, transparent 60%),
+    linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  background-position: center top, center center, center center;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Cards & Modals */
+html.cyber .dark\:bg-slate-900,
+html.cyber .dark\:bg-slate-800,
+html.cyber [class*="dark:bg-slate-900"],
+html.cyber [class*="dark:bg-slate-800"],
+html.cyber .bg-white,
+html.cyber [class*="bg-gradient-to-br"] {
+  background-color: rgba(16, 24, 52, 0.98) !important;
+  background-image: none !important;
+  border: 1px solid rgba(14, 165, 233, 0.3) !important;
+  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.05), inset 0 0 10px rgba(14, 165, 233, 0.05) !important;
+}
+
+/* Modals backdrop specific */
+html.cyber .fixed.inset-0.bg-slate-900\/50,
+html.cyber [class*="bg-slate-900/50"],
+html.cyber [class*="bg-[#0f172a]/50"],
+html.cyber [class*="bg-slate-50/50"] {
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Glowing text */
+html.cyber .text-slate-800,
+html.cyber .text-slate-900,
+html.cyber .dark\:text-slate-100,
+html.cyber .dark\:text-white,
+html.cyber [class*="dark:text-white"],
+html.cyber [class*="dark:text-slate-100"] {
+  color: #bae6fd !important;
+}
+
+html.cyber h1, html.cyber h2, html.cyber h3, html.cyber h4, html.cyber h5, html.cyber h6 {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.5), 0 0 20px rgba(56, 189, 248, 0.3) !important;
+  letter-spacing: 0.05em;
+}
+
+/* Neon buttons */
+html.cyber button.bg-white,
+html.cyber button.dark\:bg-slate-700,
+html.cyber button[class*="dark:bg-slate-700"],
+html.cyber .bg-white.dark\:bg-slate-700 {
+  background-color: rgba(14, 165, 233, 0.1) !important;
+  border: 1px solid rgba(14, 165, 233, 0.5) !important;
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.2), inset 0 0 5px rgba(14, 165, 233, 0.1) !important;
+  color: #38bdf8 !important;
+}
+
+html.cyber button.bg-white:hover,
+html.cyber button.dark\:bg-slate-700:hover,
+html.cyber button[class*="dark:bg-slate-700"]:hover,
+html.cyber .bg-white.dark\:bg-slate-700:hover {
+  background-color: rgba(14, 165, 233, 0.2) !important;
+  box-shadow: 0 0 20px rgba(14, 165, 233, 0.4), inset 0 0 10px rgba(14, 165, 233, 0.2) !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6) !important;
+}
+
+/* Gradients text/buttons */
+html.cyber .bg-indigo-600,
+html.cyber .dark\:bg-indigo-600,
+html.cyber [class*="from-indigo-500"],
+html.cyber [class*="from-blue-600"] {
+  background: transparent !important;
+  background-color: rgba(14, 165, 233, 0.15) !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 0 20px rgba(14, 165, 233, 0.4), inset 0 0 15px rgba(14, 165, 233, 0.2) !important;
+  border: 1px solid #38bdf8 !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.8) !important;
+}
+
+html.cyber [class*="bg-gradient-to-r"] {
+  background: transparent !important;
+  background-color: rgba(14, 165, 233, 0.08) !important;
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.2), inset 0 0 5px rgba(14, 165, 233, 0.1) !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+}
+
+html.cyber .notice-card-container {
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.15), inset 0 0 5px rgba(14, 165, 233, 0.05) !important;
+}
+
+/* Transparent gradients fix for text */
+html.cyber .bg-clip-text {
+  background: none !important;
+  -webkit-text-fill-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
+html.cyber .text-indigo-600,
+html.cyber .dark\:text-indigo-400,
+html.cyber .text-blue-600,
+html.cyber .dark\:text-blue-400 {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.5) !important;
+}
+
+/* Muted text */
+html.cyber .text-slate-500,
+html.cyber .dark\:text-slate-400,
+html.cyber [class*="text-slate-500"],
+html.cyber [class*="dark:text-slate-400"] {
+  color: #7dd3fc !important;
+  opacity: 0.8;
+}
+
+/* Specific Pill Overrides */
+html.cyber .bg-indigo-100,
+html.cyber [class*="dark:bg-indigo-900/"] {
+  background-color: rgba(14, 165, 233, 0.15) !important;
+  border-color: rgba(14, 165, 233, 0.3) !important;
+  color: #38bdf8 !important;
+}
+
+html.cyber .bg-emerald-50,
+html.cyber [class*="dark:bg-emerald-900/"] {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+html.cyber .bg-orange-50,
+html.cyber [class*="dark:bg-orange-900/"] {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  border-color: rgba(249, 115, 22, 0.3) !important;
+  color: #fb923c !important;
+}
+
+html.cyber .bg-slate-100.dark\:bg-slate-800,
+html.cyber span.dark\:bg-slate-800,
+html.cyber div.text-sm.dark\:bg-slate-800 {
+  background-color: rgba(14, 165, 233, 0.1) !important;
+}
+
+/* Borders */
+html.cyber .border-slate-100,
+html.cyber .dark\:border-slate-800,
+html.cyber .dark\:border-slate-700,
+html.cyber [class*="dark:border-slate-800"],
+html.cyber [class*="dark:border-slate-700"] {
+  border-color: rgba(14, 165, 233, 0.1) !important;
 }

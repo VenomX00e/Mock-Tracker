@@ -66,11 +66,11 @@ export function AllCountdownsModal({
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
+      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0 } }}
+      transition={{ duration: 0.1 }}
       className="fixed inset-0 z-[100] flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden"
     >
-      <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shrink-0">
+      <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16 bg-white/80 dark:bg-slate-900/80  border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="flex items-center gap-3">
           <button 
             onClick={onClose}

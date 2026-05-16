@@ -33,7 +33,7 @@ export function ModalsSection() {
       adminTab, setAdminTab,
       adminEditNotice, setAdminEditNotice,
       adminEditCountdown, setAdminEditCountdown,
-      darkMode, setDarkMode
+      theme, setTheme
   } = useUIStore();
   const { challenges, deletedChallenges, selectedCategory, categories } = useSystemDataCtx();
   const {
@@ -118,8 +118,8 @@ export function ModalsSection() {
         <ProfileDialog
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
-          darkMode={darkMode}
-          setDarkMode={setDarkMode}
+          theme={theme}
+          setTheme={setTheme}
           categories={categories}
         />
       )}

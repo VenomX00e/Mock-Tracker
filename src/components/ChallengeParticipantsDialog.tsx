@@ -27,8 +27,8 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
   if (!showUsers) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-0">
         <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
           <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-500" />
@@ -135,7 +135,7 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
 
                return (
                  <div key={date} className="mb-6 last:mb-0 relative">
-                    <div className="flex items-center gap-3 mb-4 sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur pb-2 pt-1 z-10">
+                    <div className="flex items-center gap-3 mb-4 sticky top-0 bg-white/90 dark:bg-slate-900/90  pb-2 pt-1 z-10">
                       <h5 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-100 dark:border-indigo-500/20">
                         {dayLabel || 'Day'}
                       </h5>

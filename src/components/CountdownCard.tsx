@@ -118,7 +118,7 @@ export const CountdownCard: React.FC<CountdownCardProps> = ({
         
         {/* Progress bar as divider */}
         <div className={`h-6 w-full rounded-full overflow-hidden mb-2 relative flex items-center justify-center ${theme.barBg}`}>
-          <div className={`absolute top-0 left-0 h-full rounded-full ${theme.bar} transition-all duration-1000 ease-out`} style={{ width: `${progress}%` }} />
+          <div className={`absolute top-0 left-0 h-full rounded-full ${theme.bar} transition-all duration-00 ease-out`} style={{ width: `${progress}%` }} />
           {/* Shuttle animation overlay */}
           <div className="absolute inset-0 w-full h-full pointer-events-none">
             <div className="w-full h-full bg-linear-to-r from-transparent via-white/60 to-transparent skew-x-[-20deg] animate-shuttle" />

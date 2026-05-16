@@ -11,6 +11,7 @@ export function ChallengesSection() {
   const { challenges, pinnedChallenges, selectedCategory, deletedChallenges } = useSystemDataCtx();
   const { 
       activeTab, 
+      setActiveTab,
       setIsCreateChallengeOpen, 
       setIsHiddenChallengesModalOpen, 
       setIsRequestsModalOpen, 
@@ -131,7 +132,7 @@ export function ChallengesSection() {
               profileTasks={profile?.tasks || []}
               onUpdateReflection={handleUpdateReflection} 
               onUpdateProfileTasks={handleUpdateProfileTasks}
-              onOpenTasks={() => setShowTasksModal(true)} 
+              onOpenTasks={() => { setActiveTab('tasks'); window.scrollTo(0, 0); }} 
             />
           )}
           {visibleChallenges.map(challenge => (

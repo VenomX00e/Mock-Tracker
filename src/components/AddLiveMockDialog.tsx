@@ -125,8 +125,8 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden my-8 border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40  overflow-y-auto animate-in fade-in duration-0">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden my-8 border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-100">
         
         <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Host Live Mock</h2>

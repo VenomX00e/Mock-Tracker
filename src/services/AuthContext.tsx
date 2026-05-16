@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getErrorMessage } from '../lib/errorUtils';
 
 interface AuthContextType {
@@ -22,9 +23,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      if (currentUser) {
+        // Track activity when opening app / auth state loading
+        try {
+          await setDoc(doc(db, 'users', currentUser.uid), { userId: currentUser.uid, lastActiveAt: Date.now() }, { merge: true });
+        } catch (e) {
+          console.error("Failed to update activity on load", e);
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -33,7 +42,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      if (result.user) {
+        await setDoc(doc(db, 'users', result.user.uid), { userId: result.user.uid, lastActiveAt: Date.now() }, { merge: true });
+      }
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
       if (error.code === 'auth/network-request-failed') {

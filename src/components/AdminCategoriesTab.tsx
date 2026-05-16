@@ -26,7 +26,6 @@ import {
 
 import { OptionManagerDropdown } from './admin/OptionManagerDropdown';
 import { SubjectManager } from './admin/SubjectManager';
-import { AdminMigrationTool } from "./AdminMigrationTool";
 
 export function AdminCategoriesTab({
   onManageSection,
@@ -50,7 +49,6 @@ export function AdminCategoriesTab({
   const [subTab, setSubTab] = useState<
     "details" | "liveMock" | "notice" | "countdown" | "challenge"
   >("details");
-  const [showMigrationModal, setShowMigrationModal] = useState(false);
 
   // Local state for the currently selected/edited category
   const [workingCat, setWorkingCat] = useState<Partial<ExamCategory>>({});
@@ -335,30 +333,7 @@ export function AdminCategoriesTab({
                 >
                   <Plus className="w-4 h-4" /> Add Category
                 </button>
-
-                <button
-                  onClick={() => setShowMigrationModal(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <Database className="w-4 h-4" /> Migration Data
-                </button>
               </div>
-
-              {showMigrationModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-                  <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-xl overflow-hidden relative">
-                    <button 
-                      onClick={() => setShowMigrationModal(false)}
-                      className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 z-10"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                    <div className="p-1 pb-4 max-h-[90vh] overflow-y-auto">
-                      <AdminMigrationTool />
-                    </div>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -391,19 +366,19 @@ export function AdminCategoriesTab({
               <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700/50 w-full mb-6 overflow-x-auto custom-scrollbar shadow-sm">
                 <button
                   onClick={() => setSubTab("details")}
-                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "details" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-0 z-10 whitespace-nowrap ${subTab === "details" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Category Details
                 </button>
                 <button
                   onClick={() => setSubTab("liveMock")}
-                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "liveMock" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-100 z-10 whitespace-nowrap ${subTab === "liveMock" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Live Mocks
                 </button>
                 <button
                   onClick={() => setSubTab("notice")}
-                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap ${subTab === "notice" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-100 z-10 whitespace-nowrap ${subTab === "notice" ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-700 shadow-sm border border-slate-200/50 dark:border-slate-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 border border-transparent"}`}
                 >
                   Notices
                 </button>

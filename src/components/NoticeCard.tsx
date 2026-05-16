@@ -100,7 +100,7 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({
         <Megaphone className={`w-32 h-32 ${c.icon}`} />
       </div>
       {inlineEditingId === n.id ? (
-         <div onClick={(e) => e.stopPropagation()} className="relative z-20 w-full flex flex-col gap-3 bg-white/80 dark:bg-slate-900/80 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-sm backdrop-blur-sm">
+         <div onClick={(e) => e.stopPropagation()} className="relative z-20 w-full flex flex-col gap-3 bg-white/80 dark:bg-slate-900/80 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-sm ">
            <div className="flex items-center justify-between">
              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Inline Editing</h3>
              <div className="flex gap-2">

@@ -57,7 +57,7 @@ export const PortalContent = ({ chartRefBox, coordinate, content, screenX, scree
   return createPortal(
     <div 
       ref={tooltipRef}
-      className="fixed z-40 pointer-events-none transition-opacity duration-75 ease-out opacity-100"
+      className="fixed z-40 pointer-events-none transition-opacity duration-0 ease-out opacity-100"
       style={{ left: screenX, top: screenY, opacity: 0 }} // Start invisible until first JS update
     >
       {content}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Dashboard from './components/Dashboard';
 import CommunityHub from './components/CommunityHub';
+import { TasksPage } from './components/TasksPage';
 import AdminDialog from './components/AdminDialog';
 import { AppProvider, UserProfileCtx, SystemDataCtx, AppStateCtx } from './context/AppContext';
 import { useUIStore } from './store/uiStore';
@@ -17,21 +18,24 @@ import { DatabaseZap } from 'lucide-react';
 import Navigation from './components/Navigation';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+import AddMockDialog from './components/AddMockDialog';
+import ProfileDialog from './components/ProfileDialog';
+
 function AppContent() {
-  const { activeTab, adminTab, adminEditNotice, adminEditCountdown, isAdminModalOpen, darkMode } = useUIStore();
+  const { activeTab, setActiveTab, adminTab, adminEditNotice, adminEditCountdown, isAdminModalOpen, theme, setTheme } = useUIStore();
   const { user, loading, logout } = useAuth();
   const { profile } = useContext(UserProfileCtx)!;
-  const { loading: mocksLoading } = useMocks();
+  const { addMock, updateMock, loading: mocksLoading } = useMocks();
   const { selectedCategory, categories, fetchAnnouncement } = useContext(SystemDataCtx)!;
-  const { isOwner, isAdmin, adminPermissions } = useContext(AppStateCtx)!;
+  const { isOwner, isAdmin, adminPermissions, mockToEdit, setMockToEdit } = useContext(AppStateCtx)!;
 
   useEffect(() => {
-    if (darkMode) {
+    document.documentElement.classList.remove('light', 'dark', 'cyber');
+    document.documentElement.classList.add(theme);
+    if (theme === 'dark' || theme === 'cyber') {
       document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
     }
-  }, [darkMode]);
+  }, [theme]);
 
   useEffect(() => {
     if (user) {
@@ -67,7 +71,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-[45px] pl-[0px] transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-[45px] pl-[0px] transition-colors duration-0">
       <Navigation />
       
       {/* Main Layout */}
@@ -80,44 +84,105 @@ function AppContent() {
            </div>
         ) : (
           <>
-            <CountdownsSection />
-            <NoticesSection />
-            <ChallengesSection />
-            <LiveMocksSection />
+            {['dashboard', 'community'].includes(activeTab) && (
+              <>
+                <CountdownsSection />
+                <NoticesSection />
+                <ChallengesSection />
+                <LiveMocksSection />
+              </>
+            )}
 
             <section className="w-full">
-              <motion.div
-                 key={activeTab}
-                 initial={{ opacity: 0, y: 10 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 transition={{ duration: 0.15, ease: "easeOut" }}
-                 className="w-full"
-              >
-                {activeTab === 'admin' && isAdmin ? (
-                    <AdminDialog
-                      isOpen={true}
-                      isOwner={isOwner}
-                      adminPermissions={adminPermissions}
-                      currentCategory={selectedCategory}
-                      asPage={true}
-                      initialTab={adminTab || ((!isOwner && adminPermissions) ? (
-                           adminPermissions.canManageUsers ? 'users' :
-                           adminPermissions.canManageLiveMocks ? 'liveMock' :
-                           adminPermissions.canManageNotices ? 'notice' :
-                           adminPermissions.canManageCountdowns ? 'countdown' :
-                           adminPermissions.canManageChallenges ? 'challenge' :
-                           adminPermissions.canManageSettings ? 'settings' : 'users'
-                      ) : 'users') as any}
-                      editNoticeData={adminEditNotice}
-                      editCountdownData={adminEditCountdown}
-                      categories={categories}
-                    />
-                  ) : activeTab === 'dashboard' ? (
-                    <Dashboard />
-                  ) : (
-                    <CommunityHub />
-                  )}
+              <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
+                <motion.div
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ duration: 0.15, ease: "easeOut" }}
+                   className="w-full"
+                >
+                  <Dashboard />
                 </motion.div>
+              </div>
+
+              {activeTab !== 'dashboard' && (
+                <motion.div
+                   key={activeTab}
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ duration: 0.15, ease: "easeOut" }}
+                   className="w-full"
+                >
+                  {activeTab === 'admin' && isAdmin ? (
+                      <AdminDialog
+                        isOpen={true}
+                        isOwner={isOwner}
+                        adminPermissions={adminPermissions}
+                        currentCategory={selectedCategory}
+                        asPage={true}
+                        initialTab={adminTab || ((!isOwner && adminPermissions) ? (
+                             adminPermissions.canManageUsers ? 'users' :
+                             adminPermissions.canManageLiveMocks ? 'liveMock' :
+                             adminPermissions.canManageNotices ? 'notice' :
+                             adminPermissions.canManageCountdowns ? 'countdown' :
+                             adminPermissions.canManageChallenges ? 'challenge' :
+                             adminPermissions.canManageSettings ? 'settings' : 'users'
+                        ) : 'users') as any}
+                        editNoticeData={adminEditNotice}
+                        editCountdownData={adminEditCountdown}
+                        categories={categories}
+                      />
+                    ) : activeTab === 'tasks' ? (
+                      <TasksPage />
+                    ) : activeTab === 'add-mock' ? (
+                      <AddMockDialog
+                        isOpen={true}
+                        asPage={true}
+                        onClose={() => {
+                          setActiveTab('dashboard');
+                          if (mockToEdit) {
+                            setTimeout(() => {
+                              document.getElementById('history-log')?.scrollIntoView({ behavior: 'smooth' });
+                              setMockToEdit(undefined);
+                            }, 100);
+                          } else {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }
+                        }}
+                        categories={categories}
+                        initialMock={mockToEdit}
+                        categoryId={selectedCategory}
+                        onSave={async (mock) => {
+                          if (mockToEdit?.id) {
+                            await updateMock(mock);
+                          } else {
+                            await addMock(mock);
+                          }
+                          setActiveTab('dashboard');
+                          if (mockToEdit) {
+                            setTimeout(() => {
+                              document.getElementById('history-log')?.scrollIntoView({ behavior: 'smooth' });
+                              setMockToEdit(undefined);
+                            }, 100);
+                          } else {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }
+                        }}
+                      />
+                    ) : activeTab === 'profile' ? (
+                      <ProfileDialog
+                        isOpen={true}
+                        asPage={true}
+                        onClose={() => setActiveTab('dashboard')}
+                        theme={theme}
+                        setTheme={setTheme}
+                        categories={categories}
+                      />
+                    ) : (
+                      <CommunityHub />
+                    )}
+                </motion.div>
+              )}
             </section>
           </>
         )}

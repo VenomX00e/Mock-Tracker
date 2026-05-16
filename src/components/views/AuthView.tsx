@@ -14,9 +14,6 @@ export function AuthView() {
     <>
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-slate-50/50 dark:bg-[#0f172a]/50">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]" />
-        <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] min-w-[400px] min-h-[400px] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[100px] mix-blend-multiply dark:mix-blend-screen animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] min-w-[400px] min-h-[400px] bg-purple-400/20 dark:bg-purple-600/10 rounded-full blur-[100px] mix-blend-multiply dark:mix-blend-screen animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
-        <div className="absolute top-[30%] left-[20%] w-[30vw] h-[30vw] min-w-[300px] min-h-[300px] bg-indigo-400/20 dark:bg-indigo-600/10 rounded-full blur-[100px] mix-blend-multiply dark:mix-blend-screen animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
       </div>
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-140px)] text-center max-w-6xl mx-auto px-4 lg:-mt-4 relative z-10">
       <div className="relative mb-6">
@@ -29,14 +26,14 @@ export function AuthView() {
           <DatabaseZap className="w-8 h-8" />
         </div>
       </div>
-      <h2 className="text-center text-[21px] min-[330px]:text-[24px] min-[370px]:text-[27px] min-[400px]:text-[30px] sm:text-4xl md:text-5xl font-extrabold tracking-tighter mb-4 whitespace-nowrap bg-clip-text text-transparent bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400">
+      <h2 className="text-center text-[21px] min-[330px]:text-[24px] min-[370px]:text-[27px] min-[400px]:text-[30px] sm:text-4xl md:text-5xl font-extrabold tracking-tighter mb-4 whitespace-nowrap bg-clip-text text-transparent bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 p-[5px]">
         Track your Mocks Intelligently
       </h2>
       <p className="text-[10px] min-[330px]:text-[11px] min-[370px]:text-xs min-[400px]:text-sm sm:text-base md:text-lg text-slate-500 dark:text-slate-400 font-bold mb-4 max-w-2xl leading-relaxed whitespace-nowrap overflow-x-hidden">
         Upload scorecards • AI extraction • track your Progress
       </p>
 
-      <div className="w-full max-w-xl mx-auto px-2 sm:px-4 py-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 mb-10 shadow-sm backdrop-blur-sm">
+      <div className="w-full max-w-xl mx-auto px-2 sm:px-4 py-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 mb-10 shadow-sm ">
         <div className="text-[8px] min-[320px]:text-[8.5px] min-[340px]:text-[9px] min-[360px]:text-[10px] min-[400px]:text-[11px] sm:text-sm md:text-base text-indigo-700 dark:text-indigo-400 font-medium flex flex-col items-center gap-1.5 w-full max-w-full">
           <p className="whitespace-nowrap w-full text-center">✨ For the best experience, use larger screen</p>
           <p className="whitespace-nowrap w-full text-center">✨ click on 3-dot menu and select "Install app" for quick access.</p>
@@ -170,9 +167,9 @@ function FeatureCard({ title, description, icon: Icon, color, delay, spotlightCo
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
+      transition={{ duration: 0.1, delay }}
       onMouseMove={handleMouseMove}
-      className="group relative p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-[2px] transition-all duration-300 overflow-hidden text-left"
+      className="group relative p-4 bg-white/70 dark:bg-slate-800/70  border border-slate-200/50 dark:border-slate-700/50 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-[2px] transition-all duration-0 overflow-hidden text-left"
     >
       <motion.div
         className="pointer-events-none absolute -inset-px rounded-xl opacity-0 transition duration-300 group-hover:opacity-100"

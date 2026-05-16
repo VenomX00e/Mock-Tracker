@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { collectionGroup, getDocs, writeBatch } from 'firebase/firestore';
+import { collectionGroup, collection, getDocs, writeBatch, query, orderBy, limit } from 'firebase/firestore';
 import { deleteField } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export function AdminMigrationTool() {
   const [loading, setLoading] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
   const [result, setResult] = useState('');
+  const [activityResult, setActivityResult] = useState('');
 
   const runMigration = async () => {
     if (!window.confirm("Are you sure you want to run the dynamic subjects migration? This will affect all mock tests across all users. Make sure to back up data if necessary.")) return;
@@ -76,38 +78,149 @@ export function AdminMigrationTool() {
     }
   };
 
-  return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mt-6">
-        <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/50 px-5 py-4">
-            <h3 className="text-[15px] font-semibold text-red-700 dark:text-red-400">Danger Zone: Legacy Data Migration</h3>
-        </div>
-        <div className="p-5">
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-                This tool performs a one-time migration of old mock data structures (using root keys like quant, reasoning, english, ga) to the new <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-400">dynamicSubjects</code> format. It scans all mocks across all users via <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">collectionGroup</code> and uses bulk <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">writeBatch</code> commits to safely map the keys based on each mock's <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">categoryId</code>.
-                <br /><br />
-                <strong>Note:</strong> This replaces the unsafe client-side automatic migrations that previously ran every time users loaded their data. Do not run this multiple times unnecessarily.
-            </p>
-            
-            <button 
-                onClick={runMigration} 
-                disabled={loading}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg shadow disabled:opacity-50 transition-colors flex items-center gap-2"
-            >
-                {loading && (
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                )}
-                {loading ? "Running Migration..." : "Run Database Migration"}
-            </button>
+  const runActivityMigration = async () => {
+    if (!window.confirm("Are you sure you want to run the last activity migration? This will set lastActiveAt for all users based on their latest mocks/creation time.")) return;
+    setActivityLoading(true);
+    setActivityResult('Starting migration... fetching users...');
+    try {
+      const usersRef = collection(db, 'users');
+      const usersSnap = await getDocs(usersRef);
+      
+      let batch = writeBatch(db);
+      let count = 0;
+      let updatedUsers = 0;
 
-            {result && (
-                <div className={`mt-5 p-4 rounded-lg text-sm border ${result.startsWith('Error') ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-900/50 dark:text-emerald-400'}`}>
-                    {result}
-                </div>
-            )}
-        </div>
+      const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      for (const userDoc of usersSnap.docs) {
+        const userData = userDoc.data();
+        
+        if (!userData.lastActiveAt) {
+          let latestTime = 0;
+          try {
+            const mocksRef = collection(db, `users/${userDoc.id}/mocks`);
+            const mocksSnap = await getDocs(query(mocksRef, orderBy('date', 'desc'), limit(1)));
+            if (!mocksSnap.empty) {
+                const latestMock: any = mocksSnap.docs[0].data();
+                if (latestMock.date) {
+                    if (typeof latestMock.date === 'string') {
+                        latestTime = new Date(latestMock.date).getTime();
+                    } else if (latestMock.date.toMillis) {
+                        latestTime = latestMock.date.toMillis();
+                    } else if (typeof latestMock.date === 'number') {
+                        latestTime = latestMock.date;
+                    } else if (latestMock.date.seconds) {
+                        latestTime = latestMock.date.seconds * 1000;
+                    }
+                }
+            }
+          } catch (e) {
+              // ignore
+          }
+          
+          if (!latestTime && userData.createdAt) {
+              if (typeof userData.createdAt === 'number') latestTime = userData.createdAt;
+              else if (userData.createdAt.toMillis) latestTime = userData.createdAt.toMillis();
+              else if (userData.createdAt.seconds) latestTime = userData.createdAt.seconds * 1000;
+              else latestTime = new Date(userData.createdAt).getTime();
+          }
+          
+          if (!latestTime) {
+              latestTime = oneWeekAgo;
+          }
+          
+          if (latestTime) {
+            batch.update(userDoc.ref, { lastActiveAt: latestTime });
+            updatedUsers++;
+            count++;
+            
+            if (count === 490) {
+                await batch.commit();
+                batch = writeBatch(db);
+                count = 0;
+            }
+          }
+        }
+      }
+      
+      if (count > 0) {
+          await batch.commit();
+      }
+      
+      setActivityResult(`Migration complete! Setup lastActiveAt for ${updatedUsers} users.`);
+    } catch (error: any) {
+      console.error(error);
+      setActivityResult(`Error: ${error.message}`);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mt-6">
+          <div className="bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-900/50 px-5 py-4">
+              <h3 className="text-[15px] font-semibold text-indigo-700 dark:text-indigo-400">User Activity Migration</h3>
+          </div>
+          <div className="p-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                  This tool sets the <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-400">lastActiveAt</code> field for all existing users who don't have it, based on their latest mock date or account creation date.
+              </p>
+              
+              <button 
+                  onClick={runActivityMigration} 
+                  disabled={activityLoading}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                  {activityLoading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                  )}
+                  {activityLoading ? "Running Migration..." : "Update Past Users Logs"}
+              </button>
+
+              {activityResult && (
+                  <div className={`mt-5 p-4 rounded-lg text-sm border ${activityResult.startsWith('Error') ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-900/50 dark:text-emerald-400'}`}>
+                      {activityResult}
+                  </div>
+              )}
+          </div>
+      </div>
+      
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mt-6">
+          <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/50 px-5 py-4">
+              <h3 className="text-[15px] font-semibold text-red-700 dark:text-red-400">Danger Zone: Legacy Data Migration</h3>
+          </div>
+          <div className="p-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                  This tool performs a one-time migration of old mock data structures (using root keys like quant, reasoning, english, ga) to the new <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-400">dynamicSubjects</code> format. It scans all mocks across all users via <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">collectionGroup</code> and uses bulk <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">writeBatch</code> commits to safely map the keys based on each mock's <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">categoryId</code>.
+                  <br /><br />
+                  <strong>Note:</strong> This replaces the unsafe client-side automatic migrations that previously ran every time users loaded their data. Do not run this multiple times unnecessarily.
+              </p>
+              
+              <button 
+                  onClick={runMigration} 
+                  disabled={loading}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg shadow disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                  {loading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                  )}
+                  {loading ? "Running Migration..." : "Run Database Migration"}
+              </button>
+
+              {result && (
+                  <div className={`mt-5 p-4 rounded-lg text-sm border ${result.startsWith('Error') ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-900/50 dark:text-emerald-400'}`}>
+                      {result}
+                  </div>
+              )}
+          </div>
+      </div>
     </div>
   );
 }

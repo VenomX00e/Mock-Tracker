@@ -22,7 +22,7 @@ function SortableSubjectItem({
   const controls = useDragControls();
   const [isTapped, setIsTapped] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const itemRef = useRef<HTMLDivElement>(null);
+  const itemRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     if (!isTapped) return;

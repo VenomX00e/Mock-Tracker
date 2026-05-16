@@ -195,10 +195,12 @@ export function useMocks() {
       });
       
       await setDoc(doc(db, 'users', uid), {
+        userId: uid,
         ...calculatedStats,
         stats30D,
         stats7D,
         categoryStats,
+        lastActiveAt: Date.now(),
         updatedAt: serverTimestamp()
       }, { merge: true });
     } catch (e) {

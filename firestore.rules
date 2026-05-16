@@ -81,32 +81,34 @@ service cloud.firestore {
     function isValidUserProfile(data) {
       return data.keys().hasAll(['userId'])
         && data.userId is string && data.userId == request.auth.uid
-        && (!data.keys().hasAny(['displayName']) || data.displayName is string)
-        && (!data.keys().hasAny(['photoURL']) || data.photoURL is string)
-        && (!data.keys().hasAny(['targetedExam']) || data.targetedExam is string)
-        && (!data.keys().hasAny(['avgPercentile']) || data.avgPercentile is number)
-        && (!data.keys().hasAny(['avgAccuracy']) || data.avgAccuracy is number)
-        && (!data.keys().hasAny(['avgQuantPercentile']) || data.avgQuantPercentile is number)
-        && (!data.keys().hasAny(['avgReasoningPercentile']) || data.avgReasoningPercentile is number)
-        && (!data.keys().hasAny(['avgEnglishPercentile']) || data.avgEnglishPercentile is number)
-        && (!data.keys().hasAny(['avgGaPercentile']) || data.avgGaPercentile is number)
-        && (!data.keys().hasAny(['totalTests']) || data.totalTests is number)
-        && (!data.keys().hasAny(['streak']) || data.streak is number)
-        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp)
-        && (!data.keys().hasAny(['isBanned']) || data.isBanned is bool)
-        && (!data.keys().hasAny(['isMuted']) || data.isMuted is bool)
-        && (!data.keys().hasAny(['lastMockDate']) || data.lastMockDate is string)
-        && (!data.keys().hasAny(['role']) || data.role is string)
-        && (!data.keys().hasAny(['categoryId']) || data.categoryId is string)
-        && (!data.keys().hasAny(['dynamicSubjects']) || data.dynamicSubjects is map)
-        && (!data.keys().hasAny(['streakActive']) || data.streakActive is bool)
-        && (!data.keys().hasAny(['dynamicAverages']) || data.dynamicAverages is map)
-        && (!data.keys().hasAny(['stats30D']) || data.stats30D is map)
-        && (!data.keys().hasAny(['stats7D']) || data.stats7D is map)
-        && (!data.keys().hasAny(['categoryStats']) || data.categoryStats is map)
-        && (!data.keys().hasAny(['badges']) || data.badges is list)
-        && (!data.keys().hasAny(['bio']) || data.bio is string)
-        && (!data.keys().hasAny(['tasks']) || data.tasks is list);
+        && (!data.keys().hasAny(['displayName']) || data.displayName is string || data.displayName == null)
+        && (!data.keys().hasAny(['photoURL']) || data.photoURL is string || data.photoURL == null)
+        && (!data.keys().hasAny(['email']) || data.email is string || data.email == null)
+        && (!data.keys().hasAny(['targetedExam']) || data.targetedExam is string || data.targetedExam == null)
+        && (!data.keys().hasAny(['avgPercentile']) || data.avgPercentile is number || data.avgPercentile == null)
+        && (!data.keys().hasAny(['avgAccuracy']) || data.avgAccuracy is number || data.avgAccuracy == null)
+        && (!data.keys().hasAny(['avgQuantPercentile']) || data.avgQuantPercentile is number || data.avgQuantPercentile == null)
+        && (!data.keys().hasAny(['avgReasoningPercentile']) || data.avgReasoningPercentile is number || data.avgReasoningPercentile == null)
+        && (!data.keys().hasAny(['avgEnglishPercentile']) || data.avgEnglishPercentile is number || data.avgEnglishPercentile == null)
+        && (!data.keys().hasAny(['avgGaPercentile']) || data.avgGaPercentile is number || data.avgGaPercentile == null)
+        && (!data.keys().hasAny(['totalTests']) || data.totalTests is number || data.totalTests == null)
+        && (!data.keys().hasAny(['streak']) || data.streak is number || data.streak == null)
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp || data.updatedAt is number || data.updatedAt is string || data.updatedAt == null)
+        && (!data.keys().hasAny(['isBanned']) || data.isBanned is bool || data.isBanned == null)
+        && (!data.keys().hasAny(['isMuted']) || data.isMuted is bool || data.isMuted == null)
+        && (!data.keys().hasAny(['lastMockDate']) || data.lastMockDate is string || data.lastMockDate == null)
+        && (!data.keys().hasAny(['role']) || data.role is string || data.role == null)
+        && (!data.keys().hasAny(['categoryId']) || data.categoryId is string || data.categoryId == null)
+        && (!data.keys().hasAny(['dynamicSubjects']) || data.dynamicSubjects is map || data.dynamicSubjects == null)
+        && (!data.keys().hasAny(['streakActive']) || data.streakActive is bool || data.streakActive == null)
+        && (!data.keys().hasAny(['dynamicAverages']) || data.dynamicAverages is map || data.dynamicAverages == null)
+        && (!data.keys().hasAny(['stats30D']) || data.stats30D is map || data.stats30D == null)
+        && (!data.keys().hasAny(['stats7D']) || data.stats7D is map || data.stats7D == null)
+        && (!data.keys().hasAny(['categoryStats']) || data.categoryStats is map || data.categoryStats == null)
+        && (!data.keys().hasAny(['badges']) || data.badges is map || data.badges is list || data.badges == null)
+        && (!data.keys().hasAny(['bio']) || data.bio is string || data.bio == null)
+        && (!data.keys().hasAny(['tasks']) || data.tasks is list || data.tasks == null)
+        && (!data.keys().hasAny(['lastActiveAt']) || data.lastActiveAt is number || data.lastActiveAt is timestamp || data.lastActiveAt == null);
     }
 
     function isValidChatMessage(data) {
@@ -158,7 +160,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(['lastCheckInDate']) || (data.lastCheckInDate is string && data.lastCheckInDate.size() <= 50))
         && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is string || data.updatedAt is timestamp)
         && (!data.keys().hasAny(['checkInDates']) || (data.checkInDates is list && data.checkInDates.size() <= 500))
-        && (!data.keys().hasAny(['checkInTimes']) || (data.checkInTimes is list && data.checkInTimes.size() <= 500))
+        && (!data.keys().hasAny(['checkInTimes']) || data.checkInTimes is map)
         && (!data.keys().hasAny(['completedTasks']) || data.completedTasks is map)
         && (!data.keys().hasAny(['activities']) || (data.activities is list && data.activities.size() <= 500))
         && (!data.keys().hasAny(['awardedBadge']) || data.awardedBadge is bool);
@@ -170,8 +172,8 @@ service cloud.firestore {
     }
 
     match /system/{docId} {
-      allow get: if isSignedIn() || docId == 'settings';
-      allow list: if isSignedIn();
+      allow get: if true;
+      allow list: if true;
       allow create: if isAnyAdmin() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
       allow update: if isAnyAdmin() 
         || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'link', 'createdAt', 'createdBy', 'type', 'updatedAt', 'color', 'icon', 'categoryId']) && (!incoming().keys().hasAny(['createdBy']) || incoming().createdBy == existing().createdBy) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
@@ -230,14 +232,14 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming());
       allow update: if isSuperAdmin() 
         || (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
+          'userId', 'email', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
           'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 'totalTests', 'streak', 
-          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks'
+          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks', 'lastActiveAt'
         ]) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
         || (isAnyAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
-          'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
+          'userId', 'email', 'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
           'avgAccuracy', 'avgQuantPercentile', 'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 
-          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks'
+          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks', 'lastActiveAt'
         ]));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
     }

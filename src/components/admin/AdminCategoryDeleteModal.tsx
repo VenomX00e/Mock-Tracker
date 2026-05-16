@@ -29,8 +29,8 @@ export const AdminCategoryDeleteModal: React.FC<AdminCategoryDeleteModalProps> =
   const confirmText = `delete ${catToDelete.name.toLowerCase()}`;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl w-full max-w-sm shadow-xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 ">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl w-full max-w-sm shadow-xl flex flex-col items-center text-center animate-in zoom-in-95 duration-0">
         <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mb-4">
           <AlertTriangle className="w-6 h-6" />
         </div>

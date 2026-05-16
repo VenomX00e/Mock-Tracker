@@ -3,8 +3,8 @@ import { create } from 'zustand';
 type AdminTab = 'categories' | 'subjects' | 'admins' | 'countdowns' | 'notices' | 'live-mocks' | 'challenges' | 'general' | 'users' | 'requests';
 
 interface UIState {
-  activeTab: 'dashboard' | 'community' | 'admin';
-  setActiveTab: (tab: 'dashboard' | 'community' | 'admin') => void;
+  activeTab: 'dashboard' | 'community' | 'admin' | 'tasks' | 'add-mock' | 'admin-panel' | 'profile';
+  setActiveTab: (tab: 'dashboard' | 'community' | 'admin' | 'tasks' | 'add-mock' | 'admin-panel' | 'profile') => void;
   
   isAddModalOpen: boolean;
   setIsAddModalOpen: (open: boolean) => void;
@@ -50,6 +50,8 @@ interface UIState {
   
   darkMode: boolean;
   setDarkMode: (mode: boolean | ((prev: boolean) => boolean)) => void;
+  theme: 'light' | 'dark' | 'cyber';
+  setTheme: (theme: 'light' | 'dark' | 'cyber') => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -99,15 +101,32 @@ export const useUIStore = create<UIState>((set) => ({
   setAdminEditCountdown: (countdown) => set({ adminEditCountdown: countdown }),
   
   darkMode: localStorage.getItem('darkMode') === 'true',
+  theme: (localStorage.getItem('theme') as 'light' | 'dark' | 'cyber') || (localStorage.getItem('darkMode') === 'true' ? 'dark' : 'light'),
   setDarkMode: (mode) => set((state) => {
     const newMode = typeof mode === 'function' ? mode(state.darkMode) : mode;
     if (newMode) {
       document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('cyber', 'light');
+      localStorage.setItem('darkMode', 'true');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark', 'cyber');
+      document.documentElement.classList.add('light');
+      localStorage.setItem('darkMode', 'false');
+      localStorage.setItem('theme', 'light');
+    }
+    return { darkMode: newMode, theme: newMode ? 'dark' : 'light' };
+  }),
+  setTheme: (theme) => set((state) => {
+    localStorage.setItem('theme', theme);
+    document.documentElement.classList.remove('light', 'dark', 'cyber');
+    document.documentElement.classList.add(theme);
+    if (theme === 'dark' || theme === 'cyber') {
+      document.documentElement.classList.add('dark');
       localStorage.setItem('darkMode', 'true');
     } else {
-      document.documentElement.classList.remove('dark');
       localStorage.setItem('darkMode', 'false');
     }
-    return { darkMode: newMode };
+    return { theme, darkMode: theme === 'dark' || theme === 'cyber' };
   }),
 }));

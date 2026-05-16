@@ -27,6 +27,7 @@ import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from "../lib/constants";
 import { parseMockAnnouncementImage } from "../services/geminiService";
 import { getErrorMessage } from "../lib/errorUtils";
 import { AdminCategoriesTab } from "./AdminCategoriesTab";
+import { AdminMigrationTool } from "./AdminMigrationTool";
 
 import { ExamCategory } from "../types";
 
@@ -215,8 +216,15 @@ export default function AdminDialog({
       const allUsers = snap.docs
         .map((d) => d.data() as UserProfile)
         .sort((a, b) => {
-          const t1 = a.lastActiveAt || 0;
-          const t2 = b.lastActiveAt || 0;
+          const getMs = (val: any) => {
+            if (!val) return 0;
+            if (typeof val === "number") return val;
+            if (val.toMillis) return val.toMillis();
+            if (val.seconds) return val.seconds * 1000;
+            return new Date(val).getTime() || 0;
+          };
+          const t1 = getMs(a.lastActiveAt);
+          const t2 = getMs(b.lastActiveAt);
           return t2 - t1;
         });
       setBannedUsers(allUsers.filter((u) => u.isBanned));
@@ -757,8 +765,8 @@ export default function AdminDialog({
   };
 
   const renderLiveMockContent = () => (
-    <div className="space-y-6 max-w-2xl mx-auto mt-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-4 gap-4">
+    <div className="flex flex-col h-full w-full">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
         <h3 className="font-semibold text-indigo-900 dark:text-indigo-300 flex items-center gap-2 whitespace-nowrap">
           <Radio className="w-5 h-5" /> Host a Live Mock
         </h3>
@@ -781,7 +789,9 @@ export default function AdminDialog({
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="max-w-4xl w-full mx-auto space-y-4">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="space-y-1.5 xl:col-span-1">
           <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             Exam Header
@@ -1070,19 +1080,22 @@ export default function AdminDialog({
           </ul>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 
   const renderNoticeContent = () => (
-    <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-4 gap-4">
+    <div className="flex flex-col h-full w-full">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
         <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
           <AlertCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />{" "}
           Broadcast Notice
         </h3>
       </div>
-      <div className="space-y-4">
-        <div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="max-w-4xl w-full mx-auto space-y-4">
+          <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
             Title
           </label>
@@ -1189,11 +1202,11 @@ export default function AdminDialog({
                 prev === "admin" ? "users" : "admin",
               )
             }
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${noticeEditableBy === "users" ? "bg-indigo-600" : "bg-slate-200 dark:bg-slate-700"} `}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-0 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${noticeEditableBy === "users" ? "bg-indigo-600" : "bg-slate-200 dark:bg-slate-700"} `}
           >
             <span
               aria-hidden="true"
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${noticeEditableBy === "users" ? "translate-x-5" : "translate-x-0"}`}
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-100 ease-in-out ${noticeEditableBy === "users" ? "translate-x-5" : "translate-x-0"}`}
             />
           </button>
         </div>
@@ -1279,19 +1292,21 @@ export default function AdminDialog({
           </ul>
         </div>
       )}
+      </div>
     </div>
   );
 
   const renderCountdownContent = () => (
-    <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-4 gap-4">
+    <div className="flex flex-col h-full w-full">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
         <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
           <Timer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />{" "}
           Manage Countdowns
         </h3>
       </div>
-      <div className="space-y-4">
-        <div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="max-w-4xl w-full mx-auto space-y-4">
+          <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
             Exam / Event Name
           </label>
@@ -1448,19 +1463,21 @@ export default function AdminDialog({
           </ul>
         </div>
       )}
+      </div>
     </div>
   );
 
   const renderChallengeContent = () => (
-    <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-4 gap-4">
+    <div className="flex flex-col h-full w-full">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
         <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
           <Timer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />{" "}
           Manage Challenges
         </h3>
       </div>
-      <div className="space-y-4">
-        <div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="max-w-4xl w-full mx-auto space-y-4">
+          <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
             Challenge Title
           </label>
@@ -1747,59 +1764,62 @@ export default function AdminDialog({
           </ul>
         </div>
       )}
+      </div>
     </div>
   );
 
   const content = (
-    <div className={`flex flex-col w-full ${asPage ? "gap-6" : ""}`}>
-      {asPage && (
-        <div className="flex gap-4 mb-2">
-          <button
-            onClick={() => {
-              setActiveTab("users");
-              setAdminCategoryScope(
-                isForcedCategory ? currentCategory || null : null,
-              );
-            }}
-            className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 z-10 border ${
-              activeTab !== "categories" && !adminCategoryScope
-                ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-md border-indigo-200 dark:border-indigo-700"
-                : "text-slate-600 dark:text-slate-400 bg-slate-50 border-slate-200/80 dark:bg-slate-800/50 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span>{isOwner ? "Owner Panel" : "Admin Panel"}</span>
-          </button>
-          {isOwner && (
+    <div className={`flex flex-col w-full ${asPage ? "" : ""}`}>
+      <div
+        className={`bg-white dark:bg-slate-900 ${asPage ? "h-[calc(100vh-140px)] shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col`}
+      >
+        {/* Top Header Tabs if Owner */}
+        {asPage && isOwner && (
+          <div className="flex gap-2 px-4 pt-3 bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 shrink-0">
+            <button
+              onClick={() => {
+                setActiveTab("users");
+                setAdminCategoryScope(
+                  isForcedCategory ? currentCategory || null : null,
+                );
+              }}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-t-xl transition-colors duration-200 z-10 border-t border-x ${
+                activeTab !== "categories" && !adminCategoryScope
+                  ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 border-b-white dark:border-b-slate-900 -mb-[1px]"
+                  : "text-slate-600 dark:text-slate-400 border-transparent hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              <span>Owner Panel</span>
+            </button>
             <button
               onClick={() => setActiveTab("categories")}
-              className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 z-10 border ${
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-t-xl transition-colors duration-200 z-10 border-t border-x ${
                 activeTab === "categories" || adminCategoryScope
-                  ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-md border-indigo-200 dark:border-indigo-700"
-                  : "text-slate-600 dark:text-slate-400 bg-slate-50 border-slate-200/80 dark:bg-slate-800/50 dark:border-slate-700/80 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm"
+                  ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 border-b-white dark:border-b-slate-900 -mb-[1px]"
+                  : "text-slate-600 dark:text-slate-400 border-transparent hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
               <Settings className="w-4 h-4" />
               <span>Exam Categories</span>
             </button>
-          )}
-        </div>
-      )}
-      <div
-        className={`bg-white dark:bg-slate-900 ${asPage ? "min-h-[calc(100vh-140px)] shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col md:flex-row`}
-      >
-        {/* Sidebar Nav */}
-        {activeTab !== "categories" && (
-          <div
-            className={`w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0 ${asPage ? "md:min-h-[calc(100vh-140px)]" : ""}`}
-          >
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <div className="flex flex-col md:flex-row overflow-hidden flex-1 relative">
+          {/* Sidebar Nav */}
+          {activeTab !== "categories" && (
+            <div
+              className={`w-full md:w-64 bg-slate-50 dark:bg-slate-800/50 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0 ${asPage ? "" : ""}`}
+            >
             <div className="hidden md:flex p-6 border-b border-slate-100 dark:border-slate-800 items-center gap-2">
               <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                {isOwner ? "Owner" : "Admin"}
+                {isOwner ? "Owner" : "Admin panel"}
               </h2>
             </div>
-            <div className="p-3 flex flex-row overflow-x-auto custom-scrollbar md:flex-col gap-2 md:gap-0 md:space-y-1 md:flex-1">
+            <div className="p-3 flex flex-row overflow-x-auto overflow-y-hidden md:overflow-y-auto custom-scrollbar md:flex-col gap-2 md:gap-0 md:space-y-1 md:flex-1">
               {adminCategoryScope && isOwner && !isForcedCategory && (
                 <div className="flex-shrink-0 md:mb-6 md:space-y-1 flex items-center">
                   <button
@@ -1816,9 +1836,11 @@ export default function AdminDialog({
               <div
                 className={`flex flex-row md:flex-col gap-2 md:gap-0 md:space-y-1 md:mb-6 ${adminCategoryScope && isOwner ? "opacity-50 pointer-events-none" : ""}`}
               >
-                <h3 className="hidden md:block px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  {isOwner ? "Owner Panel" : "Admin Panel"}
-                </h3>
+                {isOwner && (
+                  <h3 className="hidden md:block px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Owner Panel
+                  </h3>
+                )}
 
                 {isOwner && (
                   <button
@@ -1918,18 +1940,18 @@ export default function AdminDialog({
         )}
 
         {/* Form Content */}
-        <div className="flex-1 overflow-y-auto relative p-6">
+        <div className="flex-1 flex flex-col relative overflow-hidden bg-white dark:bg-slate-900">
           {!asPage && (
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors z-10"
+              className="absolute top-4 right-4 p-2 bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors z-[100] shadow-sm border border-slate-200 dark:border-slate-700"
             >
               <X className="w-5 h-5" />
             </button>
           )}
 
           {(!activeTab || (activeTab as any) === "") && (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400">
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 dark:text-slate-400 p-6">
               <Shield className="w-12 h-12 mb-4 opacity-50" />
               <p>You don't have any admin permissions yet.</p>
               <p className="text-sm mt-1">
@@ -1939,8 +1961,8 @@ export default function AdminDialog({
           )}
 
           {activeTab === "admins" && isOwner && (
-            <div className="space-y-6 max-w-2xl mx-auto pt-6 md:pt-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 gap-3 sm:gap-0">
+            <div className="flex flex-col h-full w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-200">
                   Admin Management
                 </h3>
@@ -1986,11 +2008,13 @@ export default function AdminDialog({
                   )}
                 </div>
               </div>
-              {loading ? (
-                <div className="text-center py-4 text-slate-500 dark:text-slate-400">
-                  Loading users...
-                </div>
-              ) : (
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                <div className="max-w-4xl w-full mx-auto">
+                  {loading ? (
+                    <div className="text-center py-4 text-slate-500 dark:text-slate-400">
+                      Loading users...
+                    </div>
+                  ) : (
                 <div className="space-y-4">
                   <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg overflow-visible w-full relative">
                     {[...allFirebaseUsers]
@@ -2047,7 +2071,7 @@ export default function AdminDialog({
                         const bActive = getMs(b.lastActiveAt);
                         return bActive - aActive;
                       })
-                      .map((user) => (
+                      .slice(0, 100).map((user) => (
                         <li
                           key={user.userId}
                           ref={
@@ -2055,7 +2079,7 @@ export default function AdminDialog({
                               ? adminListRef
                               : null
                           }
-                          className={`p-3 bg-white dark:bg-slate-900 transition-colors ${user.role === "admin" ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
+                          className={`p-3 bg-white dark:bg-slate-900 transition-colors first:rounded-t-lg last:rounded-b-lg ${user.role === "admin" ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
                           onClick={(e) => {
                             if (
                               user.role === "admin" &&
@@ -2271,13 +2295,15 @@ export default function AdminDialog({
                   )}
                 </div>
               )}
+                </div>
+              </div>
             </div>
           )}
 
           {activeTab === "users" &&
             (isOwner || adminPermissions?.canManageUsers) && (
-              <div className="space-y-6 max-w-2xl mx-auto pt-6 md:pt-0">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 gap-3 sm:gap-0">
+              <div className="flex flex-col h-full w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200">
                     User Management
                   </h3>
@@ -2293,11 +2319,13 @@ export default function AdminDialog({
                   </div>
                 </div>
 
-                {loading ? (
-                  <div className="text-center py-4 text-slate-500 dark:text-slate-400">
-                    Loading users...
-                  </div>
-                ) : (
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                  <div className="max-w-4xl w-full mx-auto space-y-6">
+                    {loading ? (
+                      <div className="text-center py-4 text-slate-500 dark:text-slate-400">
+                        Loading users...
+                      </div>
+                    ) : (
                   <div className="space-y-6">
                     <div>
                       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -2400,7 +2428,7 @@ export default function AdminDialog({
                               const bActive = getMs(b.lastActiveAt);
                               return bActive - aActive;
                             })
-                            .map((user) => (
+                            .slice(0, 100).map((user) => (
                               <li
                                 key={user.userId}
                                 ref={
@@ -2408,7 +2436,7 @@ export default function AdminDialog({
                                     ? adminListRef
                                     : null
                                 }
-                                className={`p-3 bg-white dark:bg-slate-900 transition-colors ${user.role === "admin" ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
+                                className={`p-3 bg-white dark:bg-slate-900 transition-colors first:rounded-t-lg last:rounded-b-lg ${user.role === "admin" ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
                                 onClick={(e) => {
                                   if (
                                     user.role === "admin" &&
@@ -2562,10 +2590,10 @@ export default function AdminDialog({
                           </p>
                         ) : (
                           <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg overflow-visible w-full relative">
-                            {bannedUsers.map((user) => (
+                            {bannedUsers.slice(0, 100).map((user) => (
                               <li
                                 key={user.userId}
-                                className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors"
+                                className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors first:rounded-t-lg last:rounded-b-lg"
                               >
                                 <div className="flex items-center gap-3">
                                   <img
@@ -2673,10 +2701,10 @@ export default function AdminDialog({
                                     (1000 * 60 * 60 * 24) <=
                                     (Number(muteDurationDays) || 1)),
                             )
-                            .map((user) => (
+                            .slice(0, 100).map((user) => (
                               <li
                                 key={user.userId}
-                                className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors"
+                                className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors first:rounded-t-lg last:rounded-b-lg"
                               >
                                 <div className="flex items-center gap-3">
                                   <img
@@ -2728,7 +2756,9 @@ export default function AdminDialog({
                   </div>
                 )}
               </div>
-            )}
+            </div>
+          </div>
+        )}
 
           {activeTab === "liveMock" &&
             (!adminCategoryScope || isForcedCategory) &&
@@ -2792,15 +2822,16 @@ export default function AdminDialog({
 
           {activeTab === "settings" &&
             (isOwner || adminPermissions?.canManageSettings) && (
-              <div className="space-y-6 max-w-2xl mx-auto mt-6 relative">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+              <div className="flex flex-col h-full w-full">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
                   <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                     <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />{" "}
                     System Settings
                   </h3>
                 </div>
-                <div className="space-y-4">
-                  <div>
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                  <div className="max-w-4xl w-full mx-auto space-y-4">
+                    <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Telegram Support Link
                     </label>
@@ -2841,13 +2872,22 @@ export default function AdminDialog({
                     <Save className="w-4 h-4 mr-2" />{" "}
                     {savingAnnouncement ? "Saving..." : "Save Settings"}
                   </button>
+
+                  {isOwner && (
+                    <div className="pt-8 mt-8 border-t border-slate-200 dark:border-slate-700/50">
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">Owner Tools</h4>
+                      <AdminMigrationTool />
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+          )}
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 
   if (asPage) return content;
 
@@ -2858,14 +2898,14 @@ export default function AdminDialog({
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm pointer-events-auto" 
+            exit={{ opacity: 0, transition: { duration: 0 } }} 
+            className="absolute inset-0 bg-slate-900/40  pointer-events-auto" 
             onClick={onClose} 
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.05 } }}
             className="relative z-10 w-full flex items-center justify-center pointer-events-auto"
           >
             {content}

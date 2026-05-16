@@ -47,17 +47,17 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+            exit={{ opacity: 0, transition: { duration: 0 } }}
+            transition={{ duration: 0.1 }}
+            className="absolute inset-0 bg-slate-900/60 " 
             onClick={onClose} 
           />
           
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.05 } }}
+            transition={{ duration: 0.1 }}
             className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800"
           >
         <div className="h-32 bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-800 relative">
@@ -244,14 +244,14 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
       <motion.div 
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-slate-900/30 backdrop-blur-[2px] z-[60] flex items-center justify-center p-4 transition-all duration-200" 
+        exit={{ opacity: 0, transition: { duration: 0 } }}
+        className="fixed inset-0 bg-slate-900/30  z-[60] flex items-center justify-center p-4 transition-all duration-0" 
         onClick={() => setSelectedBadge(null)}
       >
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
+          exit={{ opacity: 0, scale: 0.95, transition: { duration: 0 } }}
           className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-xs shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col p-6 text-center" 
           onClick={e => e.stopPropagation()}
         >

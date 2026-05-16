@@ -55,7 +55,7 @@ export function useUserProfile() {
     if (data.photoURL && data.photoURL.length > 500) throw new Error("Photo URL too long");
     if (data.bio !== undefined) {
       if (data.bio.length > 70) throw new Error("Bio must be 70 characters or less");
-      if (data.bio.length > 0 && !/^[a-zA-Z0-9\s]*$/.test(data.bio)) throw new Error("Bio can only contain alphanumeric characters and spaces");
+      if (data.bio.length > 0 && !/^[a-zA-Z0-9\s.,!?-]*$/.test(data.bio)) throw new Error("Bio can contain letters, numbers, spaces, and punctuation.");
     }
   };
 
@@ -64,7 +64,9 @@ export function useUserProfile() {
     try {
       validateUserProfile(updates);
       await setDoc(doc(db, 'users', user.uid), {
+        userId: user.uid,
         ...updates,
+        lastActiveAt: Date.now(),
         updatedAt: serverTimestamp()
       }, { merge: true });
     } catch (err: any) {

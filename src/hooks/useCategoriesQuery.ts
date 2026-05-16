@@ -33,7 +33,9 @@ async function fetchCategories() {
   
   if (!hasBanking) {
     fetchedCategories.push(DefaultBanking);
-    setDoc(doc(db, 'categories', 'banking'), DefaultBanking).catch(console.error);
+    setDoc(doc(db, 'categories', 'banking'), DefaultBanking).catch(() => {
+      // Quietly ignore permissions error for non-admins
+    });
   }
 
   return fetchedCategories;

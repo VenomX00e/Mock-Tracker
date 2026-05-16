@@ -78,7 +78,8 @@ export function LiveMocksSection() {
                     examType: liveMock.examType || '', examRole: liveMock.examRole || '', examPhase: liveMock.examPhase || '', examScope: liveMock.examScope || '',
                     quant: {score:'', percentile:'', accuracy:''}, reasoning:{score:'', percentile:'', accuracy:''}, english:{score:'', percentile:'', accuracy:''}, ga:{score:'', percentile:'', accuracy:''}
                   } as any);
-                  setIsAddModalOpen(true);
+                  useUIStore.getState().setActiveTab('add-mock');
+                  window.scrollTo(0, 0);
                 }}
                 className="inline-flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white transition-all bg-indigo-600 rounded-xl hover:bg-indigo-700 hover:shadow-md mt-2"
               >

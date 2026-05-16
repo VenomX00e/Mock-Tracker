@@ -334,6 +334,9 @@ export default function CommunityHub() {
       validateChatMessage(payload);
 
       await addDoc(collection(db, 'community_chat'), payload);
+      try {
+        await setDoc(doc(db, 'users', user.uid), { userId: user.uid, lastActiveAt: Date.now() }, { merge: true });
+      } catch (e) { console.error(e); }
       setNewMessage('');
       setReplyingTo(null);
       setShowPollMaker(false);
@@ -1688,7 +1691,7 @@ function CommunityChat(props: any) {
              </div>
           )}
           {replyingTo && (
-            <div className="absolute bottom-full mb-0 w-full left-0 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 p-2.5 px-4 flex justify-between items-center z-10 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-indigo-500">
+            <div className="absolute bottom-full mb-0 w-full left-0 bg-slate-100/90 dark:bg-slate-800/90  border-t border-slate-200 dark:border-slate-700 p-2.5 px-4 flex justify-between items-center z-10 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-indigo-500">
               <div className="flex flex-col text-xs pr-4 overflow-hidden">
                 <span className="font-semibold text-indigo-600 dark:text-indigo-400">
                   Replying to {replyingTo.userId === user?.uid ? 'You' : (userMap[replyingTo.userId]?.displayName || replyingTo.userName)}
@@ -1732,7 +1735,7 @@ function CommunityChat(props: any) {
                 />
                 <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                   {pollOptions.map((opt, i) => (
-                    <div key={opt.id} className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
+                    <div key={opt.id} className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-0">
                        <button
                          type="button"
                          onClick={() => {
