@@ -5,6 +5,7 @@ import { db } from '../services/firebase';
 export function useChallengesManager(
     user: any, 
     adminPermissions: any, 
+    isOwner: boolean | undefined,
     pinnedChallenges: string[], 
     setPinnedChallenges: (pins: string[]) => void, 
     fetchAnnouncement: () => Promise<void>
@@ -56,7 +57,13 @@ export function useChallengesManager(
 
   const handleDeleteChallenge = async (challenge: any) => {
     try {
-      if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
+      if (isOwner) {
+          const participantsSnap = await import('firebase/firestore').then(firestore => firestore.getDocs(firestore.collection(db, 'challenges', challenge.id, 'participants')));
+          const batch = await import('firebase/firestore').then(firestore => firestore.writeBatch(db));
+          participantsSnap.forEach(docSnap => batch.delete(docSnap.ref));
+          await batch.commit();
+          await deleteDoc(doc(db, 'challenges', challenge.id));
+      } else if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
           await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: true }, { merge: true });
       } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
           await setDoc(doc(db, 'challenges', challenge.id), { deletedByCreator: true }, { merge: true });
@@ -72,7 +79,10 @@ export function useChallengesManager(
   };
 
   const handlePinChallenge = async (challenge: any) => {
-    if (!adminPermissions?.canManageChallenges) return;
+    if (!adminPermissions?.canManageChallenges) {
+        alert("You do not have permission to pin challenges.");
+        return;
+    }
     
     let newPins = [...pinnedChallenges];
     if (newPins.includes(challenge.id)) {
@@ -91,8 +101,9 @@ export function useChallengesManager(
       }, { merge: true });
       setPinnedChallenges(newPins);
       await fetchAnnouncement();
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error pinning challenge", e);
+      alert("Error pinning challenge: " + (e.message || e));
     }
   };
 
@@ -113,7 +124,13 @@ export function useChallengesManager(
 
   const handlePermanentlyDeleteChallenge = async (challenge: any) => {
     try {
-      if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
+      if (isOwner) {
+          const participantsSnap = await import('firebase/firestore').then(firestore => firestore.getDocs(firestore.collection(db, 'challenges', challenge.id, 'participants')));
+          const batch = await import('firebase/firestore').then(firestore => firestore.writeBatch(db));
+          participantsSnap.forEach(docSnap => batch.delete(docSnap.ref));
+          await batch.commit();
+          await deleteDoc(doc(db, 'challenges', challenge.id));
+      } else if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
           await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByAdmin: true }, { merge: true });
       } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
           await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByCreator: true }, { merge: true });
@@ -139,5 +156,5 @@ export function useChallengesManager(
     handlePinChallenge,
     handleRestoreChallenge,
     handlePermanentlyDeleteChallenge,
-  }), [dismissedChallenges]);
+  }), [dismissedChallenges, adminPermissions, isOwner, user?.uid, pinnedChallenges, setPinnedChallenges, fetchAnnouncement]);
 }

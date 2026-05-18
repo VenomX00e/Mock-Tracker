@@ -16,6 +16,10 @@ export function usePublicSettings() {
             setTelegramLink(data.telegramLink || '');
             setTelegramText(data.telegramText || 'Contact us');
           }
+        }, (error: any) => {
+          if (error.code !== 'permission-denied') {
+             console.warn("Public settings subscription error:", error);
+          }
         });
       } catch (e) {
         console.error("Error fetching settings", e);

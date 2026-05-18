@@ -3,19 +3,40 @@
 
 @theme {
   @keyframes shuttle {
-    0% { transform: translateX(-150%); }
-    100% { transform: translateX(250%); }
+    0% {
+      transform: translateX(-150%);
+    }
+    100% {
+      transform: translateX(250%);
+    }
   }
   @keyframes subtle-float {
-    0% { transform: translate(0, 0); }
-    25% { transform: translate(3px, -2px); }
-    50% { transform: translate(0, -4px); }
-    75% { transform: translate(-3px, -2px); }
-    100% { transform: translate(0, 0); }
+    0% {
+      transform: translate(0, 0);
+    }
+    25% {
+      transform: translate(3px, -2px);
+    }
+    50% {
+      transform: translate(0, -4px);
+    }
+    75% {
+      transform: translate(-3px, -2px);
+    }
+    100% {
+      transform: translate(0, 0);
+    }
   }
   @keyframes notice-tag-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(0.96); }
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(0.96);
+    }
   }
   --animate-shuttle: shuttle 5s ease-in-out infinite;
   --animate-subtle-float: subtle-float 8s ease-in-out infinite;
@@ -33,8 +54,8 @@
 
 /* Hide scrollbar for IE, Edge and Firefox */
 * {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 input[type="search"]::-webkit-search-decoration,
@@ -45,171 +66,1177 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 /* Cyberpunk / Gamer Theme Overrides */
-html.cyber {
-  background-color: #0b132b !important; /* Deep rich blue */
-  color: #e0f2fe;
+
+/* Neon Color Variables */
+:is(html.cyber, html.cyber-light) {
+  --neon-rgb: 14, 165, 233;
+  --bg-base: #0b132b;
+  --bg-card: rgba(16, 24, 52, 0.98);
+  --neon-hex-rgb: 56, 189, 248; /* sky-400 rgb */
+  --neon-hex: #38bdf8;
+  --neon-dark: #0284c7; /* sky-600 */
+  --neon-text: #f8fafc;
+  --neon-muted: #cbd5e1;
+}
+:is(html.cyber-green, html.cyber-green-light) {
+  --neon-rgb: 34, 197, 94;
+  --neon-hex-rgb: 74, 222, 128;
+  --neon-hex: #4ade80;
+  --neon-dark: #16a34a; /* green-600 */
+  --neon-text: #f8fafc;
+  --neon-muted: #cbd5e1;
+  --bg-base: #021207;
+  --bg-card: rgba(8, 28, 16, 0.98);
+}
+:is(html.cyber-lavender, html.cyber-lavender-light) {
+  --neon-rgb: 168, 85, 247;
+  --neon-hex-rgb: 192, 132, 252;
+  --neon-hex: #c084fc;
+  --neon-dark: #9333ea; /* purple-600 */
+  --neon-text: #f8fafc;
+  --neon-muted: #cbd5e1;
+  --bg-base: #110826;
+  --bg-card: rgba(22, 16, 42, 0.98);
+}
+:is(html.cyber-pink, html.cyber-pink-light) {
+  --neon-rgb: 236, 72, 153;
+  --neon-hex-rgb: 244, 114, 182;
+  --neon-hex: #f472b6;
+  --neon-dark: #db2777; /* pink-600 */
+  --neon-text: #f8fafc;
+  --neon-muted: #cbd5e1;
+  --bg-base: #1f0715;
+  --bg-card: rgba(38, 12, 28, 0.98);
+}
+:is(html.cyber-orange, html.cyber-orange-light) {
+  --neon-rgb: 249, 115, 22;
+  --neon-hex-rgb: 251, 146, 60;
+  --neon-hex: #fb923c;
+  --neon-dark: #ea580c; /* orange-600 */
+  --neon-text: #f8fafc;
+  --neon-muted: #cbd5e1;
+  --bg-base: #1c0e05;
+  --bg-card: rgba(34, 18, 10, 0.98);
 }
 
-html.cyber body, 
-html.cyber #root, 
-html.cyber [class*="bg-[#0f172a]"],
-html.cyber .dark\:bg-\[\#0f172a\] {
+:is(
+  html.cyber,
+  html.cyber-green,
+  html.cyber-lavender,
+  html.cyber-pink,
+  html.cyber-orange
+) {
+  background-color: var(--bg-base) !important; /* Deep rich blue */
+  color: var(--neon-text);
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  body,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  #root,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="bg-[#0f172a]"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:bg-\[\#0f172a\] {
   background-color: transparent !important;
 }
 
 /* Background grid stays fixed */
-html.cyber::before {
+:is(
+  html.cyber,
+  html.cyber-green,
+  html.cyber-lavender,
+  html.cyber-pink,
+  html.cyber-orange
+)::before {
   content: "";
   position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
-  background-image: 
-    radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.15) 0%, transparent 60%),
-    linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
-  background-size: 100% 100%, 40px 40px, 40px 40px;
-  background-position: center top, center center, center center;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image:
+    linear-gradient(rgba(var(--neon-rgb), 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--neon-rgb), 0.05) 1px, transparent 1px);
+  background-size:
+    40px 40px,
+    40px 40px;
+  background-position:
+    center center,
+    center center;
   z-index: -1;
   pointer-events: none;
 }
 
 /* Cards & Modals */
-html.cyber .dark\:bg-slate-900,
-html.cyber .dark\:bg-slate-800,
-html.cyber [class*="dark:bg-slate-900"],
-html.cyber [class*="dark:bg-slate-800"],
-html.cyber .bg-white,
-html.cyber [class*="bg-gradient-to-br"] {
-  background-color: rgba(16, 24, 52, 0.98) !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:bg-slate-900,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:bg-slate-800,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-slate-900"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-slate-800"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-white,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="bg-gradient-to-br"]:not(.bg-clip-text) {
+  background-color: var(--bg-card) !important;
   background-image: none !important;
-  border: 1px solid rgba(14, 165, 233, 0.3) !important;
-  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.05), inset 0 0 10px rgba(14, 165, 233, 0.05) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.3) !important;
+  box-shadow:
+    0 4px 15px rgba(var(--neon-rgb), 0.05),
+    inset 0 0 10px rgba(var(--neon-rgb), 0.05) !important;
 }
 
 /* Modals backdrop specific */
-html.cyber .fixed.inset-0.bg-slate-900\/50,
-html.cyber [class*="bg-slate-900/50"],
-html.cyber [class*="bg-[#0f172a]/50"],
-html.cyber [class*="bg-slate-50/50"] {
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .fixed.inset-0.bg-slate-900\/50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="bg-slate-900/50"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="bg-[#0f172a]/50"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="bg-slate-50/50"] {
   backdrop-filter: blur(4px) !important;
 }
 
 /* Glowing text */
-html.cyber .text-slate-800,
-html.cyber .text-slate-900,
-html.cyber .dark\:text-slate-100,
-html.cyber .dark\:text-white,
-html.cyber [class*="dark:text-white"],
-html.cyber [class*="dark:text-slate-100"] {
-  color: #bae6fd !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .text-slate-800,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .text-slate-900,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:text-slate-100,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:text-white,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:text-white"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:text-slate-100"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:text-slate-200"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:text-slate-300"] {
+  color: var(--neon-text) !important;
 }
 
-html.cyber h1, html.cyber h2, html.cyber h3, html.cyber h4, html.cyber h5, html.cyber h6 {
-  color: #38bdf8 !important;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.5), 0 0 20px rgba(56, 189, 248, 0.3) !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  h1,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  h2,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  h3,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  h4,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  h5,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  h6 {
+  color: var(--neon-hex) !important;
+  text-shadow:
+    0 0 10px rgba(var(--neon-hex-rgb), 0.5),
+    0 0 20px rgba(var(--neon-hex-rgb), 0.3) !important;
   letter-spacing: 0.05em;
 }
 
-/* Neon buttons */
-html.cyber button.bg-white,
-html.cyber button.dark\:bg-slate-700,
-html.cyber button[class*="dark:bg-slate-700"],
-html.cyber .bg-white.dark\:bg-slate-700 {
-  background-color: rgba(14, 165, 233, 0.1) !important;
-  border: 1px solid rgba(14, 165, 233, 0.5) !important;
-  box-shadow: 0 0 15px rgba(14, 165, 233, 0.2), inset 0 0 5px rgba(14, 165, 233, 0.1) !important;
-  color: #38bdf8 !important;
+/* Fix text-shadow clipping on truncated elements that creates boxes */
+:is(html[class*="cyber"]) h1.truncate,
+:is(html[class*="cyber"]) h2.truncate,
+:is(html[class*="cyber"]) h3.truncate,
+:is(html[class*="cyber"]) h4.truncate,
+:is(html[class*="cyber"]) h5.truncate,
+:is(html[class*="cyber"]) h6.truncate {
+  padding-top: 0.5em !important;
+  padding-bottom: 0.5em !important;
+  margin-top: -0.5em !important;
+  margin-bottom: -0.5em !important;
+  padding-left: 0.5em !important;
+  padding-right: 0.5em !important;
+  margin-left: -0.5em !important;
+  margin-right: -0.5em !important;
 }
 
-html.cyber button.bg-white:hover,
-html.cyber button.dark\:bg-slate-700:hover,
-html.cyber button[class*="dark:bg-slate-700"]:hover,
-html.cyber .bg-white.dark\:bg-slate-700:hover {
-  background-color: rgba(14, 165, 233, 0.2) !important;
-  box-shadow: 0 0 20px rgba(14, 165, 233, 0.4), inset 0 0 10px rgba(14, 165, 233, 0.2) !important;
-  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6) !important;
+/* Neon buttons */
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  button.bg-white,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  button.dark\:bg-slate-700,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  button[class*="dark:bg-slate-700"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-white.dark\:bg-slate-700 {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.5) !important;
+  box-shadow:
+    0 0 15px rgba(var(--neon-rgb), 0.2),
+    inset 0 0 5px rgba(var(--neon-rgb), 0.1) !important;
+  color: var(--neon-hex) !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  button.bg-white:hover,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  button.dark\:bg-slate-700:hover,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  button[class*="dark:bg-slate-700"]:hover,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-white.dark\:bg-slate-700:hover {
+  background-color: rgba(var(--neon-rgb), 0.2) !important;
+  box-shadow:
+    0 0 20px rgba(var(--neon-rgb), 0.4),
+    inset 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+  text-shadow: 0 0 8px rgba(var(--neon-hex-rgb), 0.6) !important;
 }
 
 /* Gradients text/buttons */
-html.cyber .bg-indigo-600,
-html.cyber .dark\:bg-indigo-600,
-html.cyber [class*="from-indigo-500"],
-html.cyber [class*="from-blue-600"] {
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-indigo-600,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:bg-indigo-600,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="from-indigo-500"]:not(.bg-clip-text),
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="from-blue-600"]:not(.bg-clip-text) {
   background: transparent !important;
-  background-color: rgba(14, 165, 233, 0.15) !important;
-  color: #38bdf8 !important;
-  box-shadow: 0 0 20px rgba(14, 165, 233, 0.4), inset 0 0 15px rgba(14, 165, 233, 0.2) !important;
-  border: 1px solid #38bdf8 !important;
-  text-shadow: 0 0 8px rgba(56, 189, 248, 0.8) !important;
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  color: var(--neon-hex) !important;
+  box-shadow:
+    0 0 20px rgba(var(--neon-rgb), 0.4),
+    inset 0 0 15px rgba(var(--neon-rgb), 0.2) !important;
+  border: 1px solid var(--neon-hex) !important;
+  text-shadow: 0 0 8px rgba(var(--neon-hex-rgb), 0.8) !important;
 }
 
-html.cyber [class*="bg-gradient-to-r"] {
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="bg-gradient-to-r"]:not(.bg-clip-text) {
   background: transparent !important;
-  background-color: rgba(14, 165, 233, 0.08) !important;
-  box-shadow: 0 0 10px rgba(14, 165, 233, 0.2), inset 0 0 5px rgba(14, 165, 233, 0.1) !important;
-  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  background-color: rgba(var(--neon-rgb), 0.08) !important;
+  box-shadow:
+    0 0 10px rgba(var(--neon-rgb), 0.2),
+    inset 0 0 5px rgba(var(--neon-rgb), 0.1) !important;
+  border: 1px solid rgba(var(--neon-hex-rgb), 0.4) !important;
 }
 
-html.cyber .notice-card-container {
-  box-shadow: 0 0 8px rgba(14, 165, 233, 0.15), inset 0 0 5px rgba(14, 165, 233, 0.05) !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .notice-card-container {
+  box-shadow:
+    0 0 8px rgba(var(--neon-rgb), 0.15),
+    inset 0 0 5px rgba(var(--neon-rgb), 0.05) !important;
 }
 
 /* Transparent gradients fix for text */
-html.cyber .bg-clip-text {
+:is(html[class*="cyber"]) .bg-clip-text {
   background: none !important;
-  -webkit-text-fill-color: #38bdf8 !important;
-  color: #38bdf8 !important;
+  -webkit-text-fill-color: var(--neon-hex) !important;
+  color: var(--neon-hex) !important;
 }
 
-html.cyber .text-indigo-600,
-html.cyber .dark\:text-indigo-400,
-html.cyber .text-blue-600,
-html.cyber .dark\:text-blue-400 {
-  color: #38bdf8 !important;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.5) !important;
+:is(html[class*="-light"]) .bg-clip-text {
+  -webkit-text-fill-color: var(--neon-dark) !important;
+  color: var(--neon-dark) !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .text-indigo-600,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:text-indigo-400,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .text-blue-600,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:text-blue-400 {
+  color: var(--neon-hex) !important;
+  text-shadow: 0 0 10px rgba(var(--neon-hex-rgb), 0.5) !important;
 }
 
 /* Muted text */
-html.cyber .text-slate-500,
-html.cyber .dark\:text-slate-400,
-html.cyber [class*="text-slate-500"],
-html.cyber [class*="dark:text-slate-400"] {
-  color: #7dd3fc !important;
-  opacity: 0.8;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .text-slate-500,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .text-slate-400,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:text-slate-500,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:text-slate-400,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="text-slate-500"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="text-slate-400"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:text-slate-500"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:text-slate-400"] {
+  color: var(--neon-muted) !important;
 }
 
 /* Specific Pill Overrides */
-html.cyber .bg-indigo-100,
-html.cyber [class*="dark:bg-indigo-900/"] {
-  background-color: rgba(14, 165, 233, 0.15) !important;
-  border-color: rgba(14, 165, 233, 0.3) !important;
-  color: #38bdf8 !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-indigo-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-indigo-100,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-indigo-900/"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-indigo-500/"] {
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  border-color: rgba(var(--neon-rgb), 0.3) !important;
+  color: var(--neon-hex) !important;
 }
 
-html.cyber .bg-emerald-50,
-html.cyber [class*="dark:bg-emerald-900/"] {
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-emerald-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-emerald-900/"] {
   background-color: rgba(16, 185, 129, 0.15) !important;
   border-color: rgba(16, 185, 129, 0.3) !important;
   color: #34d399 !important;
 }
 
-html.cyber .bg-orange-50,
-html.cyber [class*="dark:bg-orange-900/"] {
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-orange-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-orange-900/"] {
   background-color: rgba(249, 115, 22, 0.15) !important;
   border-color: rgba(249, 115, 22, 0.3) !important;
   color: #fb923c !important;
 }
 
-html.cyber .bg-slate-100.dark\:bg-slate-800,
-html.cyber span.dark\:bg-slate-800,
-html.cyber div.text-sm.dark\:bg-slate-800 {
-  background-color: rgba(14, 165, 233, 0.1) !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-lime-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-lime-900/"] {
+  background-color: rgba(132, 204, 22, 0.15) !important;
+  border-color: rgba(132, 204, 22, 0.3) !important;
+  color: #a3e635 !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-rose-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-rose-900/"] {
+  background-color: rgba(244, 63, 94, 0.15) !important;
+  border-color: rgba(244, 63, 94, 0.3) !important;
+  color: #fb7185 !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-red-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-red-900/"] {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #f87171 !important;
+}
+
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-slate-100.dark\:bg-slate-800,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-slate-700/"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="hover:bg-slate-700/"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  span.dark\:bg-slate-800,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  div.text-sm.dark\:bg-slate-800 {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
 }
 
 /* Borders */
-html.cyber .border-slate-100,
-html.cyber .dark\:border-slate-800,
-html.cyber .dark\:border-slate-700,
-html.cyber [class*="dark:border-slate-800"],
-html.cyber [class*="dark:border-slate-700"] {
-  border-color: rgba(14, 165, 233, 0.1) !important;
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .border-slate-100,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:border-slate-800,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .dark\:border-slate-700,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:border-slate-800"],
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:border-slate-700"] {
+  border-color: rgba(var(--neon-rgb), 0.1) !important;
 }
+
+/* Light Gamer Theme (cyber-light) */
+:is(html[class*="-light"]) {
+  background-color: #f8fafc !important; /* Very light slate */
+  color: #0f172a;
+}
+
+:is(html[class*="-light"]) body,
+:is(html[class*="-light"]) #root {
+  background-color: transparent !important;
+}
+
+/* Background grid for light cyber */
+:is(html[class*="-light"])::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image:
+    linear-gradient(rgba(var(--neon-rgb), 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--neon-rgb), 0.1) 1px, transparent 1px);
+  background-size:
+    40px 40px,
+    40px 40px;
+  background-position:
+    center center,
+    center center;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Cards & Modals */
+:is(html[class*="-light"]) .bg-white,
+:is(html[class*="-light"]) .dark\:bg-slate-900,
+:is(html[class*="-light"]) .dark\:bg-slate-800 {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.4) !important;
+  box-shadow:
+    0 4px 15px rgba(var(--neon-rgb), 0.15),
+    inset 0 0 10px rgba(var(--neon-rgb), 0.05) !important;
+}
+
+/* Glowing text for light theme */
+:is(html[class*="-light"]) h1,
+:is(html[class*="-light"]) h2,
+:is(html[class*="-light"]) h3,
+:is(html[class*="-light"]) h4,
+:is(html[class*="-light"]) h5,
+:is(html[class*="-light"]) h6 {
+  color: var(--neon-dark) !important;
+  text-shadow: 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+}
+
+:is(html[class*="-light"]) h1.truncate,
+:is(html[class*="-light"]) h2.truncate,
+:is(html[class*="-light"]) h3.truncate,
+:is(html[class*="-light"]) h4.truncate,
+:is(html[class*="-light"]) h5.truncate,
+:is(html[class*="-light"]) h6.truncate {
+  padding-top: 0.5em !important;
+  padding-bottom: 0.5em !important;
+  margin-top: -0.5em !important;
+  margin-bottom: -0.5em !important;
+  padding-left: 0.5em !important;
+  padding-right: 0.5em !important;
+  margin-left: -0.5em !important;
+  margin-right: -0.5em !important;
+}
+
+/* Neon buttons */
+:is(html[class*="-light"]) button.bg-white,
+:is(html[class*="-light"]) button.bg-slate-900 {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.6) !important;
+  box-shadow:
+    0 0 10px rgba(var(--neon-rgb), 0.2),
+    inset 0 0 5px rgba(var(--neon-rgb), 0.1) !important;
+  color: var(--neon-dark) !important;
+}
+
+:is(html[class*="-light"]) button.bg-white:hover,
+:is(html[class*="-light"]) button.bg-slate-900:hover {
+  background-color: rgba(var(--neon-rgb), 0.2) !important;
+  box-shadow:
+    0 0 15px rgba(var(--neon-rgb), 0.3),
+    inset 0 0 8px rgba(var(--neon-rgb), 0.2) !important;
+}
+
+/* Primary actions */
+:is(html[class*="-light"]) .bg-indigo-600,
+:is(html[class*="-light"]) .dark\:bg-indigo-600 {
+  background: transparent !important;
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  color: var(--neon-dark) !important;
+  font-weight: bold;
+  box-shadow:
+    0 0 15px rgba(var(--neon-rgb), 0.3),
+    inset 0 0 10px rgba(var(--neon-rgb), 0.1) !important;
+  border: 1px solid var(--neon-dark) !important;
+}
+
+/* Specific text colors */
+:is(html[class*="-light"]) .text-indigo-600,
+:is(html[class*="-light"]) .dark\:text-indigo-400 {
+  color: var(--neon-dark) !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-blue-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-blue-900/"] {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+  color: #60a5fa !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-purple-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-purple-900/"] {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  color: #c084fc !important;
+}
+
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  .bg-amber-50,
+:is(
+    html.cyber,
+    html.cyber-green,
+    html.cyber-lavender,
+    html.cyber-pink,
+    html.cyber-orange
+  )
+  [class*="dark:bg-amber-900/"] {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+  color: #fbbf24 !important;
+}
+
+/* --- GENERIC CYBER THEME OVERRIDES --- */
+/* Fix grey text shades that got missed */
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .text-slate-600,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .text-slate-700,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:text-slate-600"],
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:text-slate-700"] {
+  color: var(--neon-muted) !important;
+}
+
+/* Ensure all primary (indigo) UI elements map to the neon accent */
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="text-indigo-"]:not([class*="hover"]),
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:text-indigo-"]:not([class*="hover"]) {
+  color: var(--neon-hex) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:text-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:text-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="group-hover:text-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:group-hover:text-indigo-"]:hover {
+  color: var(--neon-hex) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="border-indigo-"]:not([class*="hover"]),
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:border-indigo-"]:not([class*="hover"]) {
+  border-color: rgba(var(--neon-rgb), 0.5) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:border-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:border-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="group-hover:border-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:group-hover:border-indigo-"]:hover {
+  border-color: rgba(var(--neon-rgb), 0.5) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-indigo-"]:not([class*="hover"]),
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:bg-indigo-"]:not([class*="hover"]) {
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  color: var(--neon-text) !important;
+  border-color: rgba(var(--neon-rgb), 0.3) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:bg-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:bg-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="group-hover:bg-indigo-"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:group-hover:bg-indigo-"]:hover {
+  background-color: rgba(var(--neon-rgb), 0.25) !important;
+  color: var(--neon-text) !important;
+}
+
+/* Fix active and hover rows in tables */
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:bg-slate-50/"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:bg-slate-700/"]:hover {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .bg-slate-50\/80,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .dark\:bg-slate-700\/50,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-slate-50/80"],
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:bg-slate-700/50"] {
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+}
+
+/* Fix expanded row */
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:bg-slate-900/40"],
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-slate-50/50"] {
+  background-color: var(--bg-card) !important;
+}
+
+/* Fix nav buttons */
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .bg-white.dark\:bg-slate-700,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-white dark:bg-slate-700"] {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.5) !important;
+  box-shadow: 0 0 15px rgba(var(--neon-rgb), 0.2), inset 0 0 5px rgba(var(--neon-rgb), 0.1) !important;
+  color: var(--neon-hex) !important;
+}
+
+/* AuthView Custom Gaming Components */
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-action-btn {
+  background: transparent !important;
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  color: var(--neon-hex) !important;
+  box-shadow:
+    0 0 20px rgba(var(--neon-rgb), 0.4),
+    inset 0 0 15px rgba(var(--neon-rgb), 0.2) !important;
+  border: 1px solid var(--neon-hex) !important;
+  text-shadow: 0 0 8px rgba(var(--neon-hex-rgb), 0.8) !important;
+}
+:is(html[class*="-light"]) .neon-action-btn {
+  background: transparent !important;
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  color: var(--neon-dark) !important;
+  font-weight: bold !important;
+  box-shadow:
+    0 0 15px rgba(var(--neon-rgb), 0.3),
+    inset 0 0 10px rgba(var(--neon-rgb), 0.1) !important;
+  border: 1px solid var(--neon-dark) !important;
+}
+
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-bg {
+  background-color: var(--neon-hex) !important;
+}
+
+:is(html[class*="-light"]) .neon-bg {
+  background-color: var(--neon-dark) !important;
+}
+
+:is(html[class*="cyber"]) .neon-icon-blur {
+  background-color: var(--neon-hex) !important;
+}
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-icon-container {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
+  color: var(--neon-hex) !important;
+  box-shadow: inset 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+}
+
+:is(html[class*="-light"]) .neon-icon-container {
+  background-color: rgba(var(--neon-rgb), 0.05) !important;
+  color: var(--neon-dark) !important;
+  box-shadow: inset 0 0 10px rgba(var(--neon-rgb), 0.1) !important;
+}
+
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn {
+  background: transparent !important;
+  background-color: rgba(var(--neon-rgb), 0.05) !important;
+  color: var(--neon-hex) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.3) !important;
+}
+
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn:hover {
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  box-shadow: 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+}
+
+:is(html[class*="-light"]) .neon-telegram-btn {
+  background: transparent !important;
+  background-color: rgba(var(--neon-rgb), 0.05) !important;
+  color: var(--neon-dark) !important;
+  border: 1px solid var(--neon-dark) !important;
+}
+:is(html[class*="-light"]) .neon-telegram-btn:hover {
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  box-shadow: 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+}
+

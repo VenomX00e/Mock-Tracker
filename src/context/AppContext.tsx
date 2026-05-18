@@ -107,7 +107,7 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
     if (updateProfile) await updateProfile({ tasks });
   };
 
-  const systemDataVal = useSystemData(user, profile, adminPermissions);
+  const systemDataVal = useSystemData(user, profile, adminPermissions, isOwner);
   const { pinnedChallenges, fetchAnnouncement, notices, setNotices, categories } = systemDataVal;
 
   useEffect(() => {
@@ -120,7 +120,7 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
     }
   }, [categories, localCategory]);
 
-  const challengesManagerVal = useChallengesManager(user, adminPermissions, pinnedChallenges, systemDataVal.setPinnedChallenges, fetchAnnouncement);
+  const challengesManagerVal = useChallengesManager(user, adminPermissions, isOwner, pinnedChallenges, systemDataVal.setPinnedChallenges, fetchAnnouncement);
   const inlineEditNoticeVal = useInlineEditNotice(user, isAdmin, notices, setNotices);
 
   const appStateVal = useMemo(() => ({

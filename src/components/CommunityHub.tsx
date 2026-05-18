@@ -220,8 +220,10 @@ export default function CommunityHub() {
            isFirstLoad.current = false;
         }, 100);
       }
-    }, (error) => {
-      console.warn("Chat subscription error:", error);
+    }, (error: any) => {
+      if (error.code !== 'permission-denied') {
+        console.warn("Chat subscription error:", error);
+      }
     });
   return () => unsubscribe();
   }, [user, isAdmin]);

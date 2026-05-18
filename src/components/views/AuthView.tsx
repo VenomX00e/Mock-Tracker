@@ -20,9 +20,9 @@ export function AuthView() {
         <motion.div 
           animate={{ scale: [1, 1.25, 1], opacity: [0.3, 0.6, 0.3] }}
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute inset-0 bg-blue-400 dark:bg-blue-500 rounded-full blur-xl"
+          className="absolute inset-0 bg-blue-400 dark:bg-blue-500 rounded-full blur-xl neon-icon-blur"
         />
-        <div className="relative w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-inner z-10">
+        <div className="relative w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-inner z-10 neon-icon-container">
           <DatabaseZap className="w-8 h-8" />
         </div>
       </div>
@@ -110,7 +110,7 @@ export function AuthView() {
             href={telegramLink || '#'}
             target={telegramLink ? "_blank" : undefined}
             rel={telegramLink ? "noopener noreferrer" : undefined}
-            className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg transition-colors mt-2"
+            className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg transition-colors mt-2 neon-telegram-btn"
             onClick={(e) => {
               if (!telegramLink) {
                 e.preventDefault();

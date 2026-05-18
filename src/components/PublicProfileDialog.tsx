@@ -31,8 +31,10 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
           const q = query(collection(db, 'users', profile.userId, 'mocks'), orderBy('date', 'desc'), limit(5));
           const snap = await getDocs(q);
           setRecentMocks(snap.docs.map(d => d.data() as MockScore).filter(m => !(m as any).isDeleted));
-        } catch (e) {
-          console.error("Failed to fetch user mocks", e);
+        } catch (e: any) {
+          if (e.code !== 'permission-denied') {
+            console.error("Failed to fetch user mocks", e);
+          }
         }
         setLoading(false);
       };

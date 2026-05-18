@@ -4,13 +4,14 @@ import { Users, X, Flame, CheckCircle2 } from 'lucide-react';
 export interface ChallengeParticipantsDialogProps {
   showUsers: boolean;
   setShowUsers: (val: boolean) => void;
-  usersTab: 'standings' | 'activity';
-  setUsersTab: (val: 'standings' | 'activity') => void;
+  usersTab: 'standings' | 'activity' | 'award';
+  setUsersTab: (val: 'standings' | 'activity' | 'award') => void;
   participants: any[];
   groupedCheckIns: any[];
   challenge: any;
   user: any;
   today: string;
+  isOwner?: boolean;
 }
 
 export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogProps> = ({
@@ -22,8 +23,90 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
   groupedCheckIns,
   challenge,
   user,
-  today
+  today,
+  isOwner
 }) => {
+  const [awardName, setAwardName] = useState('');
+  const [awardEmoji, setAwardEmoji] = useState('🏆');
+  const [awardColor, setAwardColor] = useState('text-yellow-600');
+  const [awardBg, setAwardBg] = useState('bg-yellow-100');
+  const [awardBorder, setAwardBorder] = useState('border-yellow-200');
+  const [awardTarget, setAwardTarget] = useState<'all' | 'completed'>('completed');
+  const [awarding, setAwarding] = useState(false);
+
+  const getEligibleParticipants = () => {
+    if (awardTarget === 'all') return participants;
+    return participants.filter(p => {
+       const duration = challenge.durationDays || 0;
+       if (challenge.challengeType === 'streak') {
+         return (p.streak >= duration) || (p.checkInDates && p.checkInDates.length >= duration);
+       } else if (challenge.challengeType === 'uploadMock') {
+         return p.totalMocks >= duration;
+       } else if (challenge.challengeType === 'todo') {
+         if (challenge.todoFrequency === 'oneTime') {
+           return p.completedTasks && challenge.tasks && p.completedTasks.length >= challenge.tasks.length;
+         } else {
+           return (p.streak >= duration) || (p.checkInDates && p.checkInDates.length >= duration);
+         }
+       }
+       return false;
+    });
+  };
+
+  const handleAwardBadges = async () => {
+    if (!user || user.email !== 'mrityunjoyk29@gmail.com') return;
+    if (!awardName.trim()) {
+      alert("Please provide a badge name.");
+      return;
+    }
+
+    const eligible = getEligibleParticipants();
+    if (eligible.length === 0) {
+      alert("No eligible participants found.");
+      return;
+    }
+
+    setAwarding(true);
+    let successCount = 0;
+    try {
+      const { updateDoc, doc, getDoc } = await import('firebase/firestore');
+      const { db } = await import('../services/firebase');
+      
+      const newBadge = {
+        id: `${challenge.id}_custom_badge_${Date.now()}`,
+        text: awardName,
+        emoji: awardEmoji,
+        color: awardColor,
+        bg: awardBg,
+        border: awardBorder,
+        awardedAt: new Date().toISOString(),
+        challengeId: challenge.id,
+        challengeTitle: challenge.title
+      };
+
+      for (const p of eligible) {
+        try {
+          const userDocRef = doc(db, 'users', p.userId);
+          const snapshot = await getDoc(userDocRef);
+          if (snapshot.exists()) {
+             const data = snapshot.data();
+             const existingBadges = data.badges || [];
+             await updateDoc(userDocRef, { badges: [...existingBadges, newBadge] });
+             successCount++;
+          }
+        } catch (e) {
+          console.error("Error awarding to", p.userId, e);
+        }
+      }
+      alert(`Successfully awarded badge to ${successCount} participants!`);
+      setAwardName('');
+    } catch (e) {
+      console.error(e);
+      alert("Error awarding badges.");
+    }
+    setAwarding(false);
+  };
+
   if (!showUsers) return null;
 
   return (
@@ -52,6 +135,14 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
           >
             Recent Activity
           </button>
+          {(isOwner || user?.email === 'mrityunjoyk29@gmail.com') && (
+            <button
+              onClick={() => setUsersTab('award')}
+              className={`flex-1 py-3 text-sm font-semibold transition-colors ${usersTab === 'award' ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'}`}
+            >
+              Award Batch
+            </button>
+          )}
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 custom-scrollbar bg-slate-50/30 dark:bg-slate-900/50">
@@ -186,6 +277,76 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
                );
              })
             )
+          )}
+
+          {usersTab === 'award' && (
+            <div className="space-y-4">
+               <h4 className="font-semibold text-slate-800 dark:text-slate-200">Award Batch to All Participants</h4>
+               <p className="text-sm text-slate-500 dark:text-slate-400">
+                 Create a custom badge to reward everyone who participated in this challenge from start to end.
+               </p>
+               <div className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Badge Name</label>
+                    <input type="text" value={awardName} onChange={e => setAwardName(e.target.value)} placeholder="e.g. 50 Days Survivor" className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                     <div>
+                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Emoji</label>
+                       <input type="text" value={awardEmoji} onChange={e => setAwardEmoji(e.target.value)} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900" />
+                     </div>
+                     <div>
+                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Color Theme</label>
+                       <select value={awardColor} onChange={e => {
+                          const val = e.target.value;
+                          setAwardColor(val);
+                          if (val.includes('yellow')) { setAwardBg('bg-yellow-100 dark:bg-yellow-900/30'); setAwardBorder('border-yellow-200 dark:border-yellow-800'); }
+                          else if (val.includes('emerald')) { setAwardBg('bg-emerald-100 dark:bg-emerald-900/30'); setAwardBorder('border-emerald-200 dark:border-emerald-800'); }
+                          else if (val.includes('blue')) { setAwardBg('bg-blue-100 dark:bg-blue-900/30'); setAwardBorder('border-blue-200 dark:border-blue-800'); }
+                          else if (val.includes('purple')) { setAwardBg('bg-purple-100 dark:bg-purple-900/30'); setAwardBorder('border-purple-200 dark:border-purple-800'); }
+                       }} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300">
+                         <option value="text-yellow-600 dark:text-yellow-400">Gold / Yellow</option>
+                         <option value="text-emerald-600 dark:text-emerald-400">Emerald / Green</option>
+                         <option value="text-blue-600 dark:text-blue-400">Sapphire / Blue</option>
+                         <option value="text-purple-600 dark:text-purple-400">Amethyst / Purple</option>
+                       </select>
+                     </div>
+                  </div>
+                  
+                  <div className="pt-2 pb-2">
+                    <p className="text-xs font-medium text-slate-500 mb-2">Preview:</p>
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-bold shadow-sm ${awardBg} ${awardBorder} ${awardColor}`}>
+                      <span>{awardEmoji}</span>
+                      <span>{awardName || 'Badge Name'}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 pb-2 border-t border-slate-100 dark:border-slate-700">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Award To</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                        <input type="radio" checked={awardTarget === 'completed'} onChange={() => setAwardTarget('completed')} className="text-indigo-600 focus:ring-indigo-500" />
+                        Completed Perfectly
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                        <input type="radio" checked={awardTarget === 'all'} onChange={() => setAwardTarget('all')} className="text-indigo-600 focus:ring-indigo-500" />
+                        All Participants
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {getEligibleParticipants().length} participant(s) match this criteria.
+                    </p>
+                  </div>
+
+                  <button 
+                    onClick={handleAwardBadges}
+                    disabled={awarding || !awardName.trim() || getEligibleParticipants().length === 0}
+                    className="w-full flex items-center justify-center py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    {awarding ? 'Awarding...' : `Award to ${getEligibleParticipants().length} Participant${getEligibleParticipants().length !== 1 ? 's' : ''}`}
+                  </button>
+               </div>
+            </div>
           )}
         </div>
       </div>

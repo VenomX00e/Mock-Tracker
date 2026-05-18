@@ -3,7 +3,7 @@ import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 async function fetchChallengesData(args: any) {
-  const [_, uid, canManageChallenges] = args;
+  const [_, uid, canManageChallenges, isOwner] = args;
   const chalSnap = await getDocs(query(collection(db, 'challenges')));
   let activeChallenges: any[] = [];
   let delChallenges: any[] = [];
@@ -35,6 +35,9 @@ async function fetchChallengesData(args: any) {
 
           if (data.visibility === 'personal' && data.creatorId !== uid) return;
           if (data.visibility === 'global') {
+            if (data.endDate && data.endDate < new Date().toISOString().split('T')[0]) {
+              if (!isOwner) return;
+            }
             if (data.approvalStatus === 'pending') {
               if (data.creatorId !== uid && !canManageChallenges) return;
             } else if (data.approvalStatus === 'rejected') {
@@ -55,9 +58,9 @@ async function fetchChallengesData(args: any) {
   return { activeChallenges, delChallenges };
 }
 
-export function useChallengesQuery(user: any, adminPermissions: any) {
+export function useChallengesQuery(user: any, adminPermissions: any, isOwner?: boolean) {
   const { data, error, mutate } = useSWR(
-    user ? ['challenges', user.uid, adminPermissions?.canManageChallenges] : null,
+    user ? ['challenges', user.uid, adminPermissions?.canManageChallenges, isOwner] : null,
     fetchChallengesData,
     { revalidateOnFocus: false }
   );

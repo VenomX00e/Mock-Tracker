@@ -268,8 +268,10 @@ export default function Dashboard() {
         } else {
           setLeaderboardRank(null);
         }
-      } catch (e) {
-        console.error("Error fetching rank", e);
+      } catch (e: any) {
+        if (e.code !== 'permission-denied') {
+          console.error("Error fetching rank", e);
+        }
       }
     };
     fetchRank();
@@ -584,7 +586,7 @@ export default function Dashboard() {
     const dx = item.barCount % 2 === 0 ? 15 : 0; 
 
     return (
-      <text x={x} y={y} dy={10} dx={dx} textAnchor="middle" fill="#64748b" fontSize={11}>
+      <text x={x} y={y} dy={10} dx={dx} textAnchor="middle" className="fill-slate-700 dark:fill-white" fontSize={11}>
         {name}
       </text>
     );
@@ -744,7 +746,7 @@ export default function Dashboard() {
               </div>
               <div className="text-3xl font-light text-slate-900 dark:text-slate-100 mb-2">{stats.avgPercentile}<span className="text-sm sm:text-lg text-slate-400 dark:text-slate-500 ml-1">%</span></div>
               <div className="w-full bg-slate-100 dark:bg-slate-700/50 rounded-full h-1.5 overflow-hidden flex shadow-inner">
-                <div className="bg-indigo-500 dark:bg-indigo-400 h-1.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, Math.max(0, (Number(stats.avgPercentile) / goalPercentile) * 100 || 0))}%` }}></div>
+                <div className="bg-indigo-500 dark:bg-indigo-400 neon-bg h-1.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, Math.max(0, (Number(stats.avgPercentile) / goalPercentile) * 100 || 0))}%` }}></div>
               </div>
               <div className="flex justify-end w-full mt-1.5">
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-0.5 group">
@@ -883,7 +885,7 @@ export default function Dashboard() {
                 <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <LineChart key={`line-${activeTrendId}`} data={activeTrendFilteredChronologicalMocks} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" strokeOpacity={0.4} />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} tickFormatter={(value) => {
                       if (activeTrendId === 'overall') {
@@ -1013,7 +1015,7 @@ export default function Dashboard() {
                     <div style={{ height: '100%', minWidth: Math.max(flattenedData.length * 28, 400) }} ref={barChartRefInner}>
                       <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         <BarChart key={`bar-${activeTrendId}`} style={{ touchAction: 'pan-x' }} data={flattenedData} margin={{ top: 30, right: 20, left: -20, bottom: 5 }} barCategoryGap="0%">
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" strokeOpacity={0.4} />
                           <XAxis dataKey="flatIndex" axisLine={false} tickLine={false} interval={0} height={30} tick={renderCustomTick} />
                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                           <RechartsTooltip content={<CustomTooltip chartRefBox={barChartRefInner} activeTrendId={activeTrendId} subjects={subjects} getSub={getSub} />} isAnimationActive={false} cursor={{ fill: 'currentColor', opacity: 0.05 }} wrapperStyle={{ visibility: 'hidden' }} allowEscapeViewBox={{ x: false, y: false }} />
@@ -1025,9 +1027,8 @@ export default function Dashboard() {
                             <LabelList dataKey="cellScore" position="top" content={(props: any) => {
                                const { x, y, width, value, payload } = props;
                                if (x == null || y == null || width == null || !value) return null;
-                               const fill = payload?.fill || '#64748b';
                                return (
-                                 <text x={x + width / 2} y={y - 5} fill={fill} fontSize={10} fontWeight={700} textAnchor="middle">
+                                 <text x={x + width / 2} y={y - 5} className="fill-slate-700 dark:fill-white" fontSize={10} fontWeight={700} textAnchor="middle">
                                    {value > 0 ? value : ''}
                                  </text>
                                );
@@ -1044,7 +1045,7 @@ export default function Dashboard() {
                        const hasSub = displayedMocks.some(m => getSub(m, s.id)?.score != null && getSub(m, s.id)?.score !== 0);
                        if (!hasSub) return null;
                        return (
-                         <div key={s.id} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors[idx % colors.length] }}></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400">{s.short || s.name}</span></div>
+                         <div key={s.id} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ backgroundColor: colors[idx % colors.length] }}></div><span className="text-xs font-medium text-slate-600 dark:text-slate-400"><span className="sm:hidden">{s.short || s.name}</span><span className="hidden sm:block">{s.name}</span></span></div>
                        );
                     })}
                   </div>
@@ -1063,7 +1064,7 @@ export default function Dashboard() {
                     }));
                     return (
                       <RadarChart key={`radar-${activeTrendId}`} cx="50%" cy="50%" outerRadius="65%" margin={{ top: 20, right: 30, bottom: 20, left: 30 }} data={radarData}>
-                        <PolarGrid stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                        <PolarGrid stroke="#64748b" strokeOpacity={0.4} />
                         <PolarAngleAxis dataKey="subject" tick={(props: any) => { 
                           const { payload, x, y, textAnchor, index } = props; 
                           // Apply vertical offset based on position to avoid chart overlap

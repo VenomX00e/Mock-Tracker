@@ -104,5 +104,5 @@ export function useInlineEditNotice(user: any, isAdmin: boolean, notices: any[],
     handleDescChange,
     undo,
     redo,
-  }), [inlineEditingId, inlineNoticeTitle, inlineNoticeDesc, descHistory, historyIndex, activeNoticeId]);
+  }), [inlineEditingId, inlineNoticeTitle, inlineNoticeDesc, descHistory, historyIndex, activeNoticeId, notices, user, isAdmin]);
 }

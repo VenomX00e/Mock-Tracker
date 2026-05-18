@@ -30,9 +30,15 @@ function AppContent() {
   const { isOwner, isAdmin, adminPermissions, mockToEdit, setMockToEdit } = useContext(AppStateCtx)!;
 
   useEffect(() => {
-    document.documentElement.classList.remove('light', 'dark', 'cyber');
+    document.documentElement.classList.remove(
+      'light', 'dark', 'cyber', 'cyber-light', 
+      'cyber-green', 'cyber-green-light', 
+      'cyber-lavender', 'cyber-lavender-light', 
+      'cyber-pink', 'cyber-pink-light', 
+      'cyber-orange', 'cyber-orange-light'
+    );
     document.documentElement.classList.add(theme);
-    if (theme === 'dark' || theme === 'cyber') {
+    if (theme === 'dark' || (theme.startsWith('cyber') && !theme.includes('-light'))) {
       document.documentElement.classList.add('dark');
     }
   }, [theme]);

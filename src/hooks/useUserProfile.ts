@@ -41,8 +41,12 @@ export function useUserProfile() {
         setProfile(newProfile);
       }
       setLoading(false);
-    }, (err) => {
-      console.error(err);
+    }, (err: any) => {
+      if (err.code === 'permission-denied') {
+        // Ignore permission-denied errors during sign-out
+      } else {
+        console.error(err);
+      }
       setLoading(false);
     });
 

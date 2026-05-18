@@ -389,7 +389,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
   };
 
   const content = (
-    <div className={`bg-slate-50 dark:bg-slate-900 ${asPage ? "w-full rounded-2xl flex flex-col" : "rounded-3xl w-full max-w-5xl max-h-[92vh] shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden"} relative z-10 font-sans`}>
+    <div className={`bg-slate-50 dark:bg-slate-900 ${asPage ? "w-full rounded-3xl flex flex-col shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden" : "rounded-3xl w-full max-w-5xl max-h-[92vh] shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden"} relative z-10 font-sans`}>
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-800/60 p-5 sm:p-6 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-4">
@@ -783,7 +783,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                     <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-5 pb-3 border-b border-slate-100 dark:border-slate-700/50 inline-flex items-center gap-2">
                        <Calculator className="w-4 h-4 text-slate-400" /> Sectional Breakdown 
                     </h4>
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       {subjects.map(sub => (
                         <SubjectRow 
                           key={sub.id} 

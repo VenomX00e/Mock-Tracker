@@ -5,10 +5,10 @@ import { useCategoriesQuery } from './useCategoriesQuery';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-export function useSystemData(user: any, profile: any, adminPermissions: any) {
+export function useSystemData(user: any, profile: any, adminPermissions: any, isOwner?: boolean) {
   const [selectedCategory, setSelectedCategory] = useState<string>('banking');
 
-  const { challenges, deletedChallenges, mutate: mutateChallenges } = useChallengesQuery(user, adminPermissions);
+  const { challenges, deletedChallenges, mutate: mutateChallenges } = useChallengesQuery(user, adminPermissions, isOwner);
   const { notices, countdowns, liveMocks, pinnedCountdowns, pinnedNotices, pinnedChallenges, mutateSystemDocs } = useSystemDocsQuery();
   const { categories, mutateCategories } = useCategoriesQuery();
 
@@ -84,14 +84,14 @@ export function useSystemData(user: any, profile: any, adminPermissions: any) {
   };
 
   // dummy setters for backward compatibility, since it's driven by SWR now
-  const setNotices = () => {};
-  const setChallenges = () => {};
-  const setDeletedChallenges = () => {};
-  const setCountdowns = () => {};
-  const setPinnedCountdowns = () => {};
-  const setPinnedNotices = () => {};
-  const setPinnedChallenges = () => {};
-  const setLiveMocks = () => {};
+  const setNotices = (val: any) => mutateSystemDocs((data: any) => ({ ...data, activeNotices: val }), { revalidate: false });
+  const setChallenges = (val: any) => mutateChallenges(val, { revalidate: false });
+  const setDeletedChallenges = (val: any) => {}; // not strictly needed for UI if we refetch
+  const setCountdowns = (val: any) => mutateSystemDocs((data: any) => ({ ...data, activeCountdowns: val }), { revalidate: false });
+  const setPinnedCountdowns = (val: any) => mutateSystemDocs((data: any) => ({ ...data, pinnedCountdowns: val }), { revalidate: false });
+  const setPinnedNotices = (val: any) => mutateSystemDocs((data: any) => ({ ...data, pinnedNotices: val }), { revalidate: false });
+  const setPinnedChallenges = (val: any) => mutateSystemDocs((data: any) => ({ ...data, pinnedChallenges: val }), { revalidate: false });
+  const setLiveMocks = (val: any) => mutateSystemDocs((data: any) => ({ ...data, liveMocks: val }), { revalidate: false });
 
   return useMemo(() => ({
     categories,

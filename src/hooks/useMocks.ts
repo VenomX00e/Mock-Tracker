@@ -165,9 +165,14 @@ export function useMocks() {
         const calculatedStats = calculateStats(mockData);
 
         next(null, { mocks: mockData, deletedMocks: deletedData, stats: calculatedStats });
-      }, (err) => {
-        console.error("Error fetching mocks:", err);
-        next(err);
+      }, (err: any) => {
+        if (err.code === 'permission-denied') {
+          // Ignore permission-denied errors during sign-out
+          next(null, { mocks: [], deletedMocks: [], stats: null });
+        } else {
+          console.error("Error fetching mocks:", err);
+          next(err);
+        }
       });
     }
   );
@@ -327,5 +332,5 @@ export function useMocks() {
 
   return useMemo(() => ({
     mocks, deletedMocks, stats, loading, addMock, updateMock, deleteMock, permanentlyDeleteMock, restoreDeletedMock
-  }), [mocks, deletedMocks, stats, loading]);
+  }), [mocks, deletedMocks, stats, loading, user?.uid]);
 }

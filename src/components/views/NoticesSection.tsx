@@ -22,11 +22,11 @@ export function NoticesSection() {
       historyIndex,
       descHistory,
       setDescHistory,
-      setHistoryIndex
+      setHistoryIndex,
+      textareaRef
   } = useInlineEditNoticeCtx();
 
   const [activeNoticeId, setActiveNoticeId] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

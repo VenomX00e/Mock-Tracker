@@ -29,7 +29,7 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
   const [participantsCount, setParticipantsCount] = useState(0);
   const [participants, setParticipants] = useState<any[]>([]);
   const [showUsers, setShowUsers] = useState(false);
-  const [usersTab, setUsersTab] = useState<'standings' | 'activity'>('activity');
+  const [usersTab, setUsersTab] = useState<'standings' | 'activity' | 'award'>('activity');
 
   useEffect(() => {
     if (user && challenge.id) {
@@ -45,8 +45,10 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
       if (docSnap.exists()) {
         setParticipant(docSnap.data());
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      if (error.code !== 'permission-denied') {
+        console.error(error);
+      }
     }
     setLoading(false);
   };
