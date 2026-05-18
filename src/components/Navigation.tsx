@@ -232,10 +232,10 @@ export default function Navigation() {
               <>
                 <button
                   onClick={signInWithGoogle}
-                  className="inline-flex items-center justify-center px-5 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm"
+                  className="inline-flex flex-nowrap whitespace-nowrap items-center justify-center px-4 sm:px-5 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm neon-action-btn"
                 >
                   <LogIn className="w-4 h-4 mr-2" />
-                  Sign In
+                  <span>Sign In</span>
                 </button>
 
                 <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1 md:mx-2 hidden sm:block"></div>

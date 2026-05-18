@@ -580,6 +580,8 @@ input[type="search"]::-webkit-search-results-decoration {
 /* Transparent gradients fix for text */
 :is(html[class*="cyber"]) .bg-clip-text {
   background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
   -webkit-text-fill-color: var(--neon-hex) !important;
   color: var(--neon-hex) !important;
 }
@@ -1206,15 +1208,19 @@ input[type="search"]::-webkit-search-results-decoration {
   background-color: var(--neon-hex) !important;
 }
 :is(html[class*="cyber"]):not(html[class*="-light"]) .neon-icon-container {
-  background-color: rgba(var(--neon-rgb), 0.1) !important;
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
   color: var(--neon-hex) !important;
-  box-shadow: inset 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+  box-shadow: inset 0 0 15px rgba(var(--neon-rgb), 0.3) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.4) !important;
+  backdrop-filter: blur(8px);
 }
 
 :is(html[class*="-light"]) .neon-icon-container {
-  background-color: rgba(var(--neon-rgb), 0.05) !important;
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
   color: var(--neon-dark) !important;
-  box-shadow: inset 0 0 10px rgba(var(--neon-rgb), 0.1) !important;
+  box-shadow: inset 0 0 15px rgba(var(--neon-rgb), 0.2) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.3) !important;
+  backdrop-filter: blur(8px);
 }
 
 :is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn {

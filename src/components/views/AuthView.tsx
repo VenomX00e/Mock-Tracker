@@ -26,10 +26,10 @@ export function AuthView() {
           <DatabaseZap className="w-8 h-8" />
         </div>
       </div>
-      <h2 className="text-center text-[21px] min-[330px]:text-[24px] min-[370px]:text-[27px] min-[400px]:text-[30px] sm:text-4xl md:text-5xl font-extrabold tracking-tighter mb-4 whitespace-nowrap bg-clip-text text-transparent bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 p-[5px]">
+      <h2 className="text-center text-[21px] min-[330px]:text-[24px] min-[370px]:text-[27px] min-[400px]:text-[30px] sm:text-4xl md:text-5xl font-extrabold tracking-tighter mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 p-[5px]">
         Track your Mocks Intelligently
       </h2>
-      <p className="text-[10px] min-[330px]:text-[11px] min-[370px]:text-xs min-[400px]:text-sm sm:text-base md:text-lg text-slate-500 dark:text-slate-400 font-bold mb-4 max-w-2xl leading-relaxed whitespace-nowrap overflow-x-hidden">
+      <p className="text-[10px] min-[330px]:text-[11px] min-[370px]:text-xs min-[400px]:text-sm sm:text-base md:text-lg text-slate-500 dark:text-slate-400 font-bold mb-4 max-w-2xl leading-relaxed">
         Upload scorecards • AI extraction • track your Progress
       </p>
 

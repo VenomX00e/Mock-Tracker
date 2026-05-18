@@ -807,7 +807,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
           type="button" 
           onClick={onClose}
           disabled={isSubmitting}
-          className="px-6 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 min-w-[100px]"
+          className="px-6 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-full hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 min-w-[100px] neon-action-btn"
         >
           Cancel
         </button>
@@ -815,7 +815,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
           type="button"
           onClick={handleSubmit}
           disabled={isSubmitting}
-          className="px-8 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-sm hover:shadow-indigo-500/25 transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px]"
+          className="px-8 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-full hover:bg-indigo-700 shadow-sm hover:shadow-indigo-500/25 transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] neon-action-btn"
         >
           {isSubmitting ? (
             <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving...</>
