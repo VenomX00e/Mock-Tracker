@@ -158,7 +158,7 @@ export default function ProfileDialog({
   const content = (
     <>
       <div
-        className={`bg-white dark:bg-slate-900 ${asPage ? "w-full rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden h-[calc(100vh-140px)]" : "rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"} relative z-10`}
+        className={`bg-white dark:bg-slate-900 ${asPage ? "w-full rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden flex-1 min-h-0" : "rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"} relative z-10`}
       >
         {!asPage && (
           <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md absolute top-0 w-full z-20">

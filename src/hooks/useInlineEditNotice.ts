@@ -40,10 +40,29 @@ export function useInlineEditNotice(user: any, isAdmin: boolean, notices: any[],
     const textarea = textareaRef.current;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const len = textarea.value.length;
     const text = textarea.value;
-    const selectedText = text.substring(start, end);
-    const newText = text.substring(0, start) + before + selectedText + after + text.substring(end, len);
+    
+    let textBefore = text.substring(0, start);
+    let selectedText = text.substring(start, end);
+    let textAfter = text.substring(end);
+    
+    let actualStart = start;
+    
+    const matchBefore = textBefore.match(/<([a-zA-Z0-9]+)>$/);
+    const matchAfter = textAfter.match(/^<\/([a-zA-Z0-9]+)>/);
+    
+    if (matchBefore && matchAfter && matchBefore[1] === matchAfter[1]) {
+      const openTag = matchBefore[0];
+      const closeTag = matchAfter[0];
+      
+      textBefore = textBefore.substring(0, textBefore.length - openTag.length);
+      textAfter = textAfter.substring(closeTag.length);
+      selectedText = openTag + selectedText + closeTag;
+      
+      actualStart = actualStart - openTag.length;
+    }
+
+    const newText = textBefore + before + selectedText + after + textAfter;
     
     setInlineNoticeDesc(newText);
     
@@ -54,7 +73,7 @@ export function useInlineEditNotice(user: any, isAdmin: boolean, notices: any[],
     
     setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
+      textarea.setSelectionRange(actualStart + before.length, actualStart + before.length + selectedText.length);
     }, 0);
   };
   

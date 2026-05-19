@@ -101,6 +101,7 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
     canManageLiveMocks: isOwner || (isAdminUser && profile?.permissions?.canManageLiveMocks),
     canManageCountdowns: isOwner || (isAdminUser && profile?.permissions?.canManageCountdowns),
     canManageSettings: isOwner || (isAdminUser && profile?.permissions?.canManageSettings),
+    canManageQuotes: isOwner || (isAdminUser && profile?.permissions?.canManageQuotes),
   }), [isOwner, isAdminUser, profile?.permissions]);
 
   const handleUpdateProfileTasks = async (tasks: any[]) => {

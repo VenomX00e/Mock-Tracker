@@ -81,10 +81,10 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({
   
   let textWithLinks = n.description ? n.description.replace(/(^|\s)(#[a-zA-Z0-9_]+)/g, '$1[$2]($2)') : '';
   textWithLinks = textWithLinks
-      .replace(/<red>([\s\S]*?)<\/red>/gi, '<span class="text-red-500 font-semibold">$1</span>')
-      .replace(/<blue>([\s\S]*?)<\/blue>/gi, '<span class="text-blue-500 font-semibold">$1</span>')
-      .replace(/<green>([\s\S]*?)<\/green>/gi, '<span class="text-emerald-500 font-semibold">$1</span>')
-      .replace(/<amber>([\s\S]*?)<\/amber>/gi, '<span class="text-amber-500 font-semibold">$1</span>');
+      .replace(/<re?d>([\s\S]*?)<\/re?d>/gi, '<span class="text-red-500 font-semibold">$1</span>')
+      .replace(/<bl(?:ue)?>([\s\S]*?)<\/bl(?:ue)?>/gi, '<span class="text-blue-500 font-semibold">$1</span>')
+      .replace(/<gr(?:een)?>([\s\S]*?)<\/gr(?:een)?>/gi, '<span class="text-emerald-500 font-semibold">$1</span>')
+      .replace(/<am(?:ber)?>([\s\S]*?)<\/am(?:ber)?>/gi, '<span class="text-amber-500 font-semibold">$1</span>');
 
   return (
     <div 
@@ -135,10 +135,10 @@ export const NoticeCard: React.FC<NoticeCardProps> = ({
              <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('*', '*')} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200" title="Italic"><Italic className="w-4 h-4" /></button>
              <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('[', '](https://)')} className="p-1.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 rounded-md dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200" title="Link"><LinkIcon className="w-4 h-4" /></button>
              <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
-             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<red>', '</red>')} className="px-2 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded border border-red-200 dark:border-red-900/50">Red</button>
-             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<blue>', '</blue>')} className="px-2 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 rounded border border-blue-200 dark:border-blue-900/50">Blue</button>
-             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<green>', '</green>')} className="px-2 py-1 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 rounded border border-emerald-200 dark:border-emerald-900/50">Green</button>
-             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<amber>', '</amber>')} className="px-2 py-1 text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 rounded border border-amber-200 dark:border-amber-900/50">Amber</button>
+             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<rd>', '</rd>')} className="px-2 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded border border-red-200 dark:border-red-900/50">Red</button>
+             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<bl>', '</bl>')} className="px-2 py-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 rounded border border-blue-200 dark:border-blue-900/50">Blue</button>
+             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<gr>', '</gr>')} className="px-2 py-1 text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 rounded border border-emerald-200 dark:border-emerald-900/50">Green</button>
+             <button onMouseDown={(e) => e.preventDefault()} onClick={() => applyInlineFormat('<am>', '</am>')} className="px-2 py-1 text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 rounded border border-amber-200 dark:border-amber-900/50">Amber</button>
            </div>
          </div>
       ) : (

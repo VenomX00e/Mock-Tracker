@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Users, X, Flame, CheckCircle2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 export interface ChallengeParticipantsDialogProps {
   showUsers: boolean;
@@ -109,8 +110,8 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
 
   if (!showUsers) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 ">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 ">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-0">
         <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
           <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -350,6 +351,7 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

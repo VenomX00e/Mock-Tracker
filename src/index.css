@@ -1,6 +1,36 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 @theme {
   @keyframes shuttle {
     0% {
@@ -45,6 +75,10 @@
 
 .recharts-tooltip-wrapper {
   z-index: 1000 !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: 0.05em !important;
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
@@ -1223,6 +1257,14 @@ input[type="search"]::-webkit-search-results-decoration {
   backdrop-filter: blur(8px);
 }
 
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-active-icon {
+  filter: drop-shadow(0 0 8px var(--neon-hex));
+}
+
+:is(html[class*="-light"]) .neon-active-icon {
+  filter: drop-shadow(0 0 8px var(--neon-dark));
+}
+
 :is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn {
   background: transparent !important;
   background-color: rgba(var(--neon-rgb), 0.05) !important;
@@ -1244,5 +1286,30 @@ input[type="search"]::-webkit-search-results-decoration {
 :is(html[class*="-light"]) .neon-telegram-btn:hover {
   background-color: rgba(var(--neon-rgb), 0.15) !important;
   box-shadow: 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
+}
+
+/* Fix light theme greeting text color in Home view */
+:is(html[class*="-light"]) h1 .theme-greeting-text {
+  color: #0f172a !important; /* text-slate-900 */
+}
+
+/* Fix light theme quote text color in Home view */
+:is(html[class*="-light"]) h3.theme-quote-text {
+  color: #000000 !important;
+  text-shadow: none !important;
+}
+
+/* Light theme tooltip text fix */
+:is(html[class*="-light"]) .theme-tooltip {
+  color: #0f172a !important; /* text-slate-900 */
+}
+:is(html[class*="-light"]) .theme-tooltip-text {
+  color: #0f172a !important;
+}
+:is(html[class*="-light"]) .theme-tooltip-text-muted {
+  color: #475569 !important; /* text-slate-600 */
+}
+:is(html[class*="-light"]) .theme-tooltip-pointer {
+  border-top-color: rgba(255, 255, 255, 0.85) !important;
 }
 

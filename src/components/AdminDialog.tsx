@@ -27,6 +27,7 @@ import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from "../lib/constants";
 import { parseMockAnnouncementImage } from "../services/geminiService";
 import { getErrorMessage } from "../lib/errorUtils";
 import { AdminCategoriesTab } from "./AdminCategoriesTab";
+import AdminQuotesTab from "./admin/AdminQuotesTab";
 import { AdminMigrationTool } from "./AdminMigrationTool";
 
 import { ExamCategory } from "../types";
@@ -42,7 +43,10 @@ interface AdminDialogProps {
     | "notice"
     | "countdown"
     | "challenge"
-    | "settings";
+    | "settings"
+    | "quotes"
+    | "categories"
+    | "admins";
   editNoticeData?: any;
   editCountdownData?: any;
   asPage?: boolean;
@@ -74,6 +78,7 @@ export default function AdminDialog({
     | "settings"
     | "categories"
     | "admins"
+    | "quotes"
   >(initialTab as any);
   const [adminCategoryScope, setAdminCategoryScope] = useState<string | null>(
     !isOwner && currentCategory ? currentCategory : null,
@@ -1769,9 +1774,9 @@ export default function AdminDialog({
   );
 
   const content = (
-    <div className={`flex flex-col w-full ${asPage ? "" : ""}`}>
+    <div className={`flex flex-col w-full flex-1 min-h-0 ${asPage ? "" : ""}`}>
       <div
-        className={`bg-white dark:bg-slate-900 ${asPage ? "h-[calc(100vh-140px)] shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col`}
+        className={`bg-white dark:bg-slate-900 ${asPage ? "flex-1 min-h-0 shadow-sm rounded-2xl border border-slate-200 dark:border-slate-800 w-full" : "mx-auto rounded-2xl w-full max-w-4xl shadow-2xl h-[85vh] border border-slate-200 dark:border-slate-800"} overflow-hidden flex flex-col`}
       >
         {/* Top Header Tabs if Owner */}
         {asPage && isOwner && (
@@ -1932,6 +1937,19 @@ export default function AdminDialog({
                     className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "settings" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <Settings className="w-4 h-4" /> Settings
+                  </button>
+                )}
+                {(isOwner || adminPermissions?.canManageQuotes) && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("quotes");
+                      setAdminCategoryScope(
+                        isForcedCategory ? currentCategory || null : null,
+                      );
+                    }}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "quotes" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                  >
+                    <FileText className="w-4 h-4" /> Quotes
                   </button>
                 )}
               </div>
@@ -2188,6 +2206,7 @@ export default function AdminDialog({
                                     "canManageLiveMocks",
                                     "canManageCountdowns",
                                     "canManageSettings",
+                                    "canManageQuotes",
                                   ].map((perm) => (
                                     <label
                                       key={perm}
@@ -2547,6 +2566,7 @@ export default function AdminDialog({
                                           "canManageLiveMocks",
                                           "canManageCountdowns",
                                           "canManageSettings",
+                                          "canManageQuotes",
                                         ].map((perm) => (
                                           <label
                                             key={perm}
@@ -2818,6 +2838,11 @@ export default function AdminDialog({
                 )
               }
             />
+          )}
+
+          {activeTab === "quotes" &&
+            (isOwner || adminPermissions?.canManageQuotes) && (
+              <AdminQuotesTab />
           )}
 
           {activeTab === "settings" &&

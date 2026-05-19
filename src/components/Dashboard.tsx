@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
 import { MockScore, UserProfile, ReflectionTask, ExamCategory } from '../types';
 import { useUserProfileCtx, useSystemDataCtx, useAppStateCtx } from '../context/AppContext';
 import { useUIStore } from '../store/uiStore';
@@ -471,8 +470,6 @@ export default function Dashboard() {
   }, [displayedMocks]);
 
   const stats = useMemo(() => {
-    if (displayedMocks.length === 0) return null;
-    
     // Total tests shown in the view
     const totalTests = activeTrendFilteredMocks.length;
 
@@ -643,10 +640,8 @@ export default function Dashboard() {
               }`}
             >
               {selectedExam === type && (
-                <motion.div
-                  layoutId="activeExamTab"
+                <div
                   className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-600 -z-10"
-                  transition={{ type: "spring", bounce: 0.2, duration: 0.3 }}
                 />
               )}
               <span className="relative z-10">{type}</span>
@@ -774,7 +769,7 @@ export default function Dashboard() {
               </div>
               <div className="flex pb-1 items-end gap-2">
                 <span className="text-3xl font-light leading-none text-slate-900 dark:text-slate-100">{stats.recent.score}</span>
-                {Number(stats.scoreDiff) !== 0 && (
+                {stats.scoreDiff !== '-' && Number(stats.scoreDiff) !== 0 && (
                   <span className={`text-xs font-medium leading-none ${stats.isScoreUp ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {stats.isScoreUp ? '+' : ''}{stats.scoreDiff}
                   </span>
@@ -882,9 +877,16 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="flex-1 w-full mt-4 overflow-hidden relative min-h-[200px] sm:min-h-[250px]">
-                <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                    <LineChart key={`line-${activeTrendId}`} data={activeTrendFilteredChronologicalMocks} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
+                {activeTrendFilteredChronologicalMocks.length < 2 ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm sm:text-base px-4 text-center bg-slate-50/50 dark:bg-slate-900/20 rounded-xl border border-slate-100/50 dark:border-slate-800/50">
+                    <TrendingUp className="w-8 h-8 sm:w-10 sm:h-10 mb-3 opacity-30 text-indigo-500 dark:text-indigo-400" />
+                    <div className="font-medium text-slate-600 dark:text-slate-300">Unlock Performance Trend</div>
+                    <div className="text-xs sm:text-sm mt-1 max-w-xs">Add at least 2 mocks in this period to visualize your progress over time</div>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 h-full w-full" ref={lineChartRefInner}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <LineChart key={`line-${activeTrendId}`} data={activeTrendFilteredChronologicalMocks} margin={{ top: 5, right: 20, left: -20, bottom: 15 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#64748b" strokeOpacity={0.4} />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} height={40} tickFormatter={(val) => { const d = parseLocalDate(val); return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`; }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} tickFormatter={(value) => {
@@ -978,6 +980,7 @@ export default function Dashboard() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              )}
               </div>
             </div>
   
@@ -1449,7 +1452,7 @@ export default function Dashboard() {
                     {(activeRowId === mock.id && (mock.note || (mock.tags && mock.tags.length > 0) || mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState || editingReflectionId === mock.id)) && (
                      <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
                         <td colSpan={onDeleteMock || onEditMock ? 10 : 9} className="p-0">
-                          <div className="sticky left-0 w-[calc(100vw-30px)] sm:w-[calc(100vw-48px)] lg:w-auto max-w-full lg:max-w-none px-4 sm:px-6 py-4 whitespace-normal">
+                          <div className="sticky left-0 w-[calc(100vw-30px)] sm:w-[calc(100vw-48px)] md:w-[calc(100vw-280px)] lg:w-[calc(100vw-300px)] xl:w-[calc(100vw-320px)] max-w-full px-4 sm:px-6 py-[10px] whitespace-normal">
                             <div className="flex flex-col gap-2 relative">
                                <div className="absolute left-[2px] sm:left-[-24px] top-0 bottom-0 w-1 bg-indigo-200 dark:bg-indigo-800 rounded-full"></div>
                                
@@ -1465,35 +1468,35 @@ export default function Dashboard() {
                                ) : (
                                <>
                                  {(mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState || (mock.tags && mock.tags.length > 0)) && (
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-1">
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-0 pb-0">
                                       {(mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState) && (
                                         <div className="flex items-center gap-1 sm:gap-2">
                                           {mock.difficulty && (
-                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-purple-50 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded shadow-sm text-center sm:text-left">
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-1.5 py-0.5 sm:py-[2px] bg-purple-50 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded shadow-sm text-center sm:text-left">
                                               <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-purple-700 dark:text-purple-300 font-bold opacity-90 leading-tight">Difficulty</span>
                                               <span className="text-purple-900 dark:text-purple-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.difficulty}</span>
                                             </div>
                                           )}
                                           {mock.nervousness && (
-                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-amber-50 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded shadow-sm text-center sm:text-left">
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-1.5 py-0.5 sm:py-[2px] bg-amber-50 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded shadow-sm text-center sm:text-left">
                                               <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-amber-700 dark:text-amber-300 font-bold opacity-90 leading-tight">Nervous</span>
                                               <span className="text-amber-900 dark:text-amber-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.nervousness}</span>
                                             </div>
                                           )}
                                           {mock.focus && (
-                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-blue-50 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 rounded shadow-sm text-center sm:text-left">
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-1.5 py-0.5 sm:py-[2px] bg-blue-50 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 rounded shadow-sm text-center sm:text-left">
                                               <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-blue-700 dark:text-blue-300 font-bold opacity-90 leading-tight">Focus</span>
                                               <span className="text-blue-900 dark:text-blue-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.focus}</span>
                                             </div>
                                           )}
                                           {mock.energy && (
-                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 rounded shadow-sm text-center sm:text-left">
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-1.5 py-0.5 sm:py-[2px] bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 rounded shadow-sm text-center sm:text-left">
                                               <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-emerald-700 dark:text-emerald-300 font-bold opacity-90 leading-tight">Energy</span>
                                               <span className="text-emerald-900 dark:text-emerald-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.energy}</span>
                                             </div>
                                           )}
                                           {mock.timeState && (
-                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-2 py-0.5 sm:py-1 bg-orange-50 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 rounded shadow-sm text-center sm:text-left">
+                                            <div className="flex-1 sm:flex-none flex flex-col items-center sm:items-start justify-center px-1 sm:px-1.5 py-0.5 sm:py-[2px] bg-orange-50 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 rounded shadow-sm text-center sm:text-left">
                                               <span className="text-[5px] sm:text-[7px] uppercase tracking-widest text-orange-700 dark:text-orange-300 font-bold opacity-90 leading-tight">Time</span>
                                               <span className="text-orange-900 dark:text-orange-100 text-[6px] sm:text-[9px] font-bold uppercase tracking-wider leading-tight truncate w-full">{mock.timeState}</span>
                                             </div>
@@ -1523,13 +1526,12 @@ export default function Dashboard() {
                                       <div className="space-y-1.5 pt-1">
                                         {mock.tasks.map(task => (
                                           <div key={task.id} className="flex items-start gap-2 group">
-                                              <input 
-                                                type="checkbox" 
-                                                checked={task.completed} 
-                                                readOnly 
-                                                className="mt-0.5 w-3.5 h-3.5 text-indigo-600 rounded-sm border-slate-300 focus:ring-0 dark:border-slate-600 dark:bg-slate-800 mb-auto"
+                                              <div 
+                                                className={`mt-0.5 shrink-0 rounded flex items-center justify-center transition-colors w-5 h-5 ${task.completed ? 'bg-emerald-500 border-none' : 'border-2 border-slate-300 dark:border-slate-600'}`}
                                                 style={{ opacity: task.completed ? 0.7 : 1 }}
-                                              />
+                                              >
+                                                {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
+                                              </div>
                                               <span className={`flex-1 text-sm ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
                                                 {task.text}
                                               </span>

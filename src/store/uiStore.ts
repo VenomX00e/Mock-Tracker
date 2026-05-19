@@ -10,10 +10,12 @@ type AdminTab =
   | "challenges"
   | "general"
   | "users"
-  | "requests";
+  | "requests"
+  | "quotes";
 
 interface UIState {
   activeTab:
+    | "home"
     | "dashboard"
     | "community"
     | "admin"
@@ -23,6 +25,7 @@ interface UIState {
     | "profile";
   setActiveTab: (
     tab:
+      | "home"
       | "dashboard"
       | "community"
       | "admin"
@@ -104,6 +107,8 @@ interface UIState {
       | "cyber-orange"
       | "cyber-orange-light",
   ) => void;
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 const ALL_THEME_CLASSES = [
@@ -122,7 +127,10 @@ const ALL_THEME_CLASSES = [
 ];
 
 export const useUIStore = create<UIState>((set) => ({
-  activeTab: "dashboard",
+  isSidebarCollapsed: true,
+  setIsSidebarCollapsed: (collapsed) => set({ isSidebarCollapsed: collapsed }),
+
+  activeTab: "home",
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   isAddModalOpen: false,

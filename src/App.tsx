@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import Dashboard from './components/Dashboard';
 import CommunityHub from './components/CommunityHub';
 import { TasksPage } from './components/TasksPage';
@@ -16,6 +15,9 @@ import { LiveMocksSection } from './components/views/LiveMocksSection';
 import { ModalsSection } from './components/views/ModalsSection';
 import { DatabaseZap } from 'lucide-react';
 import Navigation from './components/Navigation';
+import { Sidebar } from './components/Sidebar';
+import { BottomNav } from './components/BottomNav';
+import { HomeView } from './components/views/HomeView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import AddMockDialog from './components/AddMockDialog';
@@ -28,6 +30,26 @@ function AppContent() {
   const { addMock, updateMock, loading: mocksLoading } = useMocks();
   const { selectedCategory, categories, fetchAnnouncement } = useContext(SystemDataCtx)!;
   const { isOwner, isAdmin, adminPermissions, mockToEdit, setMockToEdit } = useContext(AppStateCtx)!;
+
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const prevTab = React.useRef(activeTab);
+
+  useEffect(() => {
+    if (prevTab.current === activeTab) return;
+    const tabOrder = ['home', 'dashboard', 'tasks', 'add-mock', 'admin', 'community', 'profile'];
+    const oldIndex = tabOrder.indexOf(prevTab.current);
+    const newIndex = tabOrder.indexOf(activeTab);
+    
+    const isGoingDown = newIndex >= oldIndex;
+    
+    if (contentRef.current) {
+      contentRef.current.classList.remove('animate-slide-in-right', 'animate-slide-in-left');
+      void contentRef.current.offsetWidth; // force reflow
+      contentRef.current.classList.add(isGoingDown ? 'animate-slide-in-right' : 'animate-slide-in-left');
+    }
+    
+    prevTab.current = activeTab;
+  }, [activeTab]);
 
   useEffect(() => {
     document.documentElement.classList.remove(
@@ -77,48 +99,46 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 pb-[45px] pl-[0px] transition-colors duration-0">
-      <Navigation />
+    <div className="flex h-[100dvh] overflow-hidden bg-slate-50 dark:bg-[#0f172a] font-sans text-slate-900 dark:text-slate-200 transition-colors duration-0">
+      <Sidebar />
       
-      {/* Main Layout */}
-      <main className="max-w-full mx-auto px-[15px] sm:px-6 lg:px-8 py-8 pt-[25px] w-full">
-        {!user ? (
-          <AuthView />
-        ) : mocksLoading ? (
-           <div className="flex flex-col items-center justify-center min-h-[60vh]">
-             <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-           </div>
-        ) : (
-          <>
-            {['dashboard', 'community'].includes(activeTab) && (
+      <div className="flex-1 flex flex-col h-full relative overflow-hidden">
+        <div className={`sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 ${!user ? '' : 'md:hidden'}`}>
+          <Navigation />
+        </div>
+        
+        {/* Main Layout */}
+        <main className={`flex-1 ${['admin', 'profile'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'} px-[15px] sm:px-6 lg:px-8 py-8 pt-6 pb-24 md:pb-8 w-full flex flex-col min-h-0`}>
+          <div className={`max-w-full mx-auto w-full ${['admin', 'profile'].includes(activeTab) ? 'h-full min-h-0' : ''} flex flex-col animate-slide-in-right`} ref={contentRef}>
+            {!user ? (
+              <AuthView />
+            ) : mocksLoading ? (
+               <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                 <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+               </div>
+            ) : (
               <>
-                <CountdownsSection />
-                <NoticesSection />
-                <ChallengesSection />
-                <LiveMocksSection />
-              </>
-            )}
+                {['home'].includes(activeTab) && (
+                  <HomeView />
+                )}
+                {['dashboard', 'community'].includes(activeTab) && (
+                  <>
+                    <CountdownsSection />
+                    <NoticesSection />
+                    <ChallengesSection />
+                    <LiveMocksSection />
+                  </>
+                )}
 
-            <section className="w-full">
+            <section className={`w-full flex-1 ${['admin', 'profile'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
               <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
-                <motion.div
-                   initial={{ opacity: 0, y: 10 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   transition={{ duration: 0.15, ease: "easeOut" }}
-                   className="w-full"
-                >
+                <div className="w-full">
                   <Dashboard />
-                </motion.div>
+                </div>
               </div>
 
               {activeTab !== 'dashboard' && (
-                <motion.div
-                   key={activeTab}
-                   initial={{ opacity: 0, y: 10 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   transition={{ duration: 0.15, ease: "easeOut" }}
-                   className="w-full"
-                >
+                <div className={`w-full flex-1 ${['admin', 'profile'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
                   {activeTab === 'admin' && isAdmin ? (
                       <AdminDialog
                         isOpen={true}
@@ -132,7 +152,8 @@ function AppContent() {
                              adminPermissions.canManageNotices ? 'notice' :
                              adminPermissions.canManageCountdowns ? 'countdown' :
                              adminPermissions.canManageChallenges ? 'challenge' :
-                             adminPermissions.canManageSettings ? 'settings' : 'users'
+                             adminPermissions.canManageSettings ? 'settings' : 
+                             adminPermissions.canManageQuotes ? 'quotes' : 'users'
                         ) : 'users') as any}
                         editNoticeData={adminEditNotice}
                         editCountdownData={adminEditCountdown}
@@ -184,17 +205,20 @@ function AppContent() {
                         setTheme={setTheme}
                         categories={categories}
                       />
-                    ) : (
+                    ) : activeTab === 'community' ? (
                       <CommunityHub />
-                    )}
-                </motion.div>
+                    ) : null}
+                </div>
               )}
             </section>
           </>
         )}
-      </main>
+          </div>
+        </main>
 
-      <ModalsSection />
+        <BottomNav />
+        <ModalsSection />
+      </div>
     </div>
   );
 }

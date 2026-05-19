@@ -1,6 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
 import { CheckSquare, X, Check, Edit2, Trash2, CalendarDays, ArrowLeft } from 'lucide-react';
 import { MockScore, UserProfile, ReflectionTask } from '../types';
 import { getPlatformShort, parseLocalDate } from '../lib/utils';
@@ -88,18 +87,23 @@ export function TasksPage() {
 
   const caughtUp = mocksWithTasks.length === 0 && globalTasks.length === 0;
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (activeActionsTaskId && !(e.target as Element).closest('.task-item')) {
+        setActiveActionsTaskId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeActionsTaskId]);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.1, ease: "easeOut" }}
-      className="w-full space-y-6"
-    >
+    <div className="w-full space-y-6">
       <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={() => setActiveTab('dashboard')} 
-                      className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded-xl transition-colors"
+                      className="hidden md:block p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded-xl transition-colors"
                       title="Back to Dashboard"
                     >
                       <ArrowLeft className="w-5 h-5" />
@@ -146,7 +150,7 @@ export function TasksPage() {
                            {globalTasks.length > 0 && (
                              <div className="space-y-2">
                                 {globalTasks.map(task => (
-                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
+                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
                                       <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-5 h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
                                         {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
                                       </button>
@@ -168,15 +172,15 @@ export function TasksPage() {
                                            <div className="flex items-start justify-between gap-3">
                                               <span className={`text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
                                               <div className="flex items-center">
-                                                <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 md:group-hover:opacity-100 md:invisible md:group-hover:visible'}`}>
+                                                <div className={`flex items-center gap-1 transition-all shrink-0 overflow-hidden ${activeActionsTaskId === task.id ? 'opacity-100 w-auto ml-1 visible' : 'opacity-0 w-0 invisible'}`}>
                                                    <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                   <TaskProgressDisk 
+                                                     task={task} 
+                                                     variant="inline"
+                                                     onUpdateParts={(cp, tp) => handleUpdateGlobalTaskParts(task.id, cp, tp)} 
+                                                   />
                                                 </div>
-                                                <TaskProgressDisk 
-                                                  task={task} 
-                                                  variant="inline"
-                                                  onUpdateParts={(cp, tp) => handleUpdateGlobalTaskParts(task.id, cp, tp)} 
-                                                />
                                               </div>
                                            </div>
                                          )}
@@ -189,13 +193,9 @@ export function TasksPage() {
 
                         {caughtUp ? (
                           <div className="flex flex-col items-center justify-center py-20 flex-1 text-center bg-emerald-50/50 dark:bg-emerald-900/10 rounded-3xl border border-emerald-100 dark:border-emerald-900/20">
-                            <motion.div 
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ y: 0, opacity: 1 }}
-                              className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-6 border-4 border-white dark:border-emerald-900/20 shadow-xl"
-                            >
+                            <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-6 border-4 border-white dark:border-emerald-900/20 shadow-xl">
                               <CheckSquare className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
-                            </motion.div>
+                            </div>
                             <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">All Caught Up!</h3>
                             <p className="text-slate-500 dark:text-slate-400 text-base max-w-sm">
                               You don't have any pending action items. Great job staying on top of your mock reflections.
@@ -205,7 +205,7 @@ export function TasksPage() {
                           <div>
                             {sortedDates.map(dateLabel => (
                               <div key={dateLabel} className="mb-8 last:mb-4">
-                        <div className="flex items-center gap-4 mb-4">
+                        <div className="flex items-center gap-4 mb-[10px]">
                           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 tracking-wider flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
                             <CalendarDays className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                             {dateLabel}
@@ -217,53 +217,87 @@ export function TasksPage() {
                             const tasksToShow = mock.tasks?.filter(t => showCompletedTasks || !t.completed) || [];
                             if (tasksToShow.length === 0) return null;
                             
-                            const isExpanded = expandedActionMocks[mock.id] !== false; // Default expanded instead of collapsed? No wait, let's keep it based on expandedActionMocks
+                            const showTags = !!expandedActionMocks[mock.id];
                             
                             return (
                               <div key={mock.id} className="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/60 overflow-hidden shadow-sm hover:shadow transition-all group">
                                 <div 
-                                  className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2 cursor-pointer transition-colors"
+                                  className="px-5 py-[10px] border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2 transition-colors cursor-pointer"
                                   onClick={() => setExpandedActionMocks(prev => ({ ...prev, [mock.id]: !prev[mock.id] }))}
                                 >
                                   <div className="flex items-start sm:items-center justify-between">
                                     <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0 overflow-hidden sm:flex-wrap">
-                                      <h4 className="font-bold text-slate-800 dark:text-slate-100 truncate max-w-[220px] sm:max-w-none text-base">
+                                      <h4 className="font-bold text-slate-800 dark:text-slate-100 truncate max-w-[220px] sm:max-w-none text-base shrink-0">
                                         {mock.mockName}
                                       </h4>
                                       
-                                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 rounded-md text-[10px] leading-none uppercase tracking-wide border border-slate-200 dark:border-slate-600">{mock.examType}</span>
-                                          {mock.examRole && <span className="font-semibold text-[10px] px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400 leading-none tracking-wide">{mock.examRole}</span>}
+                                      <div className="flex flex-col sm:flex-row gap-0.5 sm:gap-1.5 shrink-0 mt-1 sm:mt-0 sm:items-center">
+                                        <div className="flex items-center gap-0.5">
+                                          <span className="font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/50 px-1 py-[2px] rounded flex items-center justify-center text-[7px] uppercase leading-none tracking-widest border border-slate-200 dark:border-slate-600">{mock.examType}</span>
+                                          {mock.examRole && <span className="font-bold text-[7px] px-1 py-[2px] flex items-center justify-center rounded uppercase bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400 leading-none tracking-widest">{mock.examRole}</span>}
                                         </div>
                                         {(mock.examPhase || mock.examScope) && (
-                                          <div className="flex items-center gap-1.5">
-                                            {mock.examPhase && <span className="font-semibold text-[10px] px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-600 dark:text-amber-400 leading-none tracking-wide">{mock.examPhase}</span>}
-                                            {mock.examScope && <span className="font-semibold text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 leading-none tracking-wide">{mock.examScope}</span>}
+                                          <div className="flex items-center gap-0.5">
+                                            {mock.examPhase && <span className="font-bold text-[7px] px-1 py-[2px] flex items-center justify-center rounded uppercase bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-600 dark:text-amber-400 leading-none tracking-widest">{mock.examPhase}</span>}
+                                            {mock.examScope && <span className="font-bold text-[7px] px-1 py-[2px] flex items-center justify-center rounded uppercase bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 leading-none tracking-widest">{mock.examScope}</span>}
                                           </div>
                                         )}
                                       </div>
 
-                                      {isExpanded && mock.tags && mock.tags.length > 0 && (
-                                        <div className="flex items-center gap-1.5 flex-wrap pl-2 border-l border-slate-200 dark:border-slate-700">
+                                      {showTags && mock.tags && mock.tags.length > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap shrink mt-1 sm:mt-0 w-full sm:w-auto">
                                           {mock.tags.map((t: string) => (
-                                            <span key={t} className="px-1.5 py-0.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[10px] rounded shrink-0 leading-none">#{t}</span>
+                                            <span key={t} className="px-1 py-[2px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[8px] uppercase tracking-wider font-bold rounded shrink-0 leading-none">#{t}</span>
                                           ))}
                                         </div>
                                       )}
                                     </div>
                                     <button 
-                                      onClick={(e) => { e.stopPropagation(); setAddingTaskToMockId(addingTaskToMockId === mock.id ? null : mock.id); setNewMockTaskText(''); if (!isExpanded) setExpandedActionMocks(prev => ({ ...prev, [mock.id]: true })); }}
-                                      className="p-1.5 ml-3 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-md transition-colors"
+                                      onClick={(e) => { e.stopPropagation(); setAddingTaskToMockId(addingTaskToMockId === mock.id ? null : mock.id); setNewMockTaskText(''); }}
+                                      className="hidden sm:block p-1.5 ml-3 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-md transition-colors shrink-0"
                                       title="Add Task for this Mock"
                                     >
                                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                     </button>
                                   </div>
+                                  {showTags && (mock.difficulty || mock.nervousness || mock.focus || mock.energy || mock.timeState) && (
+                                    <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto sm:overflow-visible items-center gap-1 mt-0 shrink-0 self-start w-[calc(100%+40px)] sm:w-full -mx-5 px-5 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-0">
+                                          {mock.difficulty && (
+                                            <div className="flex flex-col justify-center px-1.5 py-[2px] bg-purple-50 dark:bg-purple-900/40 border border-purple-300 dark:border-purple-700 rounded shadow-sm shrink-0">
+                                              <span className="text-[5px] uppercase tracking-widest text-purple-700 dark:text-purple-300 font-bold opacity-90 leading-tight">Difficulty</span>
+                                              <span className="text-purple-900 dark:text-purple-100 text-[8px] font-bold uppercase tracking-wider leading-tight truncate">{mock.difficulty}</span>
+                                            </div>
+                                          )}
+                                          {mock.nervousness && (
+                                            <div className="flex flex-col justify-center px-1.5 py-[2px] bg-amber-50 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded shadow-sm shrink-0">
+                                              <span className="text-[5px] uppercase tracking-widest text-amber-700 dark:text-amber-300 font-bold opacity-90 leading-tight">Nervous</span>
+                                              <span className="text-amber-900 dark:text-amber-100 text-[8px] font-bold uppercase tracking-wider leading-tight truncate">{mock.nervousness}</span>
+                                            </div>
+                                          )}
+                                          {mock.focus && (
+                                            <div className="flex flex-col justify-center px-1.5 py-[2px] bg-blue-50 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 rounded shadow-sm shrink-0">
+                                              <span className="text-[5px] uppercase tracking-widest text-blue-700 dark:text-blue-300 font-bold opacity-90 leading-tight">Focus</span>
+                                              <span className="text-blue-900 dark:text-blue-100 text-[8px] font-bold uppercase tracking-wider leading-tight truncate">{mock.focus}</span>
+                                            </div>
+                                          )}
+                                          {mock.energy && (
+                                            <div className="flex flex-col justify-center px-1.5 py-[2px] bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 rounded shadow-sm shrink-0">
+                                              <span className="text-[5px] uppercase tracking-widest text-emerald-700 dark:text-emerald-300 font-bold opacity-90 leading-tight">Energy</span>
+                                              <span className="text-emerald-900 dark:text-emerald-100 text-[8px] font-bold uppercase tracking-wider leading-tight truncate">{mock.energy}</span>
+                                            </div>
+                                          )}
+                                          {mock.timeState && (
+                                            <div className="flex flex-col justify-center px-1.5 py-[2px] bg-orange-50 dark:bg-orange-900/40 border border-orange-300 dark:border-orange-700 rounded shadow-sm shrink-0">
+                                              <span className="text-[5px] uppercase tracking-widest text-orange-700 dark:text-orange-300 font-bold opacity-90 leading-tight">Time</span>
+                                              <span className="text-orange-900 dark:text-orange-100 text-[8px] font-bold uppercase tracking-wider leading-tight truncate">{mock.timeState}</span>
+                                            </div>
+                                          )}
+                                    </div>
+                                  )}
                                 </div>
-                                <div className={`px-4 sm:px-5 pb-5 pt-3 transition-opacity duration-0 ${isExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+                                <div className="px-4 sm:px-5 pr-[20px] pb-[10px] pt-[5px] transition-opacity duration-0 opacity-100 block">
                                   {tasksToShow.map((task) => (
-                                    <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="flex items-start gap-3 group cursor-pointer p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                    <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item flex items-start gap-3 group cursor-pointer p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                       <button 
                                         onClick={async (e) => {
                                           e.stopPropagation();
@@ -302,32 +336,41 @@ export function TasksPage() {
                                                 {task.text}
                                               </span>
                                               <div className="flex items-center">
-                                                <div className={`flex items-center gap-1 transition-opacity shrink-0 ${activeActionsTaskId === task.id ? 'opacity-100 visible' : 'opacity-0 md:group-hover:opacity-100 md:invisible md:group-hover:visible'}`}>
+                                                <div className={`flex items-center gap-1 transition-all shrink-0 overflow-hidden ${activeActionsTaskId === task.id ? 'opacity-100 w-auto ml-1 visible' : 'opacity-0 w-0 invisible'}`}>
                                                    <button onClick={(e) => { e.stopPropagation(); setEditingMockTaskId(task.id); setMockIdOfEditingTask(mock.id); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100 dark:bg-slate-800 rounded-md transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
                                                    <button onClick={async (e) => { e.stopPropagation(); if (onUpdateReflection) { const updatedTasks = mock.tasks?.filter(t => t.id !== task.id) || []; await onUpdateReflection(mock.id, { tasks: updatedTasks }); setActiveActionsTaskId(null); } }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-100 dark:bg-slate-800 rounded-md transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                   <TaskProgressDisk 
+                                                     task={task} 
+                                                     variant="inline"
+                                                     onUpdateParts={async (cp, tp) => {
+                                                       if (!onUpdateReflection) return;
+                                                       const updatedTasks = mock.tasks?.map(t => {
+                                                         if (t.id === task.id) {
+                                                           const { completedParts: _cp, totalParts: _tp, ...rest } = t;
+                                                           if (cp === undefined) return rest;
+                                                           return { ...rest, completedParts: cp, totalParts: tp };
+                                                         }
+                                                         return t;
+                                                       }) || [];
+                                                       await onUpdateReflection(mock.id, { tasks: updatedTasks });
+                                                     }} 
+                                                   />
                                                 </div>
-                                                <TaskProgressDisk 
-                                                  task={task} 
-                                                  variant="inline"
-                                                  onUpdateParts={async (cp, tp) => {
-                                                    if (!onUpdateReflection) return;
-                                                    const updatedTasks = mock.tasks?.map(t => {
-                                                      if (t.id === task.id) {
-                                                        const { completedParts: _cp, totalParts: _tp, ...rest } = t;
-                                                        if (cp === undefined) return rest;
-                                                        return { ...rest, completedParts: cp, totalParts: tp };
-                                                      }
-                                                      return t;
-                                                    }) || [];
-                                                    await onUpdateReflection(mock.id, { tasks: updatedTasks });
-                                                  }} 
-                                                />
                                               </div>
                                            </div>
                                         )}
                                       </div>
                                     </div>
                                   ))}
+                                  {addingTaskToMockId !== mock.id && (
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); setAddingTaskToMockId(mock.id); setNewMockTaskText(''); }}
+                                      className="sm:hidden flex items-center justify-center gap-2 mt-2 w-full py-2 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg text-xs font-semibold transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                      Add Task
+                                    </button>
+                                  )}
                                   {addingTaskToMockId === mock.id && (
                                     <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/50 pl-8">
                                       <input autoFocus type="text" value={newMockTaskText} onChange={e => setNewMockTaskText(e.target.value)} onKeyDown={async e => {
@@ -364,6 +407,6 @@ export function TasksPage() {
                 )}
               </div>
             </div>
-    </motion.div>
+    </div>
   );
 }

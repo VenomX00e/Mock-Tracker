@@ -5,7 +5,6 @@ import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
 import { UserProfile, MockScore } from '../types';
 import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore, Send, MessageSquare, Pencil, X, Reply, BarChart2, CheckCircle2, CheckSquare, Pin, PinOff } from 'lucide-react';
-import { motion } from 'motion/react';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 import { getErrorMessage } from '../lib/errorUtils';
@@ -879,7 +878,7 @@ export default function CommunityHub() {
 
       <CommunityFeed Users={Users} loadingFeed={loadingFeed} filteredFeedLogs={filteredFeedLogs} daysVisible={daysVisible} feedSort={feedSort} handleFeedSort={handleFeedSort} getFeedSortConfig={getFeedSortConfig} subjects={subjects} onCopyMock={onCopyMock} sortedLeaderboard={sortedLeaderboard} onUserClick={onUserClick} Flame={Flame} getPlatformShort={getPlatformShort} getHeatmapColor={getHeatmapColor} getSub={getSub} handleReact={handleReact} reactions={reactions} Calendar={Calendar} setDaysVisible={setDaysVisible} ArrowRight={ArrowRight} />
       
-      <CommunityChat MessageSquare={MessageSquare} chatMessages={chatMessages} Pin={Pin} handlePinMessage={handlePinMessage} X={X} setActiveMsgId={setActiveMsgId} setCustomEmojiOpenForId={setCustomEmojiOpenForId} setActiveReactionView={setActiveReactionView} setActiveActionsMsgId={setActiveActionsMsgId} setShowPollVotersForId={setShowPollVotersForId} userMap={userMap} user={user} activeActionsMsgId={activeActionsMsgId} motion={motion} setReplyingTo={setReplyingTo} activeMsgId={activeMsgId} handlePollVote={handlePollVote} CheckCircle2={CheckCircle2} CheckSquare={CheckSquare} showPollVotersForId={showPollVotersForId} activeReactionView={activeReactionView} handleChatReact={handleChatReact} customEmojiOpenForId={customEmojiOpenForId} customEmojiInput={customEmojiInput} setCustomEmojiInput={setCustomEmojiInput} setEditingMessageId={setEditingMessageId} setNewMessage={setNewMessage} setShowPollMaker={setShowPollMaker} setPollQuestion={setPollQuestion} setPollIsMulti={setPollIsMulti} setPollOptions={setPollOptions} Pencil={Pencil} isAdmin={isAdmin} handleDeleteMessage={handleDeleteMessage} Trash2={Trash2} PinOff={PinOff} chatBottomRef={chatBottomRef} chatError={chatError} replyingTo={replyingTo} handleSendMessage={handleSendMessage} editingMessageId={editingMessageId} showPollMaker={showPollMaker} BarChart2={BarChart2} pollIsMulti={pollIsMulti} pollQuestion={pollQuestion} pollOptions={pollOptions}    newMessage={newMessage} isSending={isSending} Send={Send} />
+      <CommunityChat MessageSquare={MessageSquare} chatMessages={chatMessages} Pin={Pin} handlePinMessage={handlePinMessage} X={X} setActiveMsgId={setActiveMsgId} setCustomEmojiOpenForId={setCustomEmojiOpenForId} setActiveReactionView={setActiveReactionView} setActiveActionsMsgId={setActiveActionsMsgId} setShowPollVotersForId={setShowPollVotersForId} userMap={userMap} user={user} activeActionsMsgId={activeActionsMsgId} setReplyingTo={setReplyingTo} activeMsgId={activeMsgId} handlePollVote={handlePollVote} CheckCircle2={CheckCircle2} CheckSquare={CheckSquare} showPollVotersForId={showPollVotersForId} activeReactionView={activeReactionView} handleChatReact={handleChatReact} customEmojiOpenForId={customEmojiOpenForId} customEmojiInput={customEmojiInput} setCustomEmojiInput={setCustomEmojiInput} setEditingMessageId={setEditingMessageId} setNewMessage={setNewMessage} setShowPollMaker={setShowPollMaker} setPollQuestion={setPollQuestion} setPollIsMulti={setPollIsMulti} setPollOptions={setPollOptions} Pencil={Pencil} isAdmin={isAdmin} handleDeleteMessage={handleDeleteMessage} Trash2={Trash2} PinOff={PinOff} chatBottomRef={chatBottomRef} chatError={chatError} replyingTo={replyingTo} handleSendMessage={handleSendMessage} editingMessageId={editingMessageId} showPollMaker={showPollMaker} BarChart2={BarChart2} pollIsMulti={pollIsMulti} pollQuestion={pollQuestion} pollOptions={pollOptions}    newMessage={newMessage} isSending={isSending} Send={Send} />
       
       {showTrash && isAdmin && (
         <CommunityHubTrashModal
@@ -1313,7 +1312,7 @@ function CommunityFeed(props: any) {
 }
 
 function CommunityChat(props: any) {
-  const { MessageSquare, chatMessages, Pin, handlePinMessage, X, setActiveMsgId, setCustomEmojiOpenForId, setActiveReactionView, setActiveActionsMsgId, setShowPollVotersForId, userMap, user, activeActionsMsgId, motion, setReplyingTo, activeMsgId, handlePollVote, CheckCircle2, CheckSquare, showPollVotersForId, activeReactionView, handleChatReact, customEmojiOpenForId, customEmojiInput, setCustomEmojiInput, setEditingMessageId, setNewMessage, setShowPollMaker, setPollQuestion, setPollIsMulti, setPollOptions, Pencil, isAdmin, handleDeleteMessage, Trash2, PinOff, chatBottomRef, chatError, replyingTo, handleSendMessage, editingMessageId, showPollMaker, BarChart2, pollIsMulti, pollQuestion, pollOptions, newMessage, isSending, Send } = props;
+  const { MessageSquare, chatMessages, Pin, handlePinMessage, X, setActiveMsgId, setCustomEmojiOpenForId, setActiveReactionView, setActiveActionsMsgId, setShowPollVotersForId, userMap, user, activeActionsMsgId, setReplyingTo, activeMsgId, handlePollVote, CheckCircle2, CheckSquare, showPollVotersForId, activeReactionView, handleChatReact, customEmojiOpenForId, customEmojiInput, setCustomEmojiInput, setEditingMessageId, setNewMessage, setShowPollMaker, setPollQuestion, setPollIsMulti, setPollOptions, Pencil, isAdmin, handleDeleteMessage, Trash2, PinOff, chatBottomRef, chatError, replyingTo, handleSendMessage, editingMessageId, showPollMaker, BarChart2, pollIsMulti, pollQuestion, pollOptions, newMessage, isSending, Send } = props;
   return <>
     {/* CHAT SECTION */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[550px]">
@@ -1368,18 +1367,12 @@ function CommunityChat(props: any) {
                   className={`w-full flex ${msg.userId === user?.uid ? 'justify-end' : 'justify-start'}`}
                   onClick={(e) => { e.stopPropagation(); setActiveActionsMsgId(activeActionsMsgId === msg.id ? null : msg.id); setActiveMsgId(null); setActiveReactionView(null); setCustomEmojiOpenForId(null); setShowPollVotersForId(null); }}
                 >
-                  <motion.div 
+                  <div 
                     id={`msg-${msg.id}`}
                     className={`flex sm:gap-3 max-w-[95%] sm:max-w-[85%] ${msg.userId === user?.uid ? 'sm:flex-row-reverse' : ''}`}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    dragElastic={0.1}
-                    onDragEnd={(e, info) => {
-                       if (Math.abs(info.offset.x) > 40) {
-                           setReplyingTo(msg); 
-                           setActiveMsgId(null);
-                           document.getElementById('chatMsg')?.focus();
-                       }
+                    onClick={(e) => {
+                       // We can't use drag events easily, so just keep normal click behavior. 
+                       // Swipe to reply logic is lost but we have action menus for reply.
                     }}
                   >
                   <img src={photoURL} alt="" className="hidden sm:block w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover pointer-events-none mt-1 sm:mt-0" />
@@ -1679,7 +1672,7 @@ function CommunityChat(props: any) {
                       </div>
                     </div>
                 </div>
-              </motion.div>
+              </div>
                 </div>
             );
           })

@@ -39,6 +39,7 @@ export interface UserProfile {
     canManageLiveMocks?: boolean;
     canManageCountdowns?: boolean;
     canManageSettings?: boolean;
+    canManageQuotes?: boolean;
   };
   tasks?: ReflectionTask[];
 }

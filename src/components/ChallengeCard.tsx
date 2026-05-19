@@ -338,17 +338,12 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
     <div className="bg-gradient-to-br from-indigo-50/80 to-white dark:from-slate-800/80 dark:to-slate-900 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all hover:shadow-md flex flex-col h-full">
       <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
       
-      <div className={`flex justify-between items-start mb-4 relative z-10`}>
-        <div className="pr-2 flex-grow">
-          <div className="flex items-start justify-between cursor-pointer relative min-h-[28px]" onClick={() => setShowActions(!showActions)}>
-            <h4 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2 leading-tight flex-wrap pr-32">
+      <div className={`flex justify-between items-start mb-4 relative z-10 min-w-0`}>
+        <div className="pr-2 flex-grow min-w-0">
+          <div className="flex items-start justify-between cursor-pointer relative min-h-[28px] min-w-0" onClick={() => setShowActions(!showActions)}>
+            <h4 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2 leading-tight flex-wrap pr-8 sm:pr-12 w-full">
               <Flame className="w-5 h-5 text-orange-500 shrink-0" />
-              <span className="truncate">{challenge.title}</span>
-              {currentDay !== null && (
-                 <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1 whitespace-nowrap">
-                    Day {currentDay}
-                 </span>
-              )}
+              <span className="truncate flex-1 min-w-0">{challenge.title}</span>
             </h4>
             {showActions && (
               <div className="flex items-center gap-1 shrink-0 absolute right-0 top-0 pb-1" onClick={e => e.stopPropagation()}>
@@ -379,8 +374,8 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
         </div>
         {participant && (
           <div className="flex flex-col items-end shrink-0 ml-3">
-            <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 px-2 py-1 rounded-md flex items-center gap-1 border border-orange-100 dark:border-orange-800/30 font-bold text-xs mt-0.5">
-              <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
+            <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 px-2 py-1 rounded-md flex items-center gap-1 border border-orange-100 dark:border-orange-800/30 font-bold text-xs mt-0.5 whitespace-nowrap">
+              <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500 shrink-0" />
               {participant.streak} Day
             </div>
           </div>
@@ -408,31 +403,38 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
           </div>
         </div>
 
-        {!participant ? (
-          <button onClick={joinChallenge} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-xl text-sm font-semibold transition-colors shadow-sm active:scale-95 shrink-0 ml-auto">
-            Join
-          </button>
-        ) : challenge.challengeType === 'todo' ? null : challenge.challengeType !== 'uploadMock' ? (
-          <button 
-            onClick={checkIn} 
-            disabled={hasCheckedInToday}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95 border shrink-0 ml-auto ${hasCheckedInToday ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-transparent cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/50'}`}
-          >
-            {hasCheckedInToday ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
-            {hasCheckedInToday ? 'Checked' : 'Check-In'}
-          </button>
-        ) : (
-          hasCheckedInToday ? (
-            <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-bold border shrink-0 ml-auto bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-transparent">
-              <CheckCircle2 className="w-4 h-4" />
-              Checked
-            </div>
+        <div className="flex flex-col items-end gap-2 shrink-0 ml-auto">
+          {currentDay !== null && (
+            <span className="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+              Day {currentDay}
+            </span>
+          )}
+          {!participant ? (
+            <button onClick={joinChallenge} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-xl text-sm font-semibold transition-colors shadow-sm active:scale-95 w-full text-center">
+              Join
+            </button>
+          ) : challenge.challengeType === 'todo' ? null : challenge.challengeType !== 'uploadMock' ? (
+            <button 
+              onClick={checkIn} 
+              disabled={hasCheckedInToday}
+              className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95 border w-full text-center ${hasCheckedInToday ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-transparent cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/50'}`}
+            >
+              {hasCheckedInToday ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+              {hasCheckedInToday ? 'Checked' : 'Check-In'}
+            </button>
           ) : (
-            <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-bold border shrink-0 ml-auto bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400">
-              Give a Mock
-            </div>
-          )
-        )}
+            hasCheckedInToday ? (
+              <div className="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-bold border w-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-transparent">
+                <CheckCircle2 className="w-4 h-4" />
+                Checked
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-bold border w-full bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400">
+                Give a Mock
+              </div>
+            )
+          )}
+        </div>
       </div>
 
       {challenge.tasks && challenge.tasks.length > 0 && (

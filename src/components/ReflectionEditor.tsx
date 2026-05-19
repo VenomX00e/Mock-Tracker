@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Check } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown'; // Fix import later if needed, assuming they're in the same dir
 
 export function ReflectionEditor({ mock, onSave, onCancel }) {
@@ -122,16 +122,18 @@ export function ReflectionEditor({ mock, onSave, onCancel }) {
         <div className="space-y-2">
           {localTasks.map((task, index) => (
             <div key={task.id} className="flex items-center gap-2 bg-slate-50/50 dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700/50">
-              <input 
-                type="checkbox" 
-                checked={task.completed}
-                onChange={(e) => {
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
                   const newTasks = [...localTasks];
-                  newTasks[index].completed = e.target.checked;
+                  newTasks[index].completed = !task.completed;
                   setLocalTasks(newTasks);
                 }}
-                className="w-4 h-4 text-indigo-600 cursor-pointer border-slate-300 rounded focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800"
-              />
+                className={`w-5 h-5 cursor-pointer shrink-0 rounded flex items-center justify-center transition-colors ${task.completed ? 'bg-emerald-500 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}
+              >
+                {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
+              </button>
               <input 
                 type="text" 
                 value={task.text}
