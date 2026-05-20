@@ -18,15 +18,32 @@ interface AddLiveMockDialogProps {
 
 export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, categoryId, categories }: AddLiveMockDialogProps) {
   const { user } = useAuth();
-  const [liveMockData, setLiveMockData] = useState({
-    examType: '',
-    examRole: '',
-    examPhase: 'Prelims',
-    examScope: 'Full',
-    mockName: '',
-    platform: '',
-    date: '',
-  });
+  const getInitialLiveMockData = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const localString = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    return {
+      examType: '',
+      examRole: '',
+      examPhase: 'Prelims',
+      examScope: 'Full',
+      mockName: '',
+      platform: '',
+      date: localString,
+    };
+  };
+
+  const [liveMockData, setLiveMockData] = useState(getInitialLiveMockData());
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setLiveMockData(getInitialLiveMockData());
+      setIsCustomExam(false);
+      setIsCustomRole(false);
+      setIsCustomPhase(false);
+      setIsCustomPlatform(false);
+    }
+  }, [isOpen]);
 
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isCustomRole, setIsCustomRole] = useState(false);
@@ -67,12 +84,18 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
         if (extractedData.examPhase && !PHASES.includes(extractedData.examPhase)) setIsCustomPhase(true);
         if (extractedData.platform && !PLATFORMS.includes(extractedData.platform)) setIsCustomPlatform(true);
 
-        setLiveMockData((prev) => ({ 
-          ...prev, 
-          ...extractedData,
-          examPhase: extractedData.examPhase || prev.examPhase,
-          examScope: extractedData.examScope || prev.examScope
-        }));
+        setLiveMockData((prev) => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const localString = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+          return {
+            ...prev, 
+            ...extractedData,
+            examPhase: extractedData.examPhase || prev.examPhase,
+            examScope: extractedData.examScope || prev.examScope,
+            date: extractedData.date || localString
+          };
+        });
       }
     } catch (err: any) {
       console.error(err);

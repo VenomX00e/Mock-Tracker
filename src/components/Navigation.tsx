@@ -44,11 +44,14 @@ export default function Navigation() {
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-12 sm:h-14">
           <div className="flex items-center gap-3 md:hidden group cursor-pointer" onClick={() => setIsApiModalOpen(true)}>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-              <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
+            <div className="relative">
+              <div className="absolute inset-0 m-auto w-6 h-6 rounded-full blur-[10px] opacity-70 scale-[1.3] z-0 logo-glow-layer neon-icon-blur"></div>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-10 transition-all">
+                <img src="/icon-192.svg" alt="MockSight" className="w-full h-full object-cover relative z-10" />
+              </div>
             </div>
             <h1 className="text-lg sm:text-[21px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400">
-              MockTracker
+              MockSight
             </h1>
           </div>
           

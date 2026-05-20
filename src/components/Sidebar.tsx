@@ -113,8 +113,11 @@ export function Sidebar() {
       {/* Sidebar Header */}
       <div className="flex items-center h-16 shrink-0 pl-6 pr-4">
         <div className="flex items-center w-full">
-          <div className="w-8 h-8 rounded-lg flex shrink-0 items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            <img src="/icon-192.svg" alt="MockTracker" className="w-full h-full object-cover" />
+          <div className="relative shrink-0">
+            <div className="absolute inset-0 m-auto w-6 h-6 rounded-full blur-[10px] opacity-70 scale-[1.3] z-0 logo-glow-layer neon-icon-blur"></div>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-10 transition-all">
+              <img src="/icon-192.svg" alt="MockSight" className="w-full h-full object-cover relative z-10" />
+            </div>
           </div>
           
           <h1 
@@ -122,7 +125,7 @@ export function Sidebar() {
               isSidebarCollapsed ? "opacity-0" : "opacity-100"
             }`}
           >
-            MockTracker
+            MockSight
           </h1>
         </div>
       </div>

@@ -1241,6 +1241,12 @@ input[type="search"]::-webkit-search-results-decoration {
 :is(html[class*="cyber"]) .neon-icon-blur {
   background-color: var(--neon-hex) !important;
 }
+:is(html[class*="cyber"]) .logo-glow-layer {
+  display: block;
+}
+.logo-glow-layer {
+  display: none;
+}
 :is(html[class*="cyber"]):not(html[class*="-light"]) .neon-icon-container {
   background-color: rgba(var(--neon-rgb), 0.15) !important;
   color: var(--neon-hex) !important;

@@ -1,16 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#4f46e5" />
-    </linearGradient>
-    <linearGradient id="g2" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#ec4899" />
-      <stop offset="100%" stop-color="#8b5cf6" />
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="#0f172a" />
-  <circle cx="256" cy="256" r="160" fill="none" stroke="url(#g1)" stroke-width="40" />
-  <circle cx="256" cy="256" r="90" fill="none" stroke="url(#g2)" stroke-width="20" />
-  <polygon points="256,230 270,270 310,270 280,295 290,335 256,310 222,335 232,295 202,270 242,270" fill="#f59e0b" />
+    <defs>
+        <linearGradient id="logo-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#2563eb" />
+            <stop offset="100%" stop-color="#9333ea" />
+        </linearGradient>
+        <mask id="cutout">
+            <rect width="512" height="512" fill="white" />
+            <path d="M 96,275 L 191,180 L 251,240 L 361,130" stroke="black" stroke-width="78" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+            <polygon points="326,95 406,85 396,165" fill="black" stroke="black" stroke-width="42" stroke-linejoin="round" />
+        </mask>
+    </defs>
+    <rect width="512" height="512" fill="#1E1B4B" />
+
+    <g mask="url(#cutout)">
+        <rect x="140" y="210" width="64" height="200" rx="32" fill="url(#logo-grad)" />
+        <rect x="224" y="240" width="64" height="170" rx="32" fill="url(#logo-grad)" />
+        <rect x="308" y="160" width="64" height="250" rx="32" fill="url(#logo-grad)" />
+    </g>
+
+    <g fill="none">
+        <path d="M 96,275 L 191,180 L 251,240 L 361,130" stroke="url(#logo-grad)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <polygon points="326,95 406,85 396,165" fill="url(#logo-grad)" stroke="url(#logo-grad)" stroke-width="4" stroke-linejoin="round" />
+    </g>
 </svg>

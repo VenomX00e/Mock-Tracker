@@ -261,7 +261,8 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
           ...prev, 
           ...extractedData,
           examPhase: extractedData.examPhase || prev.examPhase,
-          examScope: extractedData.examScope || prev.examScope
+          examScope: extractedData.examScope || prev.examScope,
+          date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
         }));
       }
     } catch (err: any) {
