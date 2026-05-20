@@ -40,10 +40,10 @@ export default function Navigation() {
   } = useUIStore();
 
   return (
-    <header className="w-full relative z-40 transition-colors duration-0 py-2 sm:py-4">
+    <header className="w-full relative z-40 transition-colors duration-0 py-2 sm:py-2">
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-12 sm:h-14">
-          <div className="flex items-center gap-3 md:hidden group cursor-pointer" onClick={() => setIsApiModalOpen(true)}>
+        <div className="flex justify-between items-center h-12">
+          <div className={`flex items-center gap-3 group cursor-pointer ${!user ? '' : 'md:hidden'}`} onClick={() => setIsApiModalOpen(true)}>
             <div className="relative">
               <div className="absolute inset-0 m-auto w-6 h-6 rounded-full blur-[10px] opacity-70 scale-[1.3] z-0 logo-glow-layer neon-icon-blur"></div>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-10 transition-all">
@@ -116,6 +116,52 @@ export default function Navigation() {
               </>
             ) : (
               <>
+                <div className="hidden md:flex mr-1 items-center">
+                  {theme.startsWith("cyber") && (
+                     <div className="flex bg-slate-900/40 backdrop-blur-md rounded-full shadow-sm items-center px-2 py-1 gap-1.5 h-9 border border-slate-700/50 mr-2">
+                       {[
+                         { id: theme.includes("-light") ? "cyber-light" : "cyber", bg: "bg-[#0ea5e9]" },
+                         { id: theme.includes("-light") ? "cyber-green-light" : "cyber-green", bg: "bg-[#22c55e]" },
+                         { id: theme.includes("-light") ? "cyber-lavender-light" : "cyber-lavender", bg: "bg-[#a855f7]" },
+                         { id: theme.includes("-light") ? "cyber-pink-light" : "cyber-pink", bg: "bg-[#ec4899]" },
+                         { id: theme.includes("-light") ? "cyber-orange-light" : "cyber-orange", bg: "bg-[#f97316]" },
+                       ].map((color) => (
+                         <button
+                           key={color.id}
+                           onClick={() => setTheme(color.id as any)}
+                           className={`w-4 h-4 rounded-full ${color.bg} ${theme === color.id ? "ring-2 ring-white scale-110 shadow-[0_0_8px_currentColor]" : "opacity-70 hover:opacity-100 hover:scale-110 transition-all"}`}
+                           title={"Select " + color.id.split('-').join(' ')}
+                           style={{ color: color.bg.replace("bg-[", "").replace("]", "") }}
+                         />
+                       ))}
+                     </div>
+                   )}
+                   
+                   <button
+                     onClick={() => {
+                       if (theme.startsWith("cyber")) {
+                         setTheme(theme.includes("-light") ? "light" : "dark");
+                       } else {
+                         setTheme(theme === "light" ? "cyber-light" : "cyber");
+                       }
+                     }}
+                     className={`p-1.5 sm:p-2 mr-1 rounded-full transition-colors flex ${
+                       theme.startsWith("cyber")
+                         ? "text-indigo-600 bg-indigo-50/80 dark:text-indigo-400 dark:bg-indigo-900/40"
+                         : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 bg-white/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50"
+                     }`}
+                     title={theme.startsWith("cyber") ? "Exit Gamer Mode" : "Enter Gamer Mode"}
+                   >
+                     <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                   </button>
+                </div>
+                <button
+                  onClick={() => setTheme(theme === 'dark' || (theme.startsWith('cyber') && !theme.includes('-light')) ? 'light' : 'dark')}
+                  className="p-1.5 sm:p-2 mr-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-white/50 hover:bg-white dark:bg-slate-800/50 dark:hover:bg-slate-800 rounded-full transition-colors backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 flex"
+                  title="Toggle Theme"
+                >
+                  {theme === 'dark' || (theme.startsWith('cyber') && !theme.includes('-light')) ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
+                </button>
                 <button
                   onClick={signInWithGoogle}
                   className="inline-flex flex-nowrap whitespace-nowrap items-center justify-center px-4 sm:px-5 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm neon-action-btn"

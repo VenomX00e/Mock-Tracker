@@ -33,7 +33,7 @@ export function AuthView() {
         Upload scorecards • AI extraction • track your Progress
       </p>
 
-      <div className="w-full max-w-xl mx-auto px-2 sm:px-4 py-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 mb-10 shadow-sm ">
+      <div className="w-full max-w-xl mx-auto px-2 sm:px-4 py-3 rounded-2xl bg-indigo-50/80 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 mb-10 shadow-sm ">
         <div className="text-[8px] min-[320px]:text-[8.5px] min-[340px]:text-[9px] min-[360px]:text-[10px] min-[400px]:text-[11px] sm:text-sm md:text-base text-indigo-700 dark:text-indigo-400 font-medium flex flex-col items-center gap-1.5 w-full max-w-full">
           <p className="whitespace-nowrap w-full text-center">✨ For the best experience, use larger screen</p>
           <p className="whitespace-nowrap w-full text-center">✨ click on 3-dot menu and select "Install app" for quick access.</p>
@@ -78,7 +78,7 @@ export function AuthView() {
       <div className="flex flex-col items-center gap-4">
         <button
           onClick={signInWithGoogle}
-          className="relative overflow-hidden inline-flex items-center justify-center px-8 py-3.5 text-base font-medium text-white transition-all bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-200 dark:hover:shadow-blue-900/40"
+          className="relative overflow-hidden inline-flex items-center justify-center px-8 py-3.5 text-base font-medium text-white transition-all bg-gradient-to-r from-indigo-500 to-blue-600 rounded-2xl hover:from-indigo-600 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-200 dark:hover:shadow-blue-900/40"
         >
           <motion.div
             className="absolute inset-y-0 w-[150%] bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12"
@@ -99,7 +99,7 @@ export function AuthView() {
         {isInstallable && (
           <button
             onClick={installApp}
-            className="inline-flex items-center justify-center px-6 py-2 border-2 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-xl transition-all font-medium"
+            className="inline-flex items-center justify-center px-6 py-2 border-2 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-2xl transition-all font-medium"
           >
             <Download className="w-4 h-4 mr-2" />
             Install as Desktop/Mobile App
@@ -110,7 +110,7 @@ export function AuthView() {
             href={telegramLink || '#'}
             target={telegramLink ? "_blank" : undefined}
             rel={telegramLink ? "noopener noreferrer" : undefined}
-            className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg transition-colors mt-2 neon-telegram-btn"
+            className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-2xl transition-colors mt-2 neon-telegram-btn"
             onClick={(e) => {
               if (!telegramLink) {
                 e.preventDefault();
@@ -169,10 +169,10 @@ function FeatureCard({ title, description, icon: Icon, color, delay, spotlightCo
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.1, delay }}
       onMouseMove={handleMouseMove}
-      className="group relative p-4 bg-white/70 dark:bg-slate-800/70  border border-slate-200/50 dark:border-slate-700/50 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-[2px] transition-all duration-0 overflow-hidden text-left"
+      className="group relative p-4 bg-white/70 dark:bg-slate-800/70  border border-slate-200/50 dark:border-slate-700/50 rounded-3xl shadow-sm hover:shadow-md hover:-translate-y-[2px] transition-all duration-0 overflow-hidden text-left"
     >
       <motion.div
-        className="pointer-events-none absolute -inset-px rounded-xl opacity-0 transition duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-300 group-hover:opacity-100"
         style={{
           background: useMotionTemplate`
             radial-gradient(
@@ -184,7 +184,7 @@ function FeatureCard({ title, description, icon: Icon, color, delay, spotlightCo
         }}
       />
       <div className={`absolute inset-0 bg-gradient-to-t ${colors.tint} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-      <div className={`relative w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center mb-3 ${colors.text} transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}>
+      <div className={`relative w-10 h-10 ${colors.bg} rounded-2xl flex items-center justify-center mb-3 ${colors.text} transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3`}>
         <Icon className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
       </div>
       <h3 className="relative font-semibold text-slate-900 dark:text-slate-100 mb-1 text-sm md:text-base">{title}</h3>
