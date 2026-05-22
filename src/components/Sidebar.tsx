@@ -48,7 +48,7 @@ export function Sidebar() {
         if (customAction) {
           customAction();
         } else {
-          setActiveTab(tabId);
+          setActiveTab(tabId as any);
         }
         window.scrollTo(0, 0);
       }, 50);

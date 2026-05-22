@@ -16,6 +16,10 @@ async function fetchChallengesData(args: any) {
     const isPermanentlyDeletedByAdmin = data.permanentlyDeletedByAdmin === true;
 
     if (data.status === 'active' || data.status === undefined) {
+       if (data.endDate && data.endDate < new Date().toISOString().split('T')[0]) {
+         if (!isOwner) return;
+       }
+       
        if (data.creatorId === uid) {
           if (isPermanentlyDeletedByCreator) return;
           if (isDeletedByCreator) {
@@ -34,10 +38,7 @@ async function fetchChallengesData(args: any) {
           }
 
           if (data.visibility === 'personal' && data.creatorId !== uid) return;
-          if (data.visibility === 'global') {
-            if (data.endDate && data.endDate < new Date().toISOString().split('T')[0]) {
-              if (!isOwner) return;
-            }
+          if (data.visibility === 'global' || !data.visibility) {
             if (data.approvalStatus === 'pending') {
               if (data.creatorId !== uid && !canManageChallenges) return;
             } else if (data.approvalStatus === 'rejected') {

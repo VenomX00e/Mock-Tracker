@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 async function fetchSystemDocs() {
@@ -26,7 +26,10 @@ async function fetchSystemDocs() {
       if (data.date && new Date(data.date).getTime() < nowTs) return;
       activeNotices.push({ id: d.id, ...data });
     } else if (data.type === 'liveMock') {
-        if (data.date && new Date(data.date).getTime() < nowTs) return;
+        if (data.date && new Date(data.date).getTime() < nowTs) {
+           deleteDoc(doc(db, 'system', d.id)).catch(console.error);
+           return;
+        }
         mocks.push({ id: d.id, ...data });
     } else if (data.type === 'countdown') {
         if (data.date && new Date(data.date).getTime() < nowTs) return;

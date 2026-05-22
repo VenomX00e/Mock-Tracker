@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { collection, query, getDocs, doc, setDoc } from "firebase/firestore";
+import { collection, query, getDocs, doc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { calculateStats } from "../hooks/useMocks";
 import { UserProfile } from "../types";
 import {
   Shield,
@@ -243,9 +244,7 @@ export default function AdminDialog({
             u.userId !== currentUser?.uid,
         ),
       );
-      setAllFirebaseUsers(
-        allUsers.filter((u) => u.userId !== currentUser?.uid),
-      );
+      setAllFirebaseUsers(allUsers);
     } catch (error) {
       console.error("Error fetching users", error);
     }
@@ -712,6 +711,70 @@ export default function AdminDialog({
     }
   };
 
+  const [recalculatingUserIds, setRecalculatingUserIds] = useState<Set<string>>(new Set());
+
+  const handleRecalculateStats = async (userId: string) => {
+    try {
+      setRecalculatingUserIds(prev => new Set(prev).add(userId));
+      const q = query(collection(db, "users", userId, "mocks"));
+      const snap = await getDocs(q);
+      const mocks: any[] = [];
+      snap.forEach(doc => {
+        const data = doc.data();
+        if (!data.isDeleted) {
+          mocks.push({ ...data, id: doc.id });
+        }
+      });
+      mocks.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      const calculatedStats = calculateStats(mocks);
+      const stats30D = calculateStats(mocks, 30);
+      const stats7D = calculateStats(mocks, 7);
+      
+      const categoryStats: Record<string, any> = {};
+      const uniqueCats = new Set(mocks.map(m => m.categoryId || 'banking'));
+      uniqueCats.forEach(cat => {
+        const catMocks = mocks.filter(m => (m.categoryId || 'banking') === cat);
+        categoryStats[cat] = {
+           allTime: calculateStats(catMocks),
+           stats30D: calculateStats(catMocks, 30),
+           stats7D: calculateStats(catMocks, 7)
+        };
+      });
+
+      const payload = {
+        userId,
+        ...calculatedStats,
+        stats30D,
+        stats7D,
+        categoryStats,
+        updatedAt: serverTimestamp()
+      };
+
+      try {
+        await updateDoc(doc(db, "users", userId), payload);
+      } catch (e: any) {
+        if (e.code === 'not-found') {
+          await setDoc(doc(db, "users", userId), payload);
+        } else {
+          throw e;
+        }
+      }
+
+      alert("User stats recalculated successfully.");
+      fetchUsers();
+    } catch (error) {
+      console.error("Error recalculating stats", error);
+      alert("Failed to recalculate stats.");
+    } finally {
+      setRecalculatingUserIds(prev => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+    }
+  };
+
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
@@ -1075,7 +1138,7 @@ export default function AdminDialog({
                   </button>
                   <button
                     onClick={() => deleteLiveMock(m.id)}
-                    className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"
+                    className="text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 p-2"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1287,7 +1350,7 @@ export default function AdminDialog({
                   </button>
                   <button
                     onClick={() => deleteNotice(n.id)}
-                    className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"
+                    className="text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 p-2"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1458,7 +1521,7 @@ export default function AdminDialog({
                   </button>
                   <button
                     onClick={() => deleteCountdown(c.id)}
-                    className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"
+                    className="text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 p-2"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1759,7 +1822,7 @@ export default function AdminDialog({
                   </button>
                   <button
                     onClick={() => deleteChallenge(c.id)}
-                    className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-2"
+                    className="text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 p-2"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -2143,7 +2206,7 @@ export default function AdminDialog({
                               className="flex items-center gap-2"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {isOwner && (
+                              {isOwner && user.email !== "mrityunjoyk29@gmail.com" && (
                                 <CustomDropdown
                                   value={
                                     user.role === "admin" ? "Admin" : "User"
@@ -2161,6 +2224,23 @@ export default function AdminDialog({
                                   className="w-[85px]"
                                 />
                               )}
+                              {isOwner && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRecalculateStats(user.userId);
+                                }}
+                                disabled={recalculatingUserIds.has(user.userId)}
+                                className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${
+                                  recalculatingUserIds.has(user.userId)
+                                    ? "bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-900/50 dark:hover:text-indigo-400"
+                                }`}
+                              >
+                                {recalculatingUserIds.has(user.userId) ? "Updating..." : "Update"}
+                              </button>
+                              )}
+                              {user.email !== "mrityunjoyk29@gmail.com" && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2173,7 +2253,8 @@ export default function AdminDialog({
                               >
                                 Mute
                               </button>
-                              {isOwner && (
+                              )}
+                              {isOwner && user.email !== "mrityunjoyk29@gmail.com" && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2501,7 +2582,7 @@ export default function AdminDialog({
                                     className="flex items-center gap-2"
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    {isOwner && (
+                                    {isOwner && user.email !== "mrityunjoyk29@gmail.com" && (
                                       <CustomDropdown
                                         value={
                                           user.role === "admin"
@@ -2521,6 +2602,23 @@ export default function AdminDialog({
                                         className="w-[85px]"
                                       />
                                     )}
+                                    {isOwner && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRecalculateStats(user.userId);
+                                      }}
+                                      disabled={recalculatingUserIds.has(user.userId)}
+                                      className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${
+                                        recalculatingUserIds.has(user.userId)
+                                          ? "bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-900/50 dark:hover:text-indigo-400"
+                                      }`}
+                                    >
+                                      {recalculatingUserIds.has(user.userId) ? "Updating..." : "Update"}
+                                    </button>
+                                    )}
+                                    {user.email !== "mrityunjoyk29@gmail.com" && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -2533,7 +2631,8 @@ export default function AdminDialog({
                                     >
                                       Mute
                                     </button>
-                                    {isOwner && (
+                                    )}
+                                    {isOwner && user.email !== "mrityunjoyk29@gmail.com" && (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();

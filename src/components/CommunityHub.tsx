@@ -19,13 +19,6 @@ export default function CommunityHub() {
   const { challenges, categories, pinnedChallenges } = useSystemDataCtx();
   const { setActivePublicProfile, setIsCreateChallengeOpen, setIsRequestsModalOpen, setIsAddModalOpen } = useUIStore();
   const { handlePinChallenge, handleDeleteChallenge, dismissChallenge } = useChallengesManagerCtx();
-
-  const onCopyMock = (mock: MockScore) => {
-    // Copy the details but remove the ID so it's treated as a new entry
-    const copiedMock = { ...mock, id: '', score: '', percentile: '', percentage: '', accuracy: '', quant: { score: '', percentile: '', accuracy: '' }, reasoning: { score: '', percentile: '', accuracy: '' }, english: { score: '', percentile: '', accuracy: '' }, ga: { score: '', percentile: '', accuracy: '' }};
-    setMockToEdit(copiedMock as any);
-    setIsAddModalOpen(true);
-  };
   
   const onUserClick = setActivePublicProfile;
   const isAdmin = adminPermissions?.canManageLiveMocks;
@@ -876,7 +869,7 @@ export default function CommunityHub() {
     <div className="space-y-8 mt-6 lg:mt-8 mb-4">
       <CommunityLeaderboard Trophy={Trophy} CustomDropdown={CustomDropdown} selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod} isAdmin={isAdmin} isOwner={isOwner} sortConfig={sortConfig} handleAdminChangeGlobalSort={handleAdminChangeGlobalSort} selectedPhase={selectedPhase} availablePhases={availablePhases} setSelectedPhase={setSelectedPhase} setDoc={setDoc} doc={doc} db={db} loadingTop={loadingTop} handleSort={handleSort} subjects={subjects} sortedLeaderboard={sortedLeaderboard} parseLocalDate={parseLocalDate} onUserClick={onUserClick} getHeatmapColor={getHeatmapColor} Flame={Flame} />
 
-      <CommunityFeed Users={Users} loadingFeed={loadingFeed} filteredFeedLogs={filteredFeedLogs} daysVisible={daysVisible} feedSort={feedSort} handleFeedSort={handleFeedSort} getFeedSortConfig={getFeedSortConfig} subjects={subjects} onCopyMock={onCopyMock} sortedLeaderboard={sortedLeaderboard} onUserClick={onUserClick} Flame={Flame} getPlatformShort={getPlatformShort} getHeatmapColor={getHeatmapColor} getSub={getSub} handleReact={handleReact} reactions={reactions} Calendar={Calendar} setDaysVisible={setDaysVisible} ArrowRight={ArrowRight} />
+      <CommunityFeed Users={Users} loadingFeed={loadingFeed} filteredFeedLogs={filteredFeedLogs} daysVisible={daysVisible} feedSort={feedSort} handleFeedSort={handleFeedSort} getFeedSortConfig={getFeedSortConfig} subjects={subjects} sortedLeaderboard={sortedLeaderboard} onUserClick={onUserClick} Flame={Flame} getPlatformShort={getPlatformShort} getHeatmapColor={getHeatmapColor} getSub={getSub} handleReact={handleReact} reactions={reactions} Calendar={Calendar} setDaysVisible={setDaysVisible} ArrowRight={ArrowRight} />
       
       <CommunityChat MessageSquare={MessageSquare} chatMessages={chatMessages} Pin={Pin} handlePinMessage={handlePinMessage} X={X} setActiveMsgId={setActiveMsgId} setCustomEmojiOpenForId={setCustomEmojiOpenForId} setActiveReactionView={setActiveReactionView} setActiveActionsMsgId={setActiveActionsMsgId} setShowPollVotersForId={setShowPollVotersForId} userMap={userMap} user={user} activeActionsMsgId={activeActionsMsgId} setReplyingTo={setReplyingTo} activeMsgId={activeMsgId} handlePollVote={handlePollVote} CheckCircle2={CheckCircle2} CheckSquare={CheckSquare} showPollVotersForId={showPollVotersForId} activeReactionView={activeReactionView} handleChatReact={handleChatReact} customEmojiOpenForId={customEmojiOpenForId} customEmojiInput={customEmojiInput} setCustomEmojiInput={setCustomEmojiInput} setEditingMessageId={setEditingMessageId} setNewMessage={setNewMessage} setShowPollMaker={setShowPollMaker} setPollQuestion={setPollQuestion} setPollIsMulti={setPollIsMulti} setPollOptions={setPollOptions} Pencil={Pencil} isAdmin={isAdmin} handleDeleteMessage={handleDeleteMessage} Trash2={Trash2} PinOff={PinOff} chatBottomRef={chatBottomRef} chatError={chatError} replyingTo={replyingTo} handleSendMessage={handleSendMessage} editingMessageId={editingMessageId} showPollMaker={showPollMaker} BarChart2={BarChart2} pollIsMulti={pollIsMulti} pollQuestion={pollQuestion} pollOptions={pollOptions}    newMessage={newMessage} isSending={isSending} Send={Send} />
       
@@ -1096,7 +1089,7 @@ function CommunityLeaderboard(props: any) {
 }
 
 function CommunityFeed(props: any) {
-  const { Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, subjects, onCopyMock, sortedLeaderboard, onUserClick, Flame, getPlatformShort, getHeatmapColor, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight } = props;
+  const { Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, subjects, sortedLeaderboard, onUserClick, Flame, getPlatformShort, getHeatmapColor, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight } = props;
   return <>
     {/* FEED */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
@@ -1168,9 +1161,7 @@ function CommunityFeed(props: any) {
                 const renderFeedRow = (m: any) => (
                               <tr 
                                 key={m.id} 
-                                className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                                onClick={() => onCopyMock && onCopyMock(m)}
-                                title="Add this mock score to your dashboard"
+                                className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
                               >
                                 <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
                                   <div 
@@ -1204,7 +1195,7 @@ function CommunityFeed(props: any) {
                                 </td>
                                 <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-center">
                                   <div className="flex flex-col items-center gap-1">
-                                    <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md text-xs font-semibold">
+                                    <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-transparent rounded-md text-xs font-semibold theme-exam-badge">
                                      {m.examType}
                                     </span>
                                     {m.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium">{m.examRole}</span>}

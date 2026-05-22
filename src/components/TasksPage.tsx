@@ -38,6 +38,63 @@ export function TasksPage() {
   const [mockIdOfEditingTask, setMockIdOfEditingTask] = useState<string | null>(null);
   const [expandedActionMocks, setExpandedActionMocks] = useState<Record<string, boolean>>({});
 
+  const hasAutoDeletedRef = useRef(false);
+
+  useEffect(() => {
+    if (hasAutoDeletedRef.current || !profile || !rawMocks.length) return;
+    
+    let hasDeletions = false;
+    const now = Date.now();
+    const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
+    
+    // Check global tasks
+    if (profile.tasks && profile.tasks.length > 0) {
+      let changed = false;
+      const validTasks = profile.tasks.filter(task => {
+        if (!task.completed) return true;
+        let completedTime = 0;
+        if (task.completedAt) completedTime = new Date(task.completedAt).getTime();
+        else if (task.createdAt) completedTime = new Date(task.createdAt).getTime();
+        
+        if (completedTime && now - completedTime > FIFTEEN_DAYS_MS) {
+           changed = true;
+           return false;
+        }
+        return true;
+      });
+      if (changed && onUpdateProfileTasks) {
+        onUpdateProfileTasks(validTasks);
+        hasDeletions = true;
+      }
+    }
+    
+    // Check mock tasks
+    rawMocks.forEach(mock => {
+      if (!mock.tasks || !mock.tasks.length) return;
+      let changed = false;
+      const validTasks = mock.tasks.filter(task => {
+        if (!task.completed) return true;
+        let completedTime = 0;
+        if (task.completedAt) completedTime = new Date(task.completedAt).getTime();
+        else if (task.createdAt) completedTime = new Date(task.createdAt).getTime();
+        else if (mock.date) completedTime = new Date(mock.date).getTime();
+        
+        if (completedTime && now - completedTime > FIFTEEN_DAYS_MS) {
+           changed = true;
+           return false;
+        }
+        return true;
+      });
+      
+      if (changed) {
+        onUpdateReflection(mock.id, { tasks: validTasks });
+        hasDeletions = true;
+      }
+    });
+
+    hasAutoDeletedRef.current = true;
+  }, [profile, rawMocks, onUpdateProfileTasks]);
+
   const mocksWithTasks = useMemo(() => mocks.filter(m => m.tasks && m.tasks.length > 0 && (showCompletedTasks || m.tasks.some(t => !t.completed))), [mocks, showCompletedTasks]);
   const globalTasks = useMemo(() => (profile?.tasks || []).filter(t => showCompletedTasks || !t.completed).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()), [profile?.tasks, showCompletedTasks]);
 
@@ -64,7 +121,15 @@ export function TasksPage() {
   };
   const handleToggleGlobalTask = (taskId: string, completed: boolean) => {
       if (!onUpdateProfileTasks || !profile) return;
-      const newTasks = (profile.tasks || []).map(t => t.id === taskId ? { ...t, completed } : t);
+      const newTasks = (profile.tasks || []).map(t => {
+        if (t.id === taskId) {
+           const updated = { ...t, completed };
+           if (completed) updated.completedAt = new Date().toISOString();
+           else delete updated.completedAt;
+           return updated;
+        }
+        return t;
+      });
       onUpdateProfileTasks(newTasks);
   };
   const handleDeleteGlobalTask = (taskId: string) => {
@@ -128,6 +193,9 @@ export function TasksPage() {
                       <Check className="w-4 h-4" />
                       Completed
                     </button>
+                    {showCompletedTasks && (
+                      <span className="text-[10px] text-rose-500 font-medium bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800/50 px-2 py-1.5 rounded">Auto deleted in 15 days</span>
+                    )}
                   </div>
                 </div>
                 
@@ -233,7 +301,7 @@ export function TasksPage() {
                                       
                                       <div className="flex flex-col sm:flex-row gap-0.5 sm:gap-1.5 shrink-0 mt-1 sm:mt-0 sm:items-center">
                                         <div className="flex items-center gap-0.5">
-                                          <span className="font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/50 px-1 py-[2px] rounded flex items-center justify-center text-[7px] uppercase leading-none tracking-widest border border-slate-200 dark:border-slate-600">{mock.examType}</span>
+                                          <span className="font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/50 px-1 py-[2px] rounded flex items-center justify-center text-[7px] uppercase leading-none tracking-widest border border-slate-200 dark:border-slate-600 theme-exam-badge">{mock.examType}</span>
                                           {mock.examRole && <span className="font-bold text-[7px] px-1 py-[2px] flex items-center justify-center rounded uppercase bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400 leading-none tracking-widest">{mock.examRole}</span>}
                                         </div>
                                         {(mock.examPhase || mock.examScope) && (
@@ -302,7 +370,15 @@ export function TasksPage() {
                                         onClick={async (e) => {
                                           e.stopPropagation();
                                           if (onUpdateReflection) {
-                                            const updatedTasks = mock.tasks?.map(t => t.id === task.id ? { ...t, completed: !task.completed } : t) || [];
+                                            const updatedTasks = mock.tasks?.map(t => {
+                                              if (t.id === task.id) {
+                                                const updated = { ...t, completed: !task.completed };
+                                                if (!task.completed) updated.completedAt = new Date().toISOString();
+                                                else delete updated.completedAt;
+                                                return updated;
+                                              }
+                                              return t;
+                                            }) || [];
                                             await onUpdateReflection(mock.id, { tasks: updatedTasks });
                                           }
                                         }}

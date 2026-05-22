@@ -21,26 +21,8 @@ import { ExamCategory } from "../types";
 interface ProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  theme:
-    | "light"
-    | "dark"
-    | "cyber"
-    | "cyber-light"
-    | "cyber-green"
-    | "cyber-lavender"
-    | "cyber-pink"
-    | "cyber-orange";
-  setTheme: (
-    theme:
-      | "light"
-      | "dark"
-      | "cyber"
-      | "cyber-light"
-      | "cyber-green"
-      | "cyber-lavender"
-      | "cyber-pink"
-      | "cyber-orange",
-  ) => void;
+  theme: string;
+  setTheme: (theme: string) => void;
   categories: ExamCategory[];
   asPage?: boolean;
 }
@@ -196,7 +178,7 @@ export default function ProfileDialog({
             <div className="h-32 sm:h-48 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 relative">
               {asPage && (
                 <div className="absolute top-4 right-4 flex gap-2 z-10">
-                  {theme.startsWith("cyber") && (
+                  {(theme.startsWith("cyber") || theme === "hero-miles") && (
                     <div className="flex bg-slate-900/40 backdrop-blur-md rounded-full shadow-lg items-center px-2 py-1 gap-1.5">
                       {[
                         {
@@ -209,33 +191,43 @@ export default function ProfileDialog({
                         { id: theme.includes("-light") ? "cyber-lavender-light" : "cyber-lavender", bg: "bg-[#a855f7]" },
                         { id: theme.includes("-light") ? "cyber-pink-light" : "cyber-pink", bg: "bg-[#ec4899]" },
                         { id: theme.includes("-light") ? "cyber-orange-light" : "cyber-orange", bg: "bg-[#f97316]" },
+{ id: "hero-miles", bg: "bg-gradient-to-br from-[#ea3323] via-[#ea3323] to-black" },
                       ].map((color) => (
                         <button
                           key={color.id}
                           onClick={() => setTheme(color.id as any)}
-                          className={`w-4 h-4 rounded-full ${color.bg} ${theme === color.id ? "ring-2 ring-white scale-110 shadow-[0_0_8px_currentColor]" : "opacity-70 hover:opacity-100 hover:scale-110 transition-all"}`}
+                          className={`w-4 h-4 rounded-full flex items-center justify-center overflow-hidden relative ${color.bg} ${theme === color.id ? "ring-2 ring-white scale-110 shadow-[0_0_8px_currentColor]" : "opacity-70 hover:opacity-100 hover:scale-110 transition-all"}`}
                           title={"Select " + color.id.split('-').join(' ')}
                           style={{
-                            color: color.bg
+                            color: color.bg.includes('gradient') ? '#ea3323' : color.bg
                               .replace("bg-[", "")
                               .replace("]", ""),
                           }}
-                        />
+                        >
+                          {color.id === "hero-miles" && (
+                            <svg viewBox="0 0 24 24" className="w-[14px] h-[14px] absolute opacity-50 pointer-events-none stroke-white" style={{ fill: 'none', strokeWidth: 1 }}>
+                              <path d="M12 0v24M0 12h24M3 3l18 18M3 21L21 3" />
+                              <circle cx="12" cy="12" r="4" />
+                              <circle cx="12" cy="12" r="8" />
+                              <circle cx="12" cy="12" r="12" />
+                            </svg>
+                          )}
+                        </button>
                       ))}
                     </div>
                   )}
 
                   <button
                     onClick={() => {
-                      if (theme.startsWith("cyber")) {
+                      if ((theme.startsWith("cyber") || theme === "hero-miles")) {
                         setTheme(theme.includes("-light") ? "light" : "dark");
                       } else {
                         setTheme(theme === "light" ? "cyber-light" : "cyber");
                       }
                     }}
-                    className={`p-2 backdrop-blur-md rounded-full transition-colors ${theme.startsWith("cyber") ? "bg-indigo-500/80 hover:bg-indigo-600/80 text-white" : "bg-white/20 hover:bg-white/30 text-white"}`}
+                    className={`p-2 backdrop-blur-md rounded-full transition-colors ${(theme.startsWith("cyber") || theme === "hero-miles") ? "bg-indigo-500/80 hover:bg-indigo-600/80 text-white" : "bg-white/20 hover:bg-white/30 text-white"}`}
                     title={
-                      theme.startsWith("cyber")
+                      (theme.startsWith("cyber") || theme === "hero-miles")
                         ? "Exit Gamer Mode"
                         : "Enter Gamer Mode"
                     }
@@ -245,20 +237,22 @@ export default function ProfileDialog({
 
                   <button
                     onClick={() => {
-                      if (theme.startsWith("cyber")) {
-                        if (theme.includes("-light")) {
-                          setTheme(theme.replace("-light", "") as any);
-                        } else {
-                          setTheme((theme === "cyber" ? "cyber-light" : theme + "-light") as any);
-                        }
-                      } else {
+                      if (theme.startsWith("cyber") || theme === "hero-miles") {
+      if (theme === "hero-miles") {
+        setTheme("light"); // Fallback since hero-miles has no light mode
+      } else if (theme.includes("-light")) {
+        setTheme(theme.replace("-light", "") as any);
+      } else {
+        setTheme((theme === "cyber" ? "cyber-light" : theme + "-light") as any);
+      }
+    } else {
                         setTheme(theme === "light" ? "dark" : "light");
                       }
                     }}
                     className="p-2 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white rounded-full transition-colors"
                     title="Toggle Theme"
                   >
-                    {theme === "dark" || (theme.startsWith("cyber") && !theme.includes("-light")) ? (
+                    {theme === "dark" || ((theme.startsWith("cyber") || theme === "hero-miles") && !theme.includes("-light")) ? (
                       <Sun className="w-4 h-4" />
                     ) : (
                       <Moon className="w-4 h-4" />

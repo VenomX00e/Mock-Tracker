@@ -22,7 +22,8 @@ interface UIState {
     | "tasks"
     | "add-mock"
     | "admin-panel"
-    | "profile";
+    | "profile"
+    | "countdowns";
   setActiveTab: (
     tab:
       | "home"
@@ -32,7 +33,8 @@ interface UIState {
       | "tasks"
       | "add-mock"
       | "admin-panel"
-      | "profile",
+      | "profile"
+      | "countdowns",
   ) => void;
 
   isAddModalOpen: boolean;
@@ -91,7 +93,8 @@ interface UIState {
     | "cyber-pink"
     | "cyber-pink-light"
     | "cyber-orange"
-    | "cyber-orange-light";
+    | "cyber-orange-light"
+    | "hero-miles";
   setTheme: (
     theme:
       | "light"
@@ -105,7 +108,8 @@ interface UIState {
       | "cyber-pink"
       | "cyber-pink-light"
       | "cyber-orange"
-      | "cyber-orange-light",
+      | "cyber-orange-light"
+      | "hero-miles",
   ) => void;
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
@@ -124,6 +128,7 @@ const ALL_THEME_CLASSES = [
   "cyber-pink-light",
   "cyber-orange",
   "cyber-orange-light",
+  "hero-miles",
 ];
 
 export const useUIStore = create<UIState>((set) => ({
@@ -187,7 +192,8 @@ export const useUIStore = create<UIState>((set) => ({
       | "cyber-green"
       | "cyber-lavender"
       | "cyber-pink"
-      | "cyber-orange") ||
+      | "cyber-orange"
+      | "hero-miles") ||
     (localStorage.getItem("darkMode") === "true" ? "dark" : "light"),
   setDarkMode: (mode) =>
     set((state) => {
@@ -211,7 +217,7 @@ export const useUIStore = create<UIState>((set) => ({
       document.documentElement.classList.remove(...ALL_THEME_CLASSES);
       document.documentElement.classList.add(theme);
       
-      const isDarkTheme = (theme.startsWith("cyber") && !theme.includes("-light")) || theme === "dark";
+      const isDarkTheme = (theme.startsWith("cyber") && !theme.includes("-light")) || theme === "dark" || theme === "hero-miles";
       
       if (isDarkTheme) {
         document.documentElement.classList.add("dark");

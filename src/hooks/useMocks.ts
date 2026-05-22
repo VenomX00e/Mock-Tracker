@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp, writeBatch, deleteField } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp, writeBatch, deleteField, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
 import { MockScore } from '../types';
 import { parseLocalDate } from '../lib/utils';
 
-function calculateStats(mocks: MockScore[], periodDays?: number) {
+export function calculateStats(mocks: MockScore[], periodDays?: number) {
   let filteredMocks = mocks;
   if (periodDays !== undefined) {
     const cutoff = new Date();
@@ -182,6 +182,36 @@ export function useMocks() {
   const stats = data?.stats || null;
   const loading = !data && !error && !!user;
 
+  useEffect(() => {
+    if (!user || !deletedMocks.length) return;
+    const now = Date.now();
+    const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
+    
+    deletedMocks.forEach(mock => {
+      const updatedAtStr = (mock as any).updatedAt;
+      let updatedAtTime = 0;
+      
+      if (updatedAtStr) {
+        if (updatedAtStr.toMillis) {
+           updatedAtTime = updatedAtStr.toMillis();
+        } else if (typeof updatedAtStr === 'number') {
+           updatedAtTime = updatedAtStr;
+        } else if (updatedAtStr.seconds) {
+           updatedAtTime = updatedAtStr.seconds * 1000;
+        }
+      }
+      
+      if (!updatedAtTime && mock.date) {
+         const mockDate = new Date(mock.date).getTime();
+         updatedAtTime = mockDate;
+      }
+      
+      if (updatedAtTime && (now - updatedAtTime) > FIFTEEN_DAYS_MS) {
+         deleteDoc(doc(db, 'users', user.uid, 'mocks', mock.id)).catch(e => console.error("Auto delete failed", e));
+      }
+    });
+  }, [deletedMocks, user?.uid]);
+
   const updateStatsForUser = async (uid: string, mockData: MockScore[]) => {
     try {
       const calculatedStats = calculateStats(mockData);
@@ -199,7 +229,7 @@ export function useMocks() {
         };
       });
       
-      await setDoc(doc(db, 'users', uid), {
+      const payload = {
         userId: uid,
         ...calculatedStats,
         stats30D,
@@ -207,7 +237,17 @@ export function useMocks() {
         categoryStats,
         lastActiveAt: Date.now(),
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      };
+
+      try {
+        await updateDoc(doc(db, 'users', uid), payload);
+      } catch (e: any) {
+        if (e.code === 'not-found') {
+          await setDoc(doc(db, 'users', uid), payload);
+        } else {
+          throw e;
+        }
+      }
     } catch (e) {
       console.error("Error updating stats", e);
     }

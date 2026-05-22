@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { createPortal } from 'react-dom';
 import { MockScore, UserProfile, ReflectionTask, ExamCategory } from '../types';
 import { useUserProfileCtx, useSystemDataCtx, useAppStateCtx } from '../context/AppContext';
@@ -9,7 +10,7 @@ import {
   BarChart, Bar, Legend, ReferenceLine, LabelList, Cell, Label,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download, CheckSquare, X, Check } from 'lucide-react';
+import { Trophy, TrendingUp, Target, CalendarDays, Calculator, Brain, BookA, ChevronRight, Trash2, Edit2, RotateCcw, Flame, Download, CheckSquare, X, Check, History } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { collection, query, orderBy, getDocs, writeBatch, collectionGroup, deleteField, limit } from 'firebase/firestore';
@@ -583,7 +584,7 @@ export default function Dashboard() {
     const dx = item.barCount % 2 === 0 ? 15 : 0; 
 
     return (
-      <text x={x} y={y} dy={10} dx={dx} textAnchor="middle" className="fill-slate-700 dark:fill-white" fontSize={11}>
+      <text x={x} y={y} dy={10} dx={dx} textAnchor="middle" fill="#ffffff" fontSize={11}>
         {name}
       </text>
     );
@@ -628,20 +629,22 @@ export default function Dashboard() {
       {/* Tabs */}
       {mocks.length > 0 && (
       <div className="flex overflow-x-auto mb-[6px] pb-[12px] gap-2 custom-scrollbar">
-        <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-2xl items-center flex-nowrap w-max border border-slate-200/50 dark:border-slate-700/50  shadow-sm relative">
+        <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1.5 rounded-2xl items-center flex-nowrap w-max border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative">
           {examTypes.map(type => (
-            <button
+             <button
               key={type}
               onClick={() => setSelectedExam(type)}
-              className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors duration-0 z-10 ${
+              className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors duration-200 z-10 bg-transparent border-none outline-none ${
                 selectedExam === type 
-                  ? 'text-blue-600 dark:text-blue-400' 
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+                  ? 'text-indigo-600 dark:text-indigo-400' 
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               {selectedExam === type && (
-                <div
-                  className="absolute inset-0 bg-white dark:bg-slate-700 rounded-xl shadow-sm border border-slate-200/50 dark:border-slate-600 -z-10"
+                <motion.div
+                  layoutId="examTab"
+                  transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                  className="absolute inset-0 rounded-xl border border-current -z-10"
                 />
               )}
               <span className="relative z-10">{type}</span>
@@ -741,7 +744,7 @@ export default function Dashboard() {
               </div>
               <div className="text-3xl font-light text-slate-900 dark:text-slate-100 mb-2">{stats.avgPercentile}<span className="text-sm sm:text-lg text-slate-400 dark:text-slate-500 ml-1">%</span></div>
               <div className="w-full bg-slate-100 dark:bg-slate-700/50 rounded-full h-1.5 overflow-hidden flex shadow-inner">
-                <div className="bg-indigo-500 dark:bg-indigo-400 neon-bg h-1.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, Math.max(0, (Number(stats.avgPercentile) / goalPercentile) * 100 || 0))}%` }}></div>
+                <div className="avg-percentile-bar h-1.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.min(100, Math.max(0, (Number(stats.avgPercentile) / goalPercentile) * 100 || 0))}%` }}></div>
               </div>
               <div className="flex justify-end w-full mt-1.5">
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-0.5 group">
@@ -1031,7 +1034,7 @@ export default function Dashboard() {
                                const { x, y, width, value, payload } = props;
                                if (x == null || y == null || width == null || !value) return null;
                                return (
-                                 <text x={x + width / 2} y={y - 5} className="fill-slate-700 dark:fill-white" fontSize={10} fontWeight={700} textAnchor="middle">
+                                 <text x={x + width / 2} y={y - 5} fill="#ffffff" fontSize={10} fontWeight={700} textAnchor="middle">
                                    {value > 0 ? value : ''}
                                  </text>
                                );
@@ -1284,6 +1287,10 @@ export default function Dashboard() {
               </div>
             )}
           </button>
+
+          {showRecycleBin && (
+            <span className="text-[10px] text-rose-500 font-medium bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800/50 px-2 py-1 rounded">Auto deleted in 15 days</span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 ml-auto">
@@ -1298,10 +1305,10 @@ export default function Dashboard() {
           {deletedMocks.length > 0 && (
             <button
               onClick={() => setShowRecycleBin(!showRecycleBin)}
-              className={`p-2 border rounded-lg transition-colors flex items-center justify-center text-xs font-medium ${showRecycleBin ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
+              className={`p-2 border rounded-lg transition-colors flex items-center justify-center text-xs font-medium ${showRecycleBin ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'}`}
               title={showRecycleBin ? "Close Recycle Bin" : "Open Recycle Bin"}
             >
-              <Trash2 className="w-4 h-4" />
+              {showRecycleBin ? <History className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
             </button>
           )}
         </div>
@@ -1359,7 +1366,7 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300 text-center align-middle">
                        <div className="flex flex-col items-center gap-1">
-                         <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-md text-xs font-semibold whitespace-nowrap">
+                         <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-transparent rounded-md text-xs font-semibold whitespace-nowrap theme-exam-badge">
                            {mock.examType}
                          </span>
                          {mock.examRole && <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-medium whitespace-nowrap">{mock.examRole}</span>}

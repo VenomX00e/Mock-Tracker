@@ -736,43 +736,43 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
             ) : (
               <div className="space-y-5">
                 {/* Overall Performance */}
-                <div className="bg-indigo-50/50 dark:bg-indigo-950/10 p-5 sm:p-6 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-5">
+                <div className="bg-slate-50/50 dark:bg-slate-900/40 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 opacity-5 text-slate-500">
                     <Activity className="w-32 h-32" />
                   </div>
-                  <h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-300 mb-4 inline-flex items-center gap-2 relative z-10">
-                    <BarChart3 className="w-4 h-4" /> Overall Performance
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 inline-flex items-center gap-2 relative z-10">
+                    <BarChart3 className="w-4 h-4 text-slate-500" /> Overall Performance
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-5 relative z-10">
                     <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                      <label className="text-[11px] font-bold text-indigo-600/70 dark:text-indigo-400/70 uppercase tracking-widest pl-1">Score</label>
+                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Score</label>
                       <input autoComplete="off"   
                         type="search" inputMode="decimal" step="0.01"
                         name="score"
                         value={formData.score ?? ''}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm"
+                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
                         required
                       />
                     </div>
                     <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                      <label className="text-[11px] font-bold text-indigo-600/70 dark:text-indigo-400/70 uppercase tracking-widest pl-1">Percentile</label>
+                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Percentile</label>
                       <input autoComplete="off"   
                         type="search" inputMode="decimal" step="0.01"
                         name="percentile"
                         value={formData.percentile ?? ''}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm"
+                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
                       />
                     </div>
                     <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                      <label className="text-[11px] font-bold text-indigo-600/70 dark:text-indigo-400/70 uppercase tracking-widest pl-1">Accuracy %</label>
+                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Accuracy %</label>
                       <input autoComplete="off"   
                         type="search" inputMode="decimal" step="0.01"
                         name="accuracy"
                         value={formData.accuracy ?? ''}
                         onChange={handleChange}
-                        className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm"
+                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
                       />
                     </div>
                   </div>

@@ -119,7 +119,7 @@ export function HomeView() {
         <div className="hidden md:flex justify-end w-full">
           <div className="flex items-center gap-3">
             <div className="flex bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 rounded-full p-1 gap-1">
-              {theme.startsWith("cyber") && (
+              {(theme.startsWith("cyber") || theme === "hero-miles") && (
                 <div className="flex items-center gap-1.5 px-2 border-r border-slate-200 dark:border-slate-700 mr-1">
                   {[
                     {
@@ -130,32 +130,42 @@ export function HomeView() {
                     { id: theme.includes("-light") ? "cyber-lavender-light" : "cyber-lavender", bg: "bg-[#a855f7]" },
                     { id: theme.includes("-light") ? "cyber-pink-light" : "cyber-pink", bg: "bg-[#ec4899]" },
                     { id: theme.includes("-light") ? "cyber-orange-light" : "cyber-orange", bg: "bg-[#f97316]" },
+{ id: "hero-miles", bg: "bg-gradient-to-br from-[#ea3323] via-[#ea3323] to-black" },
                   ].map((color) => (
                     <button
                       key={color.id}
                       onClick={() => setTheme(color.id as any)}
-                      className={`w-4 h-4 rounded-full ${color.bg} ${theme === color.id ? "ring-2 ring-offset-1 ring-indigo-500 dark:ring-indigo-400 dark:ring-offset-slate-900 border border-white" : "opacity-60 hover:opacity-100 hover:scale-110 transition-all"}`}
+                      className={`w-4 h-4 rounded-full flex items-center justify-center overflow-hidden relative ${color.bg} ${theme === color.id ? "ring-2 ring-offset-1 ring-indigo-500 dark:ring-indigo-400 dark:ring-offset-slate-900 border border-white" : "opacity-60 hover:opacity-100 hover:scale-110 transition-all"}`}
                       title={"Select " + color.id.split('-').join(' ') + " color"}
-                    />
+                    >
+                      {color.id === "hero-miles" && (
+                        <svg viewBox="0 0 24 24" className="w-[14px] h-[14px] absolute opacity-50 pointer-events-none stroke-white" style={{ fill: 'none', strokeWidth: 1 }}>
+                          <path d="M12 0v24M0 12h24M3 3l18 18M3 21L21 3" />
+                          <circle cx="12" cy="12" r="4" />
+                          <circle cx="12" cy="12" r="8" />
+                          <circle cx="12" cy="12" r="12" />
+                        </svg>
+                      )}
+                    </button>
                   ))}
                 </div>
               )}
 
               <button
                 onClick={() => {
-                  if (theme.startsWith("cyber")) {
+                  if ((theme.startsWith("cyber") || theme === "hero-miles")) {
                     setTheme(theme.includes("-light") ? "light" : "dark");
                   } else {
                     setTheme(theme === "light" ? "cyber-light" : "cyber");
                   }
                 }}
                 className={`p-2 rounded-full transition-colors flex ${
-                  theme.startsWith("cyber")
+                  (theme.startsWith("cyber") || theme === "hero-miles")
                     ? "text-indigo-600 bg-indigo-50/80 dark:text-indigo-400 dark:bg-indigo-900/40"
                     : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700"
                 }`}
                 title={
-                  theme.startsWith("cyber")
+                  (theme.startsWith("cyber") || theme === "hero-miles")
                     ? "Exit Gamer Mode"
                     : "Enter Gamer Mode"
                 }
@@ -165,20 +175,22 @@ export function HomeView() {
 
               <button
                 onClick={() => {
-                  if (theme.startsWith("cyber")) {
-                    if (theme.includes("-light")) {
-                      setTheme(theme.replace("-light", "") as any);
-                    } else {
-                      setTheme((theme === "cyber" ? "cyber-light" : theme + "-light") as any);
-                    }
-                  } else {
+                  if (theme.startsWith("cyber") || theme === "hero-miles") {
+      if (theme === "hero-miles") {
+        setTheme("light"); // Fallback since hero-miles has no light mode
+      } else if (theme.includes("-light")) {
+        setTheme(theme.replace("-light", "") as any);
+      } else {
+        setTheme((theme === "cyber" ? "cyber-light" : theme + "-light") as any);
+      }
+    } else {
                     setTheme(theme === "light" ? "dark" : "light");
                   }
                 }}
                 className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-full transition-colors flex"
                 title="Toggle Theme"
               >
-                {theme === "dark" || (theme.startsWith("cyber") && !theme.includes("-light")) ? (
+                {theme === "dark" || ((theme.startsWith("cyber") || theme === "hero-miles") && !theme.includes("-light")) ? (
                   <Sun className="w-5 h-5" />
                 ) : (
                   <Moon className="w-5 h-5" />

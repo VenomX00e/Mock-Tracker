@@ -18,6 +18,7 @@ import Navigation from './components/Navigation';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/views/HomeView';
+import { CountdownsPage } from './components/views/CountdownsPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import AddMockDialog from './components/AddMockDialog';
@@ -36,7 +37,7 @@ function AppContent() {
 
   useEffect(() => {
     if (prevTab.current === activeTab) return;
-    const tabOrder = ['home', 'dashboard', 'tasks', 'add-mock', 'admin', 'community', 'profile'];
+    const tabOrder = ['home', 'dashboard', 'countdowns', 'tasks', 'add-mock', 'admin', 'community', 'profile'];
     const oldIndex = tabOrder.indexOf(prevTab.current);
     const newIndex = tabOrder.indexOf(activeTab);
     
@@ -108,8 +109,8 @@ function AppContent() {
         </div>
         
         {/* Main Layout */}
-        <main className={`flex-1 ${['admin', 'profile'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'} px-[15px] sm:px-6 lg:px-8 py-8 pt-6 pb-24 md:pb-8 w-full flex flex-col min-h-0`}>
-          <div className={`max-w-full mx-auto w-full ${['admin', 'profile'].includes(activeTab) ? 'h-full min-h-0' : ''} flex flex-col animate-slide-in-right`} ref={contentRef}>
+        <main className={`flex-1 ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'} px-[15px] sm:px-6 lg:px-8 py-8 pt-6 pb-24 md:pb-8 w-full flex flex-col min-h-0`}>
+          <div className={`max-w-full mx-auto w-full ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'h-full min-h-0' : ''} flex flex-col animate-slide-in-right`} ref={contentRef}>
             {!user ? (
               <AuthView />
             ) : mocksLoading ? (
@@ -130,7 +131,7 @@ function AppContent() {
                   </>
                 )}
 
-            <section className={`w-full flex-1 ${['admin', 'profile'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
+            <section className={`w-full flex-1 ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
               <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
                 <div className="w-full">
                   <Dashboard />
@@ -138,7 +139,7 @@ function AppContent() {
               </div>
 
               {activeTab !== 'dashboard' && (
-                <div className={`w-full flex-1 ${['admin', 'profile'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
+                <div className={`w-full flex-1 ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
                   {activeTab === 'admin' && isAdmin ? (
                       <AdminDialog
                         isOpen={true}
@@ -207,6 +208,8 @@ function AppContent() {
                       />
                     ) : activeTab === 'community' ? (
                       <CommunityHub />
+                    ) : activeTab === 'countdowns' ? (
+                      <CountdownsPage />
                     ) : null}
                 </div>
               )}

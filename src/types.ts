@@ -51,6 +51,7 @@ export interface ReflectionTask {
   completedParts?: number;
   totalParts?: number;
   createdAt?: string;
+  completedAt?: string;
 }
 
 export interface MockScore {

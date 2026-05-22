@@ -3,16 +3,13 @@ import { useSystemDataCtx, useAppStateCtx } from '../../context/AppContext';
 import { useUIStore } from '../../store/uiStore';
 import { CountdownCard } from '../CountdownCard';
 import { ChevronRight } from 'lucide-react';
-import { AllCountdownsModal } from './AllCountdownsModal';
-import { AnimatePresence } from 'motion/react';
 
 export function CountdownsSection() {
   const { countdowns, pinnedCountdowns, selectedCategory, togglePin } = useSystemDataCtx();
-  const { activeTab, setAdminEditCountdown, setAdminTab, setIsAdminModalOpen } = useUIStore();
+  const { activeTab, setAdminEditCountdown, setAdminTab, setIsAdminModalOpen, setActiveTab } = useUIStore();
   const { adminPermissions } = useAppStateCtx();
 
   const [tappedCountdownId, setTappedCountdownId] = useState<string | null>(null);
-  const [isAllOpen, setIsAllOpen] = useState(false);
   const countdownsRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(new Date().getTime());
 
@@ -66,7 +63,7 @@ export function CountdownsSection() {
   return (
     <div className="relative mb-6">
       <button 
-        onClick={() => setIsAllOpen(true)}
+        onClick={() => setActiveTab('countdowns')}
         className="absolute top-1/2 -translate-y-1/2 -right-2 md:-right-4 z-10 bg-white/80 dark:bg-slate-800/80  text-slate-600 dark:text-slate-300 p-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
         title="View All Countdowns"
       >
@@ -90,24 +87,6 @@ export function CountdownsSection() {
           />
         ))}
       </div>
-
-      <AnimatePresence>
-        {isAllOpen && (
-          <AllCountdownsModal 
-            countdowns={filteredCountdowns}
-            now={now}
-            onClose={() => setIsAllOpen(false)}
-            tappedCountdownId={tappedCountdownId}
-            setTappedCountdownId={setTappedCountdownId}
-            pinnedCountdowns={pinnedCountdowns}
-            canManageCountdowns={adminPermissions?.canManageCountdowns || false}
-            togglePin={togglePin}
-            setAdminEditCountdown={setAdminEditCountdown}
-            setAdminTab={setAdminTab}
-            setIsAdminModalOpen={setIsAdminModalOpen}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

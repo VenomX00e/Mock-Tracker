@@ -102,6 +102,17 @@ input[type="search"]::-webkit-search-results-decoration {
 /* Cyberpunk / Gamer Theme Overrides */
 
 /* Neon Color Variables */
+
+:is(html.hero-miles) {
+  --neon-rgb: 234, 51, 35;
+  --neon-hex-rgb: 234, 51, 35;
+  --neon-hex: #ea3323;
+  --neon-dark: #b31b1b;
+  --neon-text: #fcfcfc;
+  --neon-muted: #a3a3a3;
+  --bg-base: #08080a;
+  --bg-card: rgba(18, 18, 22, 0.98);
+}
 :is(html.cyber, html.cyber-light) {
   --neon-rgb: 14, 165, 233;
   --bg-base: #0b132b;
@@ -158,7 +169,8 @@ input[type="search"]::-webkit-search-results-decoration {
   html.cyber-green,
   html.cyber-lavender,
   html.cyber-pink,
-  html.cyber-orange
+  html.cyber-orange,
+    html.hero-miles
 ) {
   background-color: var(--bg-base) !important; /* Deep rich blue */
   color: var(--neon-text);
@@ -169,7 +181,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   body,
 :is(
@@ -177,7 +190,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   #root,
 :is(
@@ -185,7 +199,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="bg-[#0f172a]"],
 :is(
@@ -193,7 +208,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:bg-\[\#0f172a\] {
   background-color: transparent !important;
@@ -205,8 +221,8 @@ input[type="search"]::-webkit-search-results-decoration {
   html.cyber-green,
   html.cyber-lavender,
   html.cyber-pink,
-  html.cyber-orange
-)::before {
+  html.cyber-orange,
+    )::before {
   content: "";
   position: fixed;
   top: 0;
@@ -232,7 +248,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:bg-slate-900,
 :is(
@@ -240,7 +257,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:bg-slate-800,
 :is(
@@ -248,7 +266,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-slate-900"],
 :is(
@@ -256,7 +275,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-slate-800"],
 :is(
@@ -264,7 +284,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-white,
 :is(
@@ -272,7 +293,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="bg-gradient-to-br"]:not(.bg-clip-text) {
   background-color: var(--bg-card) !important;
@@ -289,7 +311,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .fixed.inset-0.bg-slate-900\/50,
 :is(
@@ -297,7 +320,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="bg-slate-900/50"],
 :is(
@@ -305,7 +329,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="bg-[#0f172a]/50"],
 :is(
@@ -313,7 +338,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="bg-slate-50/50"] {
   backdrop-filter: blur(4px) !important;
@@ -325,7 +351,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .text-slate-800,
 :is(
@@ -333,7 +360,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .text-slate-900,
 :is(
@@ -341,7 +369,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:text-slate-100,
 :is(
@@ -349,7 +378,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:text-white,
 :is(
@@ -357,7 +387,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:text-white"],
 :is(
@@ -365,7 +396,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:text-slate-100"],
 :is(
@@ -373,7 +405,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:text-slate-200"],
 :is(
@@ -381,7 +414,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:text-slate-300"] {
   color: var(--neon-text) !important;
@@ -392,7 +426,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   h1,
 :is(
@@ -400,7 +435,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   h2,
 :is(
@@ -408,7 +444,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   h3,
 :is(
@@ -416,7 +453,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   h4,
 :is(
@@ -424,7 +462,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   h5,
 :is(
@@ -432,7 +471,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   h6 {
   color: var(--neon-hex) !important;
@@ -465,7 +505,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   button.bg-white,
 :is(
@@ -473,7 +514,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   button.dark\:bg-slate-700,
 :is(
@@ -481,7 +523,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   button[class*="dark:bg-slate-700"],
 :is(
@@ -489,7 +532,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-white.dark\:bg-slate-700 {
   background-color: rgba(var(--neon-rgb), 0.1) !important;
@@ -505,7 +549,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   button.bg-white:hover,
 :is(
@@ -513,7 +558,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   button.dark\:bg-slate-700:hover,
 :is(
@@ -521,7 +567,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   button[class*="dark:bg-slate-700"]:hover,
 :is(
@@ -529,7 +576,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-white.dark\:bg-slate-700:hover {
   background-color: rgba(var(--neon-rgb), 0.2) !important;
@@ -545,7 +593,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-indigo-600,
 :is(
@@ -553,7 +602,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:bg-indigo-600,
 :is(
@@ -561,7 +611,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="from-indigo-500"]:not(.bg-clip-text),
 :is(
@@ -569,7 +620,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="from-blue-600"]:not(.bg-clip-text) {
   background: transparent !important;
@@ -587,7 +639,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="bg-gradient-to-r"]:not(.bg-clip-text) {
   background: transparent !important;
@@ -603,7 +656,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .notice-card-container {
   box-shadow:
@@ -630,7 +684,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .text-indigo-600,
 :is(
@@ -638,7 +693,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:text-indigo-400,
 :is(
@@ -646,7 +702,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .text-blue-600,
 :is(
@@ -654,7 +711,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:text-blue-400 {
   color: var(--neon-hex) !important;
@@ -667,7 +725,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .text-slate-500,
 :is(
@@ -675,7 +734,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .text-slate-400,
 :is(
@@ -683,7 +743,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:text-slate-500,
 :is(
@@ -691,7 +752,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:text-slate-400,
 :is(
@@ -699,7 +761,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="text-slate-500"],
 :is(
@@ -707,7 +770,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="text-slate-400"],
 :is(
@@ -715,7 +779,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:text-slate-500"],
 :is(
@@ -723,7 +788,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:text-slate-400"] {
   color: var(--neon-muted) !important;
@@ -735,7 +801,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-indigo-50,
 :is(
@@ -743,7 +810,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-indigo-100,
 :is(
@@ -751,7 +819,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-indigo-900/"],
 :is(
@@ -759,7 +828,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-indigo-500/"] {
   background-color: rgba(var(--neon-rgb), 0.15) !important;
@@ -772,7 +842,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-emerald-50,
 :is(
@@ -780,7 +851,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-emerald-900/"] {
   background-color: rgba(16, 185, 129, 0.15) !important;
@@ -793,7 +865,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-orange-50,
 :is(
@@ -801,7 +874,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-orange-900/"] {
   background-color: rgba(249, 115, 22, 0.15) !important;
@@ -814,7 +888,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-lime-50,
 :is(
@@ -822,7 +897,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-lime-900/"] {
   background-color: rgba(132, 204, 22, 0.15) !important;
@@ -835,7 +911,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-rose-50,
 :is(
@@ -843,7 +920,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-rose-900/"] {
   background-color: rgba(244, 63, 94, 0.15) !important;
@@ -856,7 +934,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-red-50,
 :is(
@@ -864,7 +943,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-red-900/"] {
   background-color: rgba(239, 68, 68, 0.15) !important;
@@ -878,7 +958,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-slate-100.dark\:bg-slate-800,
 :is(
@@ -886,7 +967,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-slate-700/"],
 :is(
@@ -894,7 +976,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="hover:bg-slate-700/"],
 :is(
@@ -902,7 +985,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   span.dark\:bg-slate-800,
 :is(
@@ -910,7 +994,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   div.text-sm.dark\:bg-slate-800 {
   background-color: rgba(var(--neon-rgb), 0.1) !important;
@@ -922,7 +1007,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .border-slate-100,
 :is(
@@ -930,7 +1016,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:border-slate-800,
 :is(
@@ -938,7 +1025,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .dark\:border-slate-700,
 :is(
@@ -946,7 +1034,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:border-slate-800"],
 :is(
@@ -954,7 +1043,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:border-slate-700"] {
   border-color: rgba(var(--neon-rgb), 0.1) !important;
@@ -1073,7 +1163,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-blue-50,
 :is(
@@ -1081,7 +1172,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-blue-900/"] {
   background-color: rgba(59, 130, 246, 0.15) !important;
@@ -1094,7 +1186,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-purple-50,
 :is(
@@ -1102,7 +1195,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-purple-900/"] {
   background-color: rgba(168, 85, 247, 0.15) !important;
@@ -1115,7 +1209,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   .bg-amber-50,
 :is(
@@ -1123,7 +1218,8 @@ input[type="search"]::-webkit-search-results-decoration {
     html.cyber-green,
     html.cyber-lavender,
     html.cyber-pink,
-    html.cyber-orange
+    html.cyber-orange,
+    html.hero-miles
   )
   [class*="dark:bg-amber-900/"] {
   background-color: rgba(245, 158, 11, 0.15) !important;
@@ -1133,75 +1229,118 @@ input[type="search"]::-webkit-search-results-decoration {
 
 /* --- GENERIC CYBER THEME OVERRIDES --- */
 /* Fix grey text shades that got missed */
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .text-slate-600,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .text-slate-700,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:text-slate-600"],
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:text-slate-700"] {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) .text-slate-600,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) .text-slate-700,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="dark:text-slate-600"],
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="dark:text-slate-700"] {
   color: var(--neon-muted) !important;
 }
 
 /* Ensure all primary (indigo) UI elements map to the neon accent */
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="text-indigo-"]:not([class*="hover"]),
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:text-indigo-"]:not([class*="hover"]) {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) .theme-exam-badge {
+  background-color: rgba(var(--neon-rgb), 0.15) !important;
+  color: var(--neon-hex) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.4) !important;
+  box-shadow: 0 0 10px rgba(var(--neon-rgb), 0.15) !important;
+}
+
+:is(html[class*="-light"]) .theme-exam-badge {
+  background-color: rgba(var(--neon-rgb), 0.1) !important;
+  color: rgba(var(--neon-rgb), 0.9) !important;
+  border: 1px solid rgba(var(--neon-rgb), 0.4) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) :is(
+  .text-indigo-50, .text-indigo-100, .text-indigo-200, .text-indigo-300, .text-indigo-400, .text-indigo-500, .text-indigo-600, .text-indigo-700, .text-indigo-800, .text-indigo-900,
+  .dark\:text-indigo-50, .dark\:text-indigo-100, .dark\:text-indigo-200, .dark\:text-indigo-300, .dark\:text-indigo-400, .dark\:text-indigo-500, .dark\:text-indigo-600, .dark\:text-indigo-700, .dark\:text-indigo-800, .dark\:text-indigo-900
+) {
   color: var(--neon-hex) !important;
 }
 
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:text-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:text-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="group-hover:text-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:group-hover:text-indigo-"]:hover {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) :is(
+  .hover\:text-indigo-50:hover, .hover\:text-indigo-100:hover, .hover\:text-indigo-200:hover, .hover\:text-indigo-300:hover, .hover\:text-indigo-400:hover, .hover\:text-indigo-500:hover, .hover\:text-indigo-600:hover, .hover\:text-indigo-700:hover, .hover\:text-indigo-800:hover, .hover\:text-indigo-900:hover,
+  .dark\:hover\:text-indigo-50:hover, .dark\:hover\:text-indigo-100:hover, .dark\:hover\:text-indigo-200:hover, .dark\:hover\:text-indigo-300:hover, .dark\:hover\:text-indigo-400:hover, .dark\:hover\:text-indigo-500:hover, .dark\:hover\:text-indigo-600:hover, .dark\:hover\:text-indigo-700:hover, .dark\:hover\:text-indigo-800:hover, .dark\:hover\:text-indigo-900:hover,
+  .group-hover\:text-indigo-50:hover, .group-hover\:text-indigo-100:hover, .group-hover\:text-indigo-200:hover, .group-hover\:text-indigo-300:hover, .group-hover\:text-indigo-400:hover, .group-hover\:text-indigo-500:hover, .group-hover\:text-indigo-600:hover, .group-hover\:text-indigo-700:hover, .group-hover\:text-indigo-800:hover, .group-hover\:text-indigo-900:hover,
+  .dark\:group-hover\:text-indigo-50:hover, .dark\:group-hover\:text-indigo-100:hover, .dark\:group-hover\:text-indigo-200:hover, .dark\:group-hover\:text-indigo-300:hover, .dark\:group-hover\:text-indigo-400:hover, .dark\:group-hover\:text-indigo-500:hover, .dark\:group-hover\:text-indigo-600:hover, .dark\:group-hover\:text-indigo-700:hover, .dark\:group-hover\:text-indigo-800:hover, .dark\:group-hover\:text-indigo-900:hover
+) {
   color: var(--neon-hex) !important;
 }
 
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="border-indigo-"]:not([class*="hover"]),
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:border-indigo-"]:not([class*="hover"]) {
-  border-color: rgba(var(--neon-rgb), 0.5) !important;
-}
-
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:border-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:border-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="group-hover:border-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:group-hover:border-indigo-"]:hover {
-  border-color: rgba(var(--neon-rgb), 0.5) !important;
-}
-
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-indigo-"]:not([class*="hover"]),
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:bg-indigo-"]:not([class*="hover"]) {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) :is(
+  .bg-indigo-50, .bg-indigo-100, .bg-indigo-200, .bg-indigo-300, .bg-indigo-400, .bg-indigo-500, .bg-indigo-600, .bg-indigo-700, .bg-indigo-800, .bg-indigo-900,
+  .dark\:bg-indigo-50, .dark\:bg-indigo-100, .dark\:bg-indigo-200, .dark\:bg-indigo-300, .dark\:bg-indigo-400, .dark\:bg-indigo-500, .dark\:bg-indigo-600, .dark\:bg-indigo-700, .dark\:bg-indigo-800, .dark\:bg-indigo-900
+) {
   background-color: rgba(var(--neon-rgb), 0.15) !important;
   color: var(--neon-text) !important;
   border-color: rgba(var(--neon-rgb), 0.3) !important;
 }
 
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:bg-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:bg-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="group-hover:bg-indigo-"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:group-hover:bg-indigo-"]:hover {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) :is(
+  .hover\:bg-indigo-50:hover, .hover\:bg-indigo-100:hover, .hover\:bg-indigo-200:hover, .hover\:bg-indigo-300:hover, .hover\:bg-indigo-400:hover, .hover\:bg-indigo-500:hover, .hover\:bg-indigo-600:hover, .hover\:bg-indigo-700:hover, .hover\:bg-indigo-800:hover, .hover\:bg-indigo-900:hover,
+  .dark\:hover\:bg-indigo-50:hover, .dark\:hover\:bg-indigo-100:hover, .dark\:hover\:bg-indigo-200:hover, .dark\:hover\:bg-indigo-300:hover, .dark\:hover\:bg-indigo-400:hover, .dark\:hover\:bg-indigo-500:hover, .dark\:hover\:bg-indigo-600:hover, .dark\:hover\:bg-indigo-700:hover, .dark\:hover\:bg-indigo-800:hover, .dark\:hover\:bg-indigo-900:hover,
+  .group-hover\:bg-indigo-50:hover, .group-hover\:bg-indigo-100:hover, .group-hover\:bg-indigo-200:hover, .group-hover\:bg-indigo-300:hover, .group-hover\:bg-indigo-400:hover, .group-hover\:bg-indigo-500:hover, .group-hover\:bg-indigo-600:hover, .group-hover\:bg-indigo-700:hover, .group-hover\:bg-indigo-800:hover, .group-hover\:bg-indigo-900:hover,
+  .dark\:group-hover\:bg-indigo-50:hover, .dark\:group-hover\:bg-indigo-100:hover, .dark\:group-hover\:bg-indigo-200:hover, .dark\:group-hover\:bg-indigo-300:hover, .dark\:group-hover\:bg-indigo-400:hover, .dark\:group-hover\:bg-indigo-500:hover, .dark\:group-hover\:bg-indigo-600:hover, .dark\:group-hover\:bg-indigo-700:hover, .dark\:group-hover\:bg-indigo-800:hover, .dark\:group-hover\:bg-indigo-900:hover
+) {
   background-color: rgba(var(--neon-rgb), 0.25) !important;
   color: var(--neon-text) !important;
 }
 
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) :is(
+  .border-indigo-50, .border-indigo-100, .border-indigo-200, .border-indigo-300, .border-indigo-400, .border-indigo-500, .border-indigo-600, .border-indigo-700, .border-indigo-800, .border-indigo-900,
+  .dark\:border-indigo-50, .dark\:border-indigo-100, .dark\:border-indigo-200, .dark\:border-indigo-300, .dark\:border-indigo-400, .dark\:border-indigo-500, .dark\:border-indigo-600, .dark\:border-indigo-700, .dark\:border-indigo-800, .dark\:border-indigo-900
+) {
+  border-color: rgba(var(--neon-rgb), 0.5) !important;
+}
+
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange, html.hero-miles) :is(
+  .hover\:border-indigo-50:hover, .hover\:border-indigo-100:hover, .hover\:border-indigo-200:hover, .hover\:border-indigo-300:hover, .hover\:border-indigo-400:hover, .hover\:border-indigo-500:hover, .hover\:border-indigo-600:hover, .hover\:border-indigo-700:hover, .hover\:border-indigo-800:hover, .hover\:border-indigo-900:hover,
+  .dark\:hover\:border-indigo-50:hover, .dark\:hover\:border-indigo-100:hover, .dark\:hover\:border-indigo-200:hover, .dark\:hover\:border-indigo-300:hover, .dark\:hover\:border-indigo-400:hover, .dark\:hover\:border-indigo-500:hover, .dark\:hover\:border-indigo-600:hover, .dark\:hover\:border-indigo-700:hover, .dark\:hover\:border-indigo-800:hover, .dark\:hover\:border-indigo-900:hover,
+  .group-hover\:border-indigo-50:hover, .group-hover\:border-indigo-100:hover, .group-hover\:border-indigo-200:hover, .group-hover\:border-indigo-300:hover, .group-hover\:border-indigo-400:hover, .group-hover\:border-indigo-500:hover, .group-hover\:border-indigo-600:hover, .group-hover\:border-indigo-700:hover, .group-hover\:border-indigo-800:hover, .group-hover\:border-indigo-900:hover,
+  .dark\:group-hover\:border-indigo-50:hover, .dark\:group-hover\:border-indigo-100:hover, .dark\:group-hover\:border-indigo-200:hover, .dark\:group-hover\:border-indigo-300:hover, .dark\:group-hover\:border-indigo-400:hover, .dark\:group-hover\:border-indigo-500:hover, .dark\:group-hover\:border-indigo-600:hover, .dark\:group-hover\:border-indigo-700:hover, .dark\:group-hover\:border-indigo-800:hover, .dark\:group-hover\:border-indigo-900:hover
+) {
+  border-color: rgba(var(--neon-rgb), 0.5) !important;
+}
+
 /* Fix active and hover rows in tables */
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="hover:bg-slate-50/"]:hover,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:hover:bg-slate-700/"]:hover {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="hover:bg-slate-50/"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="hover:bg-slate-100"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="dark:hover:bg-slate-700/"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="dark:hover:bg-slate-800"]:hover {
   background-color: rgba(var(--neon-rgb), 0.1) !important;
 }
 
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .bg-slate-50\/80,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .dark\:bg-slate-700\/50,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-slate-50/80"],
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:bg-slate-700/50"] {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) .bg-slate-50\/80,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) .dark\:bg-slate-700\/50,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="bg-slate-50/80"],
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="dark:bg-slate-700/50"] {
   background-color: rgba(var(--neon-rgb), 0.15) !important;
 }
 
 /* Fix expanded row */
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="dark:bg-slate-900/40"],
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-slate-50/50"] {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="dark:bg-slate-900/40"],
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="bg-slate-50/50"] {
   background-color: var(--bg-card) !important;
 }
 
 /* Fix nav buttons */
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) .bg-white.dark\:bg-slate-700,
-:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange) [class*="bg-white dark:bg-slate-700"] {
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) .bg-white.dark\:bg-slate-700,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="bg-white dark:bg-slate-700"] {
   background-color: rgba(var(--neon-rgb), 0.1) !important;
   border: 1px solid rgba(var(--neon-rgb), 0.5) !important;
   box-shadow: 0 0 15px rgba(var(--neon-rgb), 0.2), inset 0 0 5px rgba(var(--neon-rgb), 0.1) !important;
@@ -1271,14 +1410,16 @@ input[type="search"]::-webkit-search-results-decoration {
   filter: drop-shadow(0 0 8px var(--neon-dark));
 }
 
-:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn {
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn,
+html.hero-miles .neon-telegram-btn {
   background: transparent !important;
   background-color: rgba(var(--neon-rgb), 0.05) !important;
   color: var(--neon-hex) !important;
   border: 1px solid rgba(var(--neon-rgb), 0.3) !important;
 }
 
-:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn:hover {
+:is(html[class*="cyber"]):not(html[class*="-light"]) .neon-telegram-btn:hover,
+html.hero-miles .neon-telegram-btn:hover {
   background-color: rgba(var(--neon-rgb), 0.15) !important;
   box-shadow: 0 0 10px rgba(var(--neon-rgb), 0.2) !important;
 }
@@ -1319,3 +1460,37 @@ input[type="search"]::-webkit-search-results-decoration {
   border-top-color: rgba(255, 255, 255, 0.85) !important;
 }
 
+
+
+/* Background grid stays fixed */
+:is(
+  html.hero-miles
+)::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url("data:image/svg+xml,%3Csvg%20width%3D%27100%25%27%20height%3D%27100%25%27%20viewBox%3D%270%200%201000%201000%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%3E%3Cstyle%3E%0A%20%20%20%20.spoke%20%7B%20stroke%3A%20rgb(234%2C%2051%2C%2035)%3B%20stroke-width%3A%202%3B%20stroke-opacity%3A%200.10%3B%20fill%3A%20none%3B%20%7D%0A%20%20%20%20.ring%20%7B%20stroke%3A%20rgb(234%2C%2051%2C%2035)%3B%20stroke-width%3A%202%3B%20stroke-opacity%3A%200.12%3B%20fill%3A%20none%3B%20%7D%0A%20%20%3C%2Fstyle%3E%3Cline%20x1%3D%27525%27%20y1%3D%27500%27%20x2%3D%271000%27%20y2%3D%27500%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27523.0969883127822%27%20y1%3D%27509.56708580912726%27%20x2%3D%27961.9397662556433%27%20y2%3D%27691.3417161825449%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27517.6776695296637%27%20y1%3D%27517.6776695296637%27%20x2%3D%27853.5533905932738%27%20y2%3D%27853.5533905932737%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27509.56708580912726%27%20y1%3D%27523.0969883127822%27%20x2%3D%27691.3417161825449%27%20y2%3D%27961.9397662556433%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27500%27%20y1%3D%27525%27%20x2%3D%27500.00000000000006%27%20y2%3D%271000%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27490.43291419087274%27%20y1%3D%27523.0969883127822%27%20x2%3D%27308.65828381745513%27%20y2%3D%27961.9397662556433%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27482.32233047033634%27%20y1%3D%27517.6776695296637%27%20x2%3D%27146.44660940672628%27%20y2%3D%27853.5533905932738%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27476.9030116872178%27%20y1%3D%27509.56708580912726%27%20x2%3D%2738.06023374435665%27%20y2%3D%27691.3417161825449%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27475%27%20y1%3D%27500%27%20x2%3D%270%27%20y2%3D%27500.00000000000006%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27476.9030116872178%27%20y1%3D%27490.43291419087274%27%20x2%3D%2738.060233744356594%27%20y2%3D%27308.6582838174552%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27482.3223304703363%27%20y1%3D%27482.32233047033634%27%20x2%3D%27146.44660940672617%27%20y2%3D%27146.44660940672628%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27490.43291419087274%27%20y1%3D%27476.9030116872178%27%20x2%3D%27308.65828381745484%27%20y2%3D%2738.060233744356765%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27500%27%20y1%3D%27475%27%20x2%3D%27499.9999999999999%27%20y2%3D%270%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27509.56708580912726%27%20y1%3D%27476.9030116872178%27%20x2%3D%27691.341716182545%27%20y2%3D%2738.06023374435671%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27517.6776695296637%27%20y1%3D%27482.3223304703363%27%20x2%3D%27853.5533905932737%27%20y2%3D%27146.44660940672617%27%20class%3D%27spoke%27%20%2F%3E%3Cline%20x1%3D%27523.0969883127822%27%20y1%3D%27490.43291419087274%27%20x2%3D%27961.9397662556432%27%20y2%3D%27308.65828381745484%27%20class%3D%27spoke%27%20%2F%3E%3Cpath%20d%3D%27M%20554.9704738628092%20500%20Q%20551.218520040362%20510.18799707491087%20550.786095694296%20521.0362896165552%20Q%20543.4209646612572%20529.0129610245009%20538.8699948334303%20538.8699948334303%20Q%20529.0129610245009%20543.4209646612572%20521.0362896165552%20550.786095694296%20Q%20510.18799707491087%20551.218520040362%20500%20554.9704738628092%20Q%20489.81200292508913%20551.218520040362%20478.9637103834447%20550.786095694296%20Q%20470.9870389754991%20543.4209646612572%20461.13000516656973%20538.8699948334303%20Q%20456.5790353387427%20529.0129610245009%20449.2139043057039%20521.0362896165552%20Q%20448.7814799596379%20510.18799707491087%20445.0295261371908%20500%20Q%20448.7814799596379%20489.81200292508913%20449.2139043057039%20478.9637103834447%20Q%20456.5790353387427%20470.9870389754991%20461.13000516656973%20461.13000516656973%20Q%20470.9870389754991%20456.5790353387427%20478.9637103834447%20449.213904305704%20Q%20489.81200292508913%20448.7814799596379%20500%20445.0295261371908%20Q%20510.18799707491087%20448.7814799596379%20521.0362896165553%20449.213904305704%20Q%20529.0129610245009%20456.5790353387427%20538.8699948334303%20461.13000516656973%20Q%20543.4209646612572%20470.9870389754991%20550.786095694296%20478.96371038344466%20Q%20551.218520040362%20489.8120029250891%20554.9704738628092%20500%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20593.8540680493811%20500%20Q%20587.4481540263563%20517.3945193403636%20586.7098525137447%20535.9163969025639%20Q%20574.1349652953338%20549.5354001332306%20566.3648479596611%20566.364847959661%20Q%20549.5354001332306%20574.1349652953338%20535.9163969025639%20586.7098525137447%20Q%20517.3945193403636%20587.4481540263563%20500%20593.8540680493811%20Q%20482.6054806596365%20587.4481540263563%20464.08360309743614%20586.7098525137447%20Q%20450.4645998667694%20574.1349652953338%20433.63515204033894%20566.3648479596611%20Q%20425.8650347046662%20549.5354001332306%20413.2901474862553%20535.9163969025639%20Q%20412.5518459736437%20517.3945193403636%20406.1459319506189%20500%20Q%20412.5518459736437%20482.6054806596365%20413.2901474862553%20464.08360309743614%20Q%20425.8650347046662%20450.4645998667694%20433.63515204033894%20433.63515204033894%20Q%20450.4645998667694%20425.8650347046662%20464.0836030974361%20413.2901474862553%20Q%20482.60548065963644%20412.5518459736437%20500%20406.1459319506189%20Q%20517.3945193403636%20412.5518459736437%20535.9163969025639%20413.2901474862553%20Q%20549.5354001332306%20425.8650347046662%20566.364847959661%20433.63515204033894%20Q%20574.1349652953338%20450.4645998667694%20586.7098525137446%20464.0836030974361%20Q%20587.4481540263563%20482.60548065963644%20593.8540680493811%20500%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20637.0054396975188%20500%20Q%20627.6542726609739%20525.3920135811227%20626.5765215792469%20552.4297119161348%20Q%20608.2200668372038%20572.3103368548184%20596.8774754695601%20596.8774754695601%20Q%20572.3103368548184%20608.2200668372038%20552.4297119161348%20626.5765215792469%20Q%20525.3920135811227%20627.6542726609739%20500%20637.0054396975188%20Q%20474.6079864188773%20627.6542726609739%20447.5702880838652%20626.5765215792469%20Q%20427.68966314518167%20608.2200668372038%20403.1225245304399%20596.8774754695601%20Q%20391.7799331627961%20572.3103368548184%20373.4234784207531%20552.4297119161348%20Q%20372.34572733902615%20525.3920135811227%20362.99456030248126%20500%20Q%20372.34572733902615%20474.6079864188773%20373.4234784207531%20447.5702880838652%20Q%20391.7799331627961%20427.68966314518167%20403.1225245304399%20403.1225245304399%20Q%20427.6896631451816%20391.77993316279617%20447.57028808386514%20373.4234784207531%20Q%20474.60798641887726%20372.34572733902615%20500%20362.99456030248126%20Q%20525.3920135811227%20372.34572733902615%20552.4297119161348%20373.4234784207531%20Q%20572.3103368548183%20391.7799331627961%20596.8774754695601%20403.1225245304399%20Q%20608.2200668372038%20427.6896631451816%20626.5765215792469%20447.57028808386514%20Q%20627.6542726609738%20474.60798641887726%20637.0054396975188%20499.99999999999994%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20683.1851094063559%20500%20Q%20670.6819959500688%20533.9507598835133%20669.240973241373%20570.1019064257988%20Q%20644.697209302817%20596.6835842226799%20629.5314330736339%20629.5314330736338%20Q%20596.68358422268%20644.697209302817%20570.1019064257988%20669.240973241373%20Q%20533.9507598835133%20670.6819959500688%20500%20683.1851094063559%20Q%20466.04924011648666%20670.6819959500688%20429.89809357420125%20669.240973241373%20Q%20403.3164157773201%20644.697209302817%20370.4685669263662%20629.5314330736339%20Q%20355.302790697183%20596.6835842226799%20330.759026758627%20570.1019064257988%20Q%20329.31800404993123%20533.9507598835135%20316.8148905936441%20500%20Q%20329.31800404993123%20466.0492401164866%20330.759026758627%20429.89809357420125%20Q%20355.302790697183%20403.3164157773201%20370.46856692636607%20370.4685669263662%20Q%20403.31641577732006%20355.302790697183%20429.89809357420114%20330.75902675862704%20Q%20466.04924011648654%20329.3180040499313%20499.99999999999994%20316.8148905936441%20Q%20533.9507598835133%20329.31800404993123%20570.1019064257988%20330.759026758627%20Q%20596.6835842226799%20355.302790697183%20629.5314330736338%20370.46856692636607%20Q%20644.697209302817%20403.31641577732006%20669.240973241373%20429.8980935742011%20Q%20670.6819959500688%20466.04924011648654%20683.1851094063559%20499.99999999999994%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20731.7557587828295%20500%20Q%20715.9375050197368%20542.9526403295326%20714.114402081079%20588.689089241389%20Q%20683.0629773588394%20622.3187708650808%20663.8760686143726%20663.8760686143725%20Q%20622.3187708650808%20683.0629773588394%20588.689089241389%20714.114402081079%20Q%20542.9526403295326%20715.9375050197368%20500%20731.7557587828295%20Q%20457.04735967046736%20715.9375050197368%20411.31091075861104%20714.114402081079%20Q%20377.68122913491936%20683.0629773588394%20336.12393138562754%20663.8760686143726%20Q%20316.93702264116064%20622.3187708650808%20285.885597918921%20588.689089241389%20Q%20284.0624949802632%20542.9526403295328%20268.2442412171705%20500%20Q%20284.0624949802632%20457.04735967046736%20285.88559791892095%20411.31091075861104%20Q%20316.93702264116064%20377.68122913491936%20336.1239313856275%20336.12393138562754%20Q%20377.6812291349193%20316.93702264116064%20411.3109107586109%20285.885597918921%20Q%20457.0473596704673%20284.06249498026324%20499.99999999999994%20268.2442412171705%20Q%20542.9526403295326%20284.0624949802632%20588.6890892413891%20285.885597918921%20Q%20622.3187708650806%20316.93702264116064%20663.8760686143725%20336.1239313856275%20Q%20683.0629773588394%20377.6812291349193%20714.114402081079%20411.3109107586109%20Q%20715.9375050197368%20457.04735967046724%20731.7557587828295%20499.99999999999994%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20782.3209286625188%20500%20Q%20763.0514006228705%20552.32417684043%20760.8305275908801%20608.0395420090723%20Q%20723.004209444923%20649.0066489171787%20699.6310431281506%20699.6310431281505%20Q%20649.0066489171787%20723.004209444923%20608.0395420090724%20760.8305275908801%20Q%20552.32417684043%20763.0514006228705%20500%20782.3209286625188%20Q%20447.67582315957003%20763.0514006228705%20391.9604579909277%20760.8305275908801%20Q%20350.99335108282133%20723.004209444923%20300.3689568718495%20699.6310431281506%20Q%20276.99579055507695%20649.0066489171787%20239.1694724091198%20608.0395420090724%20Q%20236.9485993771296%20552.3241768404301%20217.67907133748122%20500.00000000000006%20Q%20236.9485993771296%20447.67582315957%20239.1694724091198%20391.9604579909277%20Q%20276.9957905550769%20350.99335108282133%20300.3689568718494%20300.3689568718495%20Q%20350.9933510828213%20276.99579055507695%20391.96045799092747%20239.16947240911986%20Q%20447.6758231595699%20236.9485993771296%20499.99999999999994%20217.67907133748122%20Q%20552.32417684043%20236.9485993771296%20608.0395420090724%20239.16947240911986%20Q%20649.0066489171786%20276.9957905550769%20699.6310431281505%20300.3689568718494%20Q%20723.004209444923%20350.9933510828213%20760.8305275908801%20391.96045799092747%20Q%20763.0514006228705%20447.67582315956986%20782.3209286625188%20499.99999999999994%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20834.6073467690335%20500%20Q%20811.7690624045551%20562.0147222786264%20809.1368791078166%20628.0486879561496%20Q%20764.3050488470501%20676.6029875338156%20736.6031239352222%20736.6031239352222%20Q%20676.6029875338156%20764.3050488470501%20628.0486879561496%20809.1368791078166%20Q%20562.0147222786264%20811.7690624045551%20500%20834.6073467690335%20Q%20437.9852777213736%20811.7690624045551%20371.9513120438504%20809.1368791078166%20Q%20323.39701246618444%20764.3050488470501%20263.39687606477776%20736.6031239352222%20Q%20235.6949511529499%20676.6029875338156%20190.8631208921833%20628.0486879561496%20Q%20188.23093759544486%20562.0147222786266%20165.39265323096646%20500.00000000000006%20Q%20188.23093759544486%20437.98527772137356%20190.86312089218325%20371.9513120438504%20Q%20235.6949511529499%20323.39701246618444%20263.39687606477776%20263.39687606477776%20Q%20323.3970124661844%20235.69495115294995%20371.95131204385024%20190.86312089218336%20Q%20437.98527772137345%20188.2309375954449%20499.99999999999994%20165.39265323096646%20Q%20562.0147222786264%20188.23093759544486%20628.0486879561497%20190.8631208921833%20Q%20676.6029875338155%20235.6949511529499%20736.6031239352221%20263.39687606477776%20Q%20764.3050488470501%20323.3970124661844%20809.1368791078166%20371.9513120438502%20Q%20811.7690624045551%20437.98527772137345%20834.6073467690335%20499.99999999999994%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20888.413949920214%20500%20Q%20861.9031505457722%20571.9870124372163%20858.8476984731496%20648.6395835339496%20Q%20806.8066765354075%20705.0016672319755%20774.6501378960354%20774.6501378960354%20Q%20705.0016672319756%20806.8066765354075%20648.6395835339497%20858.8476984731496%20Q%20571.9870124372163%20861.9031505457722%20500%20888.413949920214%20Q%20428.0129875627837%20861.9031505457722%20351.3604164660504%20858.8476984731496%20Q%20294.99833276802457%20806.8066765354076%20225.3498621039646%20774.6501378960354%20Q%20193.19332346459242%20705.0016672319755%20141.1523015268503%20648.6395835339497%20Q%20138.09684945422777%20571.9870124372164%20111.58605007978593%20500.00000000000006%20Q%20138.09684945422777%20428.0129875627836%20141.15230152685024%20351.3604164660504%20Q%20193.19332346459237%20294.99833276802457%20225.34986210396448%20225.3498621039646%20Q%20294.9983327680245%20193.19332346459248%20351.3604164660502%20141.15230152685035%20Q%20428.0129875627835%20138.09684945422782%20499.99999999999994%20111.58605007978593%20Q%20571.9870124372163%20138.09684945422777%20648.6395835339497%20141.15230152685035%20Q%20705.0016672319754%20193.19332346459237%20774.6501378960354%20225.34986210396448%20Q%20806.8066765354075%20294.9983327680245%20858.8476984731496%20351.36041646605014%20Q%20861.9031505457722%20428.0129875627835%20888.413949920214%20499.9999999999999%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%20943.5859249093176%20500%20Q%20913.3094184578558%20582.2123548857618%20909.8199569338071%20669.7529842931406%20Q%20850.3868061568555%20734.1209788827811%20813.6626155422852%20813.662615542285%20Q%20734.1209788827812%20850.3868061568555%20669.7529842931407%20909.8199569338071%20Q%20582.2123548857619%20913.3094184578558%20500%20943.5859249093176%20Q%20417.7876451142382%20913.3094184578558%20330.2470157068594%20909.8199569338071%20Q%20265.87902111721905%20850.3868061568555%20186.3373844577149%20813.6626155422852%20Q%20149.61319384314453%20734.1209788827811%2090.18004306619292%20669.7529842931407%20Q%2086.69058154214417%20582.212354885762%2056.41407509068239%20500.00000000000006%20Q%2086.69058154214417%20417.7876451142381%2090.18004306619287%20330.24701570685943%20Q%20149.61319384314447%20265.87902111721905%20186.3373844577148%20186.3373844577149%20Q%20265.87902111721894%20149.61319384314453%20330.2470157068591%2090.18004306619298%20Q%20417.787645114238%2086.69058154214423%20499.99999999999994%2056.41407509068239%20Q%20582.2123548857619%2086.69058154214417%20669.7529842931408%2090.18004306619292%20Q%20734.120978882781%20149.61319384314447%20813.662615542285%20186.3373844577148%20Q%20850.3868061568555%20265.87902111721894%20909.819956933807%20330.2470157068591%20Q%20913.3094184578558%20417.787645114238%20943.5859249093176%20499.9999999999999%27%20class%3D%27ring%27%20%2F%3E%3Cpath%20d%3D%27M%201000%20500%20Q%20965.8730081915344%20592.6679029576609%20961.9397662556433%20691.3417161825449%20Q%20894.948065843709%20763.8958606843111%20853.5533905932738%20853.5533905932737%20Q%20763.8958606843111%20894.948065843709%20691.3417161825449%20961.9397662556433%20Q%20592.667902957661%20965.8730081915344%20500.00000000000006%201000%20Q%20407.3320970423391%20965.8730081915344%20308.65828381745513%20961.9397662556433%20Q%20236.10413931568905%20894.9480658437091%20146.44660940672628%20853.5533905932738%20Q%20105.05193415629094%20763.8958606843111%2038.06023374435665%20691.3417161825449%20Q%2034.12699180846556%20592.6679029576611%200%20500.00000000000006%20Q%2034.12699180846556%20407.332097042339%2038.060233744356594%20308.6582838174552%20Q%20105.05193415629088%20236.10413931568905%20146.44660940672617%20146.44660940672628%20Q%20236.10413931568894%20105.051934156291%20308.65828381745484%2038.060233744356765%20Q%20407.3320970423389%2034.12699180846562%20499.9999999999999%200%20Q%20592.667902957661%2034.12699180846556%20691.341716182545%2038.06023374435671%20Q%20763.895860684311%20105.05193415629088%20853.5533905932737%20146.44660940672617%20Q%20894.948065843709%20236.10413931568894%20961.9397662556432%20308.65828381745484%20Q%20965.8730081915344%20407.3320970423389%201000%20499.9999999999999%27%20class%3D%27ring%27%20%2F%3E%3Cg%20transform%3D%27translate(423.2%2C%20429.2)%20scale(1.6)%27%3E%0A%20%20%20%20%3Cpath%20fill-rule%3D%27evenodd%27%20clip-rule%3D%27evenodd%27%20d%3D%27M50.4431%2044.6386L50.703%2044.1559C53.3391%2045.6906%2059.4431%2049.3762%2062.7698%2051.8416C62.745%2053.9208%2062.5247%2059.401%2061.8416%2064.6881C61.5322%2067.3243%2060.2599%2073.8589%2057.646%2078.9084C59.1435%2076.9158%2062.4876%2071.3713%2063.8836%2065.1337C64.3663%2063.3639%2065.4653%2058.0495%2066%2050.9505C63.1534%2049.3045%2056.1683%2045.5223%2051%2043.5619L51.3713%2042.7822C55.1955%2043.8342%2064.1287%2046.5025%2069.2673%2048.7599C69.1559%2051.4332%2068.495%2058.4505%2066.7426%2065.1337C65.8371%2068.5866%2063.3416%2077.4752%2056.2723%2086C56.3697%2085.8994%2056.4882%2085.78%2056.6273%2085.6398C58.1308%2084.1248%2062.0302%2080.1956%2067.5223%2071.6312C70.2698%2066.5446%2072.0891%2060.6782%2074.3911%2046.7178C68.9703%2044.9728%2061.5817%2043.0421%2051.594%2042.0025L51.8911%2041.4084C55.6039%2041.2104%2064.2772%2041.0743%2069.2673%2042.1139C69.8366%2038.3144%2069.6312%2029.4975%2065.146%2024.6262C66.1361%2027.3366%2067.9827%2034.0569%2066.5569%2039.255C62.9307%2039.2302%2054.9431%2039.3812%2052.0025%2040.1832L51.5198%2039.552C53.698%2038.2525%2058.6708%2035.5421%2061.1361%2035.0965C61.1442%2035.0372%2061.1523%2034.9774%2061.1605%2034.9172C61.8684%2029.7099%2062.9799%2021.5342%2055.4554%2011C57.2747%2014.75%2060.2153%2023.802%2058.3143%2033.2772L50.9257%2038.6609L50.3688%2037.8812L52.6336%2035.5421C52.2252%2034.8738%2051.0074%2033.3812%2049.4035%2032.7574C50.1708%2033.6733%2051.2079%2035.698%2049.2178%2036.4703H46.2846C45.4307%2036.2475%2044.198%2035.1931%2046.099%2032.7574C45.3193%2033.1163%2043.604%2034.1757%2042.9802%2035.5421L44.6881%2037.5842L44.3168%2038.3267L37.1881%2033.3144C36.3465%2029.6881%2035.6584%2020.1559%2039.6386%2011.0371C39.3184%2011.6268%2039.0101%2012.189%2038.7142%2012.7287C34.6868%2020.0738%2032.9356%2023.2677%2034.1807%2035.0965C35.5792%2035.3936%2039.3639%2036.6856%2043.3144%2039.4777L43.0916%2039.9604C39.7005%2039.6386%2032.0941%2039.0619%2028.797%2039.3292C28.2277%2036.6807%2027.7054%2030.0322%2030.1708%2024.6262C26.2723%2030.1213%2025.4926%2034.1312%2026.1609%2042.2252C28.9703%2041.6807%2036.2896%2040.755%2043.0916%2041.4084L43.3144%2042.0025C38.3144%2042.6337%2026.8515%2044.4604%2021%2046.7178C21.1638%2047.5953%2021.3229%2048.4557%2021.4788%2049.2991C22.9129%2057.0566%2024.0818%2063.3797%2026.2723%2068.3639C29.9854%2075.5044%2033.156%2079.1728%2037.0129%2083.6354C37.6683%2084.3937%2038.3435%2085.1749%2039.0446%2086C33.0668%2077.7203%2026.8738%2067.3243%2026.1609%2048.7599C30.0965%2047.1881%2039.1931%2043.7921%2044.0941%2042.7822L44.4282%2043.5619C40.4183%2045.2574%2031.7673%2049.0941%2029.5396%2050.8762C29.5642%2051.2066%2029.5884%2051.5383%2029.6127%2051.8715C30.1759%2059.5913%2030.7984%2068.1239%2037.5965%2078.9084C35.4802%2074.2673%2033.0891%2068.9802%2032.5842%2051.8416C35.5173%2049.8738%2042.0446%2045.5817%2044.6881%2044.1559L44.9851%2044.6386C43.6485%2045.4926%2040.5446%2047.6386%2038.8218%2049.3911C38.7104%2050.1089%2038.5545%2052.7847%2038.8218%2057.745C40.0965%2060.0594%2043.6559%2065.0668%2047.6955%2066.5817C49.7624%2065.7401%2054.4084%2062.7946%2056.4579%2057.745C56.6188%2056.5569%2056.9035%2053.2376%2056.7549%2049.4653C55.5173%2048.3391%2052.5223%2045.797%2050.4431%2044.6386ZM40.5%2049.5L43.5%2047L41.5%2050C41.5%2055.5%2043.3217%2059.0567%2047.8%2060.8C53.0938%2057.745%2054%2055%2054%2050L52%2047L55.2%2049.8C55.2951%2052.3648%2055.4229%2053.7895%2054.7%2056.5C53.5%2059.5%2051.5%2061.5%2047.7%2063.8C44%2061.5%2043%2060%2040.7%2056.5C40.3164%2053.5132%2040.1274%2051.9879%2040.5%2049.5Z%27%20fill%3D%27%2308080a%27%20%2F%3E%0A%20%20%20%20%3Cpath%20class%3D%27logo-spiderman%27%20fill-rule%3D%27evenodd%27%20clip-rule%3D%27evenodd%27%20d%3D%27M50.4431%2044.6386L50.703%2044.1559C53.3391%2045.6906%2059.4431%2049.3762%2062.7698%2051.8416C62.745%2053.9208%2062.5247%2059.401%2061.8416%2064.6881C61.5322%2067.3243%2060.2599%2073.8589%2057.646%2078.9084C59.1435%2076.9158%2062.4876%2071.3713%2063.8836%2065.1337C64.3663%2063.3639%2065.4653%2058.0495%2066%2050.9505C63.1534%2049.3045%2056.1683%2045.5223%2051%2043.5619L51.3713%2042.7822C55.1955%2043.8342%2064.1287%2046.5025%2069.2673%2048.7599C69.1559%2051.4332%2068.495%2058.4505%2066.7426%2065.1337C65.8371%2068.5866%2063.3416%2077.4752%2056.2723%2086C56.3697%2085.8994%2056.4882%2085.78%2056.6273%2085.6398C58.1308%2084.1248%2062.0302%2080.1956%2067.5223%2071.6312C70.2698%2066.5446%2072.0891%2060.6782%2074.3911%2046.7178C68.9703%2044.9728%2061.5817%2043.0421%2051.594%2042.0025L51.8911%2041.4084C55.6039%2041.2104%2064.2772%2041.0743%2069.2673%2042.1139C69.8366%2038.3144%2069.6312%2029.4975%2065.146%2024.6262C66.1361%2027.3366%2067.9827%2034.0569%2066.5569%2039.255C62.9307%2039.2302%2054.9431%2039.3812%2052.0025%2040.1832L51.5198%2039.552C53.698%2038.2525%2058.6708%2035.5421%2061.1361%2035.0965C61.1442%2035.0372%2061.1523%2034.9774%2061.1605%2034.9172C61.8684%2029.7099%2062.9799%2021.5342%2055.4554%2011C57.2747%2014.75%2060.2153%2023.802%2058.3143%2033.2772L50.9257%2038.6609L50.3688%2037.8812L52.6336%2035.5421C52.2252%2034.8738%2051.0074%2033.3812%2049.4035%2032.7574C50.1708%2033.6733%2051.2079%2035.698%2049.2178%2036.4703H46.2846C45.4307%2036.2475%2044.198%2035.1931%2046.099%2032.7574C45.3193%2033.1163%2043.604%2034.1757%2042.9802%2035.5421L44.6881%2037.5842L44.3168%2038.3267L37.1881%2033.3144C36.3465%2029.6881%2035.6584%2020.1559%2039.6386%2011.0371C39.3184%2011.6268%2039.0101%2012.189%2038.7142%2012.7287C34.6868%2020.0738%2032.9356%2023.2677%2034.1807%2035.0965C35.5792%2035.3936%2039.3639%2036.6856%2043.3144%2039.4777L43.0916%2039.9604C39.7005%2039.6386%2032.0941%2039.0619%2028.797%2039.3292C28.2277%2036.6807%2027.7054%2030.0322%2030.1708%2024.6262C26.2723%2030.1213%2025.4926%2034.1312%2026.1609%2042.2252C28.9703%2041.6807%2036.2896%2040.755%2043.0916%2041.4084L43.3144%2042.0025C38.3144%2042.6337%2026.8515%2044.4604%2021%2046.7178C21.1638%2047.5953%2021.3229%2048.4557%2021.4788%2049.2991C22.9129%2057.0566%2024.0818%2063.3797%2026.2723%2068.3639C29.9854%2075.5044%2033.156%2079.1728%2037.0129%2083.6354C37.6683%2084.3937%2038.3435%2085.1749%2039.0446%2086C33.0668%2077.7203%2026.8738%2067.3243%2026.1609%2048.7599C30.0965%2047.1881%2039.1931%2043.7921%2044.0941%2042.7822L44.4282%2043.5619C40.4183%2045.2574%2031.7673%2049.0941%2029.5396%2050.8762C29.5642%2051.2066%2029.5884%2051.5383%2029.6127%2051.8715C30.1759%2059.5913%2030.7984%2068.1239%2037.5965%2078.9084C35.4802%2074.2673%2033.0891%2068.9802%2032.5842%2051.8416C35.5173%2049.8738%2042.0446%2045.5817%2044.6881%2044.1559L44.9851%2044.6386C43.6485%2045.4926%2040.5446%2047.6386%2038.8218%2049.3911C38.7104%2050.1089%2038.5545%2052.7847%2038.8218%2057.745C40.0965%2060.0594%2043.6559%2065.0668%2047.6955%2066.5817C49.7624%2065.7401%2054.4084%2062.7946%2056.4579%2057.745C56.6188%2056.5569%2056.9035%2053.2376%2056.7549%2049.4653C55.5173%2048.3391%2052.5223%2045.797%2050.4431%2044.6386ZM40.5%2049.5L43.5%2047L41.5%2050C41.5%2055.5%2043.3217%2059.0567%2047.8%2060.8C53.0938%2057.745%2054%2055%2054%2050L52%2047L55.2%2049.8C55.2951%2052.3648%2055.4229%2053.7895%2054.7%2056.5C53.5%2059.5%2051.5%2061.5%2047.7%2063.8C44%2061.5%2043%2060%2040.7%2056.5C40.3164%2053.5132%2040.1274%2051.9879%2040.5%2049.5Z%27%20fill%3D%27rgb(234%2C%2051%2C%2035)%27%20fill-opacity%3D%270.12%27%20stroke%3D%27rgb(234%2C%2051%2C%2035)%27%20stroke-opacity%3D%270.12%27%20stroke-width%3D%270.5%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%2F%3E%0A%20%20%3C%2Fg%3E%3C%2Fsvg%3E");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Custom class for Avg Percentile Bar so its color is never faded */
+.avg-percentile-bar {
+  background-color: #6366f1 !important; /* Indigo 500 */
+}
+.dark .avg-percentile-bar {
+  background-color: #818cf8 !important; /* Indigo 400 */
+}
+:is(html[class*="cyber"]):not(html[class*="-light"]) .avg-percentile-bar,
+:is(html.hero-miles) .avg-percentile-bar {
+  background-color: var(--neon-hex) !important;
+}
+:is(html[class*="-light"]) .avg-percentile-bar {
+  background-color: var(--neon-dark) !important;
+}

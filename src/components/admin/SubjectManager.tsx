@@ -16,6 +16,7 @@ function SortableSubjectItem({
   setEditPhases,
   setEditingIndex,
   handleEditSave,
+  handlePhaseChange,
   handleDelete,
   availablePhases
 }: any) {
@@ -62,26 +63,26 @@ function SortableSubjectItem({
       </div>
       {editingIndex === i ? (
         <div className="flex-1 space-y-2 min-w-0">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              className="w-full text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5 min-w-0"
+              className="flex-1 min-w-0 text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
               placeholder="Name"
             />
             <input
               type="text"
               value={editShort}
               onChange={(e) => setEditShort(e.target.value)}
-              className="w-full text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5 min-w-0"
+              className="flex-[0.5] min-w-0 w-24 sm:w-auto text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
               placeholder="Short (e.g. Q)"
             />
             <input
               type="text"
               value={editId}
               onChange={(e) => setEditId(e.target.value)}
-              className="w-full text-xs font-mono border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5 min-w-0"
+              className="flex-1 min-w-0 text-xs font-mono border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
               placeholder="ID"
             />
           </div>
@@ -94,8 +95,11 @@ function SortableSubjectItem({
                     type="checkbox"
                     checked={editPhases.includes(phase)}
                     onChange={e => {
-                      if (e.target.checked) setEditPhases([...editPhases, phase]);
-                      else setEditPhases(editPhases.filter((p: string) => p !== phase));
+                      const newP = e.target.checked 
+                        ? [...editPhases, phase] 
+                        : editPhases.filter((p: string) => p !== phase);
+                      setEditPhases(newP);
+                      handlePhaseChange(newP, i);
                     }}
                     className="w-3 h-3 text-indigo-600 rounded bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 focus:ring-indigo-500 shrink-0"
                   />
@@ -137,7 +141,7 @@ function SortableSubjectItem({
         </div>
       )}
 
-      {!editingIndex || editingIndex !== i ? (
+      {editingIndex !== i ? (
         <div className="hidden lg:flex flex-1 gap-2 opacity-50 pointer-events-none">
           <div className="flex-1 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 py-2 px-3 text-sm text-slate-400 truncate">
             Score
@@ -175,6 +179,9 @@ function SortableSubjectItem({
               onClick={(e) => {
                 if (!isTapped && !isHovered) return;
                 e.stopPropagation();
+                if (editingIndex !== null && editingIndex !== i && editName.trim()) {
+                  handleEditSave(editingIndex);
+                }
                 setEditId(sub.id);
                 setEditName(sub.name);
                 setEditShort(sub.short || "");
@@ -240,6 +247,15 @@ export function SubjectManager({
     }
   };
 
+  const handlePhaseChange = (newPhases: string[], index: number) => {
+    if (editName.trim()) {
+      const id = editId.trim() || editName.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
+      const newSubs = [...subjects];
+      newSubs[index] = { id, name: editName.trim(), short: editShort.trim(), ...(newPhases.length ? { phases: newPhases } : {}) };
+      onChange(newSubs);
+    }
+  };
+
   const handleEditSave = (index: number) => {
     if (editName.trim()) {
       const id =
@@ -279,6 +295,7 @@ export function SubjectManager({
             setEditPhases={setEditPhases}
             setEditingIndex={setEditingIndex}
             handleEditSave={handleEditSave}
+            handlePhaseChange={handlePhaseChange}
             handleDelete={(idx: number) => {
               const newS = [...subjects];
               newS.splice(idx, 1);
@@ -292,27 +309,27 @@ export function SubjectManager({
 
       <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-slate-50/50 dark:bg-slate-800/30 p-3 rounded-xl border border-slate-200 border-dashed dark:border-slate-700/50">
         <div className="flex-1 w-full space-y-2">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={newSubName}
               onChange={(e) => setNewSubName(e.target.value)}
               placeholder="Full Name (e.g. Quantitative Aptitude)"
-              className="text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
+              className="flex-1 min-w-0 text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
             />
             <input
               type="text"
               value={newSubShort}
               onChange={(e) => setNewSubShort(e.target.value)}
               placeholder="Short Name (e.g. Q)"
-              className="text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
+              className="flex-[0.5] min-w-0 w-24 sm:w-auto text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
             />
             <input
               type="text"
               value={newSubId}
               onChange={(e) => setNewSubId(e.target.value)}
               placeholder="ID (optional, e.g. quant)"
-              className="text-xs font-mono border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
+              className="flex-1 min-w-0 text-xs font-mono border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
             />
           </div>
           {availablePhases?.length > 0 && (

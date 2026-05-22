@@ -19,9 +19,10 @@ interface AddLiveMockDialogProps {
 export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, categoryId, categories }: AddLiveMockDialogProps) {
   const { user } = useAuth();
   const getInitialLiveMockData = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const localString = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const nextDay = new Date();
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(0, 0, 0, 0);
+    const localString = new Date(nextDay.getTime() - nextDay.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     return {
       examType: '',
       examRole: '',
@@ -85,9 +86,10 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
         if (extractedData.platform && !PLATFORMS.includes(extractedData.platform)) setIsCustomPlatform(true);
 
         setLiveMockData((prev) => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const localString = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+          const nextDay = new Date();
+          nextDay.setDate(nextDay.getDate() + 1);
+          nextDay.setHours(0, 0, 0, 0);
+          const localString = new Date(nextDay.getTime() - nextDay.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
           return {
             ...prev, 
             ...extractedData,

@@ -6,6 +6,28 @@ import { AuthProvider } from './services/AuthContext';
 import { db } from './services/firebase';
 import { doc, getDocFromServer } from 'firebase/firestore';
 
+// Suppress benign Vite websocket errors in preview environment
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('[vite] failed to connect to websocket')) {
+    return;
+  }
+  if (typeof args[0] === 'string' && args[0].includes('WebSocket closed without opened')) {
+    return;
+  }
+  if (args[0] instanceof Error && args[0].message.includes('WebSocket closed without opened')) {
+    return;
+  }
+  originalConsoleError(...args);
+};
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('[vite]')) {
+    if (args.some(arg => typeof arg === 'string' && arg.includes('WebSocket closed without opened'))) return;
+  }
+  originalConsoleLog(...args);
+};
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
     for(let registration of registrations) {

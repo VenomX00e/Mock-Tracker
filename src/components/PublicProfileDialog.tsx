@@ -225,7 +225,7 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
                             <div className="text-[10px] text-slate-400">{parseLocalDate(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
                          </div>
                          <div className="flex justify-between items-end">
-                            <span className="text-[10px] text-slate-500 bg-slate-200/50 dark:bg-slate-700 px-1.5 py-0.5 rounded">{m.examType}</span>
+                            <span className="text-[10px] text-slate-500 bg-slate-200/50 dark:bg-slate-700 px-1.5 py-0.5 rounded border border-transparent theme-exam-badge">{m.examType}</span>
                             <div className="flex gap-2 items-center text-right">
                                <span className="font-mono text-slate-600 dark:text-slate-400 text-xs">Score: {m.score}</span>
                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${getHeatmapColor(m.percentile)}`}>{m.percentile}%P</span>
