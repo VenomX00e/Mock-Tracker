@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
-import Dashboard from './components/Dashboard';
-import CommunityHub from './components/CommunityHub';
-import { TasksPage } from './components/TasksPage';
-import AdminDialog from './components/AdminDialog';
+import React, { useState, useEffect, useLayoutEffect, useContext } from 'react';
+import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import { AppProvider, UserProfileCtx, SystemDataCtx, AppStateCtx } from './context/AppContext';
 import { useUIStore } from './store/uiStore';
 import { useMocks } from './hooks/useMocks';
 import { useAuth } from './services/AuthContext';
+import { useThemeManager } from './hooks/useThemeManager';
 import { AuthView } from './components/views/AuthView';
 import { CountdownsSection } from './components/views/CountdownsSection';
 import { NoticesSection } from './components/views/NoticesSection';
@@ -18,53 +16,57 @@ import Navigation from './components/Navigation';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/views/HomeView';
-import { CountdownsPage } from './components/views/CountdownsPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
-
-import AddMockDialog from './components/AddMockDialog';
-import ProfileDialog from './components/ProfileDialog';
+import { ViewManager } from './components/ViewManager';
 
 function AppContent() {
-  const { activeTab, setActiveTab, adminTab, adminEditNotice, adminEditCountdown, isAdminModalOpen, theme, setTheme } = useUIStore();
+  const { activeTab, setActiveTab, adminTab, isAdminModalOpen, theme, setTheme, mockToEdit, setMockToEdit } = useUIStore();
   const { user, loading, logout } = useAuth();
   const { profile } = useContext(UserProfileCtx)!;
   const { addMock, updateMock, loading: mocksLoading } = useMocks();
   const { selectedCategory, categories, fetchAnnouncement } = useContext(SystemDataCtx)!;
-  const { isOwner, isAdmin, adminPermissions, mockToEdit, setMockToEdit } = useContext(AppStateCtx)!;
+  const { isOwner, isAdmin, adminPermissions } = useContext(AppStateCtx)!;
 
-  const contentRef = React.useRef<HTMLDivElement>(null);
-  const prevTab = React.useRef(activeTab);
+  const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
+  const [isGoingDown, setIsGoingDown] = useState(true);
+  const contentAnimation = useAnimation();
+  
+  const isAppReady = !loading && (!user || !!profile);
 
-  useEffect(() => {
-    if (prevTab.current === activeTab) return;
+  useLayoutEffect(() => {
+     if (!isAppReady) return;
+     
+     // Stop any currently running animation
+     contentAnimation.stop();
+     // Instantly snap to the starting position
+     contentAnimation.set("initial");
+     
+     let frame1: number;
+     let frame2: number;
+     
+     // Double requestAnimationFrame ensures the browser has painted 
+     // the initial DOM before starting the GPU animation, eliminating stutter
+     frame1 = requestAnimationFrame(() => {
+       frame2 = requestAnimationFrame(() => {
+         contentAnimation.start("animate");
+       });
+     });
+     
+     return () => {
+       cancelAnimationFrame(frame1);
+       cancelAnimationFrame(frame2);
+     };
+  }, [activeTab, contentAnimation, isGoingDown, isAppReady]);
+
+  if (activeTab !== prevActiveTab) {
     const tabOrder = ['home', 'dashboard', 'countdowns', 'tasks', 'add-mock', 'admin', 'community', 'profile'];
-    const oldIndex = tabOrder.indexOf(prevTab.current);
+    const oldIndex = tabOrder.indexOf(prevActiveTab);
     const newIndex = tabOrder.indexOf(activeTab);
-    
-    const isGoingDown = newIndex >= oldIndex;
-    
-    if (contentRef.current) {
-      contentRef.current.classList.remove('animate-slide-in-right', 'animate-slide-in-left');
-      void contentRef.current.offsetWidth; // force reflow
-      contentRef.current.classList.add(isGoingDown ? 'animate-slide-in-right' : 'animate-slide-in-left');
-    }
-    
-    prevTab.current = activeTab;
-  }, [activeTab]);
+    setPrevActiveTab(activeTab);
+    setIsGoingDown(newIndex > oldIndex);
+  }
 
-  useEffect(() => {
-    document.documentElement.classList.remove(
-      'light', 'dark', 'cyber', 'cyber-light', 
-      'cyber-green', 'cyber-green-light', 
-      'cyber-lavender', 'cyber-lavender-light', 
-      'cyber-pink', 'cyber-pink-light', 
-      'cyber-orange', 'cyber-orange-light'
-    );
-    document.documentElement.classList.add(theme);
-    if (theme === 'dark' || (theme.startsWith('cyber') && !theme.includes('-light'))) {
-      document.documentElement.classList.add('dark');
-    }
-  }, [theme]);
+  useThemeManager(theme);
 
   useEffect(() => {
     if (user) {
@@ -110,8 +112,19 @@ function AppContent() {
         
         {/* Main Layout */}
         <main className={`flex-1 ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'} px-[15px] sm:px-6 lg:px-8 py-8 pt-6 pb-24 md:pb-8 w-full flex flex-col min-h-0`}>
-          <div className={`max-w-full mx-auto w-full ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'h-full min-h-0' : ''} flex flex-col animate-slide-in-right`} ref={contentRef}>
-            {!user ? (
+            <motion.div 
+              custom={isGoingDown}
+              variants={{
+                initial: (direction: boolean) => ({ x: direction ? 6 : -6, opacity: 0 }),
+                animate: { x: 0, opacity: 1 }
+              }}
+              initial="initial"
+              animate={contentAnimation}
+              transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
+              style={{ willChange: "transform, opacity" }}
+              className={`max-w-full mx-auto w-full ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'h-full min-h-0' : ''} flex flex-col`}
+            >
+              {!user ? (
               <AuthView />
             ) : mocksLoading ? (
                <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -131,92 +144,10 @@ function AppContent() {
                   </>
                 )}
 
-            <section className={`w-full flex-1 ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
-              <div style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}>
-                <div className="w-full">
-                  <Dashboard />
-                </div>
-              </div>
-
-              {activeTab !== 'dashboard' && (
-                <div className={`w-full flex-1 ${['admin', 'profile', 'countdowns'].includes(activeTab) ? 'min-h-0' : ''} flex flex-col`}>
-                  {activeTab === 'admin' && isAdmin ? (
-                      <AdminDialog
-                        isOpen={true}
-                        isOwner={isOwner}
-                        adminPermissions={adminPermissions}
-                        currentCategory={selectedCategory}
-                        asPage={true}
-                        initialTab={adminTab || ((!isOwner && adminPermissions) ? (
-                             adminPermissions.canManageUsers ? 'users' :
-                             adminPermissions.canManageLiveMocks ? 'liveMock' :
-                             adminPermissions.canManageNotices ? 'notice' :
-                             adminPermissions.canManageCountdowns ? 'countdown' :
-                             adminPermissions.canManageChallenges ? 'challenge' :
-                             adminPermissions.canManageSettings ? 'settings' : 
-                             adminPermissions.canManageQuotes ? 'quotes' : 'users'
-                        ) : 'users') as any}
-                        editNoticeData={adminEditNotice}
-                        editCountdownData={adminEditCountdown}
-                        categories={categories}
-                      />
-                    ) : activeTab === 'tasks' ? (
-                      <TasksPage />
-                    ) : activeTab === 'add-mock' ? (
-                      <AddMockDialog
-                        isOpen={true}
-                        asPage={true}
-                        onClose={() => {
-                          setActiveTab('dashboard');
-                          if (mockToEdit) {
-                            setTimeout(() => {
-                              document.getElementById('history-log')?.scrollIntoView({ behavior: 'smooth' });
-                              setMockToEdit(undefined);
-                            }, 100);
-                          } else {
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }
-                        }}
-                        categories={categories}
-                        initialMock={mockToEdit}
-                        categoryId={selectedCategory}
-                        onSave={async (mock) => {
-                          if (mockToEdit?.id) {
-                            await updateMock(mock);
-                          } else {
-                            await addMock(mock);
-                          }
-                          setActiveTab('dashboard');
-                          if (mockToEdit) {
-                            setTimeout(() => {
-                              document.getElementById('history-log')?.scrollIntoView({ behavior: 'smooth' });
-                              setMockToEdit(undefined);
-                            }, 100);
-                          } else {
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }
-                        }}
-                      />
-                    ) : activeTab === 'profile' ? (
-                      <ProfileDialog
-                        isOpen={true}
-                        asPage={true}
-                        onClose={() => setActiveTab('dashboard')}
-                        theme={theme}
-                        setTheme={setTheme}
-                        categories={categories}
-                      />
-                    ) : activeTab === 'community' ? (
-                      <CommunityHub />
-                    ) : activeTab === 'countdowns' ? (
-                      <CountdownsPage />
-                    ) : null}
-                </div>
-              )}
-            </section>
+            <ViewManager />
           </>
         )}
-          </div>
+            </motion.div>
         </main>
 
         <BottomNav />

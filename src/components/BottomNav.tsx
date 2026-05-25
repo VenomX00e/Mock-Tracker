@@ -12,11 +12,9 @@ import { useUIStore } from '../store/uiStore';
 
 export function BottomNav() {
   const { user } = useAuthCtx();
-  const { setMockToEdit } = useAppStateCtx();
-  const { 
-    activeTab, 
-    setActiveTab
-  } = useUIStore();
+  ;
+  const { activeTab, 
+    setActiveTab, setMockToEdit } = useUIStore();
 
   if (!user) return null;
 

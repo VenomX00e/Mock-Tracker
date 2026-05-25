@@ -22,7 +22,6 @@ export function ModalsSection() {
   const {
       isAddModalOpen, setIsAddModalOpen,
       isProfileModalOpen, setIsProfileModalOpen,
-      activePublicProfile, setActivePublicProfile,
       isRequestsModalOpen, setIsRequestsModalOpen,
       isChallengeRecycleBinOpen, setIsChallengeRecycleBinOpen,
       isHiddenChallengesModalOpen, setIsHiddenChallengesModalOpen,
@@ -31,8 +30,6 @@ export function ModalsSection() {
       isCreateChallengeOpen, setIsCreateChallengeOpen,
       isApiModalOpen, setIsApiModalOpen,
       adminTab, setAdminTab,
-      adminEditNotice, setAdminEditNotice,
-      adminEditCountdown, setAdminEditCountdown,
       theme, setTheme
   } = useUIStore();
   const { challenges, deletedChallenges, selectedCategory, categories } = useSystemDataCtx();
@@ -45,7 +42,8 @@ export function ModalsSection() {
       handlePermanentlyDeleteChallenge
   } = useChallengesManagerCtx();
   const { addMock, updateMock } = useMocks();
-  const { mockToEdit, setMockToEdit, editingChallenge, setEditingChallenge, adminPermissions, isOwner, isAdmin } = useAppStateCtx();
+  const { adminPermissions, isOwner, isAdmin } = useAppStateCtx();
+  const { mockToEdit, setMockToEdit, editingChallenge, setEditingChallenge, activePublicProfile, setActivePublicProfile, adminEditNotice, setAdminEditNotice, adminEditCountdown, setAdminEditCountdown } = useUIStore();
 
   // Local state for API key input
   const [apiKeyInput, setApiKeyInput] = useState(localStorage.getItem('geminiApiKey') || '');

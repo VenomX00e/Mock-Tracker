@@ -11,11 +11,8 @@ import { usePublicSettings } from '../hooks/usePublicSettings';
 import { MockScore } from '../types';
 
 export interface AppStateContextType {
+
   handleUpdateProfileTasks: (tasks: any[]) => Promise<void>;
-  mockToEdit: MockScore | undefined;
-  setMockToEdit: (mock: MockScore | undefined) => void;
-  editingChallenge: any | null;
-  setEditingChallenge: (challenge: any | null) => void;
   isOwner: boolean;
   isAdminUser: boolean;
   isAdmin: boolean;
@@ -78,8 +75,6 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
   const userProfileVal = useContext(UserProfileCtx)!;
   const publicSettingsVal = useContext(PublicSettingsCtx)!;
 
-  const [mockToEdit, setMockToEdit] = useState<MockScore | undefined>(undefined);
-  const [editingChallenge, setEditingChallenge] = useState<any>(null);
 
   const { user } = authVal;
   const { profile, updateProfile } = userProfileVal;
@@ -125,9 +120,9 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
   const inlineEditNoticeVal = useInlineEditNotice(user, isAdmin, notices, setNotices);
 
   const appStateVal = useMemo(() => ({
-    handleUpdateProfileTasks, mockToEdit, setMockToEdit, editingChallenge, setEditingChallenge,
-    isOwner, isAdminUser, isAdmin, adminPermissions, setLocalCategory, localCategory
-  }), [mockToEdit, editingChallenge, isOwner, isAdminUser, isAdmin, adminPermissions, localCategory]);
+    handleUpdateProfileTasks,
+    isOwner, isAdminUser, isAdmin, adminPermissions, setLocalCategory, localCategory,
+  }), [isOwner, isAdminUser, isAdmin, adminPermissions, localCategory]);
 
   return (
     <SystemDataCtx.Provider value={systemDataVal}>

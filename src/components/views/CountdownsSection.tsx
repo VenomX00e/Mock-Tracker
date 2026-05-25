@@ -6,7 +6,7 @@ import { ChevronRight } from 'lucide-react';
 
 export function CountdownsSection() {
   const { countdowns, pinnedCountdowns, selectedCategory, togglePin } = useSystemDataCtx();
-  const { activeTab, setAdminEditCountdown, setAdminTab, setIsAdminModalOpen, setActiveTab } = useUIStore();
+  const { activeTab, setAdminTab, setIsAdminModalOpen, setActiveTab, setAdminEditCountdown } = useUIStore();
   const { adminPermissions } = useAppStateCtx();
 
   const [tappedCountdownId, setTappedCountdownId] = useState<string | null>(null);

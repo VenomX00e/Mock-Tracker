@@ -19,15 +19,26 @@ interface ChallengeProps {
   isAdmin?: boolean;
 }
 
+const participantCache: Record<string, any> = {};
+const fetchedKeys = new Set<string>();
+const countCache: Record<string, number> = {};
+const listCache: Record<string, any[]> = {};
+
 export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, isAdmin }: ChallengeProps) {
   const { user } = useAuth();
   const { profile } = useUserProfile();
   const { mocks } = useMocks();
-  const [participant, setParticipant] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  
+  const cacheKey = user ? `${user.uid}_${challenge.id}` : null;
+  const initialParticipant = cacheKey ? participantCache[cacheKey] : null;
+  const initialCount = countCache[challenge.id] || 0;
+  const initialList = listCache[challenge.id] || [];
+
+  const [participant, setParticipant] = useState<any>(initialParticipant || null);
+  const [loading, setLoading] = useState(cacheKey ? !fetchedKeys.has(cacheKey) : true);
   const [showActions, setShowActions] = useState(false);
-  const [participantsCount, setParticipantsCount] = useState(0);
-  const [participants, setParticipants] = useState<any[]>([]);
+  const [participantsCount, setParticipantsCount] = useState(initialCount);
+  const [participants, setParticipants] = useState<any[]>(initialList);
   const [showUsers, setShowUsers] = useState(false);
   const [usersTab, setUsersTab] = useState<'standings' | 'activity' | 'award'>('activity');
 
@@ -43,8 +54,14 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
       const docRef = doc(db, 'challenges', challenge.id, 'participants', user!.uid);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        setParticipant(docSnap.data());
+        const data = docSnap.data();
+        setParticipant(data);
+        participantCache[`${user!.uid}_${challenge.id}`] = data;
+      } else {
+        setParticipant(null);
+        delete participantCache[`${user!.uid}_${challenge.id}`];
       }
+      fetchedKeys.add(`${user!.uid}_${challenge.id}`);
     } catch (error: any) {
       if (error.code !== 'permission-denied') {
         console.error(error);
@@ -59,6 +76,7 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
      try {
        const snap = await getDocs(query(collection(db, 'challenges', challenge.id, 'participants')));
        setParticipantsCount(snap.size);
+       countCache[challenge.id] = snap.size;
        const ptsPromises = snap.docs.map(async (d) => {
          const p = d.data();
          const uid = p.userId;
@@ -87,6 +105,7 @@ export function ChallengeCard({ challenge, onEdit, onDelete, onDismiss, onPin, i
        
        resolvedPts.sort((a,b) => ((b.streak || 0) - (a.streak || 0)) || ((b.checkInDates?.length || 0) - (a.checkInDates?.length || 0)) || (hasTasks ? (getTaskCount(b) - getTaskCount(a)) : ((b.totalMocks || 0) - (a.totalMocks || 0))));
        setParticipants(resolvedPts);
+       listCache[challenge.id] = resolvedPts;
      } catch(e){}
   }
 

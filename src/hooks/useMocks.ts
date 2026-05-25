@@ -159,7 +159,18 @@ export function useMocks() {
           }
         });
         mockData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        deletedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        deletedData.sort((a: any, b: any) => {
+          const getTime = (mock: any) => {
+            const updatedAtStr = mock.updatedAt;
+            if (updatedAtStr) {
+               if (updatedAtStr.toMillis) return updatedAtStr.toMillis();
+               if (updatedAtStr.seconds) return updatedAtStr.seconds * 1000;
+               return new Date(updatedAtStr).getTime();
+            }
+            return new Date(mock.date).getTime();
+          };
+          return getTime(b) - getTime(a);
+        });
         
         // Calculate stats purely in memory for local app state
         const calculatedStats = calculateStats(mockData);

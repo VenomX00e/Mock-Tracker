@@ -6,6 +6,8 @@ import { getDocs, query, collection, orderBy, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { Card } from './ui/Card';
+
 interface PublicProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,7 +32,7 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
         try {
           const q = query(collection(db, 'users', profile.userId, 'mocks'), orderBy('date', 'desc'), limit(5));
           const snap = await getDocs(q);
-          setRecentMocks(snap.docs.map(d => d.data() as MockScore).filter(m => !(m as any).isDeleted));
+          setRecentMocks(snap.docs.map(d => d.data() as MockScore).filter(m => !m.isDeleted));
         } catch (e: any) {
           if (e.code !== 'permission-denied') {
             console.error("Failed to fetch user mocks", e);
@@ -138,7 +140,7 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
               <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{profile.leaderboardRank ? `#${profile.leaderboardRank}` : '-'}</span>
             </div>
             <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50 flex flex-col items-center justify-center text-center">
-              <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Mocks</span>
+              <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Mocks {profile.periodContext && profile.periodContext !== 'All' && profile.periodContext !== 'All Time' ? `(${profile.periodContext})` : ''}</span>
               <span className="text-2xl font-bold text-slate-800 dark:text-slate-100">{profile.totalTests || 0}</span>
             </div>
           </div>
@@ -171,7 +173,7 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
           )}
           
           <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-xl p-4 mb-4">
-             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Average Performance</div>
+             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Average Performance {profile.periodContext && profile.periodContext !== 'All' && profile.periodContext !== 'All Time' ? `(${profile.periodContext})` : ''}</div>
              <div className="flex items-end justify-between mb-4">
                 <div>
                    <div className="text-3xl font-light text-slate-900 dark:text-slate-100 tracking-tight">{profile.avgPercentile || 0}<span className="text-lg text-slate-400 font-medium">%</span></div>
@@ -254,35 +256,37 @@ export function PublicProfileDialog({ isOpen, onClose, profile, isCurrentUser, o
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95, transition: { duration: 0 } }}
-          className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-xs shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col p-6 text-center" 
+          className="w-full max-w-xs shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200" 
           onClick={e => e.stopPropagation()}
         >
-         <div className="flex justify-end -mt-2 -mr-2">
-           <button onClick={() => setSelectedBadge(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
-              <X className="w-4 h-4" />
-           </button>
-         </div>
-         
-         <div className="flex justify-center mb-4">
-            {selectedBadge.imageBase64 ? (
-               <img src={selectedBadge.imageBase64} alt={selectedBadge.name} className="w-24 h-24 rounded-full shadow-lg border-4 border-slate-50 dark:border-slate-700 object-cover" />
-            ) : (
-               <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-white dark:border-slate-800 ${selectedBadge.color}`}>
-                 {selectedBadge.icon}
-               </div>
-            )}
-         </div>
-         
-         <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">{selectedBadge.name}</h3>
-         {selectedBadge.challengeTitle && (
-           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">
-             Earned from completing: <span className="text-indigo-600 dark:text-indigo-400">{selectedBadge.challengeTitle}</span>
-           </p>
-         )}
-         <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-           <Calendar className="w-3.5 h-3.5" />
-           Awarded {selectedBadge.awardedAt ? new Date(selectedBadge.awardedAt).toLocaleDateString() : 'recently'}
-         </div>
+          <Card className="flex flex-col p-6 text-center border-slate-100 dark:border-slate-700/50">
+           <div className="flex justify-end -mt-2 -mr-2">
+             <button onClick={() => setSelectedBadge(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
+                <X className="w-4 h-4" />
+             </button>
+           </div>
+           
+           <div className="flex justify-center mb-4">
+              {selectedBadge.imageBase64 ? (
+                 <img src={selectedBadge.imageBase64} alt={selectedBadge.name} className="w-24 h-24 rounded-full shadow-lg border-4 border-slate-50 dark:border-slate-700 object-cover" />
+              ) : (
+                 <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl shadow-lg border-4 border-white dark:border-slate-800 ${selectedBadge.color}`}>
+                   {selectedBadge.icon}
+                 </div>
+              )}
+           </div>
+           
+           <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">{selectedBadge.name}</h3>
+           {selectedBadge.challengeTitle && (
+             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">
+               Earned from completing: <span className="text-indigo-600 dark:text-indigo-400">{selectedBadge.challengeTitle}</span>
+             </p>
+           )}
+           <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+             <Calendar className="w-3.5 h-3.5" />
+             Awarded {selectedBadge.awardedAt ? new Date(selectedBadge.awardedAt).toLocaleDateString() : 'recently'}
+           </div>
+          </Card>
         </motion.div>
       </motion.div>
     )}

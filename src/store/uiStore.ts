@@ -43,9 +43,6 @@ interface UIState {
   isProfileModalOpen: boolean;
   setIsProfileModalOpen: (open: boolean) => void;
 
-  activePublicProfile: any;
-  setActivePublicProfile: (profile: any) => void;
-
   isAdminModalOpen: boolean;
   setIsAdminModalOpen: (open: boolean) => void;
 
@@ -72,12 +69,6 @@ interface UIState {
 
   adminTab: AdminTab;
   setAdminTab: (tab: AdminTab) => void;
-
-  adminEditNotice: any;
-  setAdminEditNotice: (notice: any) => void;
-
-  adminEditCountdown: any;
-  setAdminEditCountdown: (countdown: any) => void;
 
   darkMode: boolean;
   setDarkMode: (mode: boolean | ((prev: boolean) => boolean)) => void;
@@ -113,6 +104,17 @@ interface UIState {
   ) => void;
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: (collapsed: boolean) => void;
+
+  mockToEdit: any | undefined;
+  setMockToEdit: (mock: any) => void;
+  editingChallenge: any | null;
+  setEditingChallenge: (challenge: any | null) => void;
+  activePublicProfile: any | null;
+  setActivePublicProfile: (profile: any | null) => void;
+  adminEditNotice: any | null;
+  setAdminEditNotice: (notice: any | null) => void;
+  adminEditCountdown: any | null;
+  setAdminEditCountdown: (countdown: any | null) => void;
 }
 
 const ALL_THEME_CLASSES = [
@@ -135,6 +137,18 @@ export const useUIStore = create<UIState>((set) => ({
   isSidebarCollapsed: true,
   setIsSidebarCollapsed: (collapsed) => set({ isSidebarCollapsed: collapsed }),
 
+  mockToEdit: undefined,
+  setMockToEdit: (mock) => set({ mockToEdit: mock }),
+  editingChallenge: null,
+  setEditingChallenge: (challenge) => set({ editingChallenge: challenge }),
+  activePublicProfile: null,
+  setActivePublicProfile: (profile) => set({ activePublicProfile: profile }),
+  adminEditNotice: null,
+  setAdminEditNotice: (notice) => set({ adminEditNotice: notice }),
+  adminEditCountdown: null,
+  setAdminEditCountdown: (countdown) => set({ adminEditCountdown: countdown }),
+
+
   activeTab: "home",
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -143,9 +157,6 @@ export const useUIStore = create<UIState>((set) => ({
 
   isProfileModalOpen: false,
   setIsProfileModalOpen: (open) => set({ isProfileModalOpen: open }),
-
-  activePublicProfile: null,
-  setActivePublicProfile: (profile) => set({ activePublicProfile: profile }),
 
   isAdminModalOpen: false,
   setIsAdminModalOpen: (open) => set({ isAdminModalOpen: open }),
@@ -175,12 +186,6 @@ export const useUIStore = create<UIState>((set) => ({
 
   adminTab: "categories",
   setAdminTab: (tab) => set({ adminTab: tab as any }),
-
-  adminEditNotice: null,
-  setAdminEditNotice: (notice) => set({ adminEditNotice: notice }),
-
-  adminEditCountdown: null,
-  setAdminEditCountdown: (countdown) => set({ adminEditCountdown: countdown }),
 
   darkMode: localStorage.getItem("darkMode") === "true",
   theme:

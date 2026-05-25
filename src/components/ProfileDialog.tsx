@@ -17,6 +17,7 @@ import { useAuth } from "../services/AuthContext";
 import { CustomDropdown } from "./CustomDropdown";
 
 import { ExamCategory } from "../types";
+import { Card } from "./ui/Card";
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -547,17 +548,17 @@ export default function ProfileDialog({
           className="fixed inset-0 bg-slate-900/30  z-[60] flex items-center justify-center p-4 animate-in fade-in duration-100"
           onClick={() => setSelectedBadge(null)}
         >
-          <div
-            className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-xs shadow-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200"
+          <Card
+            className="w-full max-w-xs shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default flex flex-col p-6 text-center border-slate-100 dark:border-slate-700/50"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-end -mt-2 -mr-2">
-              <button
-                onClick={() => setSelectedBadge(null)}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex justify-end -mt-2 -mr-2">
+                <button
+                  onClick={() => setSelectedBadge(null)}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
             </div>
 
             <div className="flex justify-center mb-4">
@@ -594,7 +595,7 @@ export default function ProfileDialog({
                 ? new Date(selectedBadge.awardedAt).toLocaleDateString()
                 : "recently"}
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </>

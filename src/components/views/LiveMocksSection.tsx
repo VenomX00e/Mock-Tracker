@@ -7,8 +7,8 @@ import { useMocks } from '../../hooks/useMocks';
 export function LiveMocksSection() {
   const { liveMocks, selectedCategory } = useSystemDataCtx();
   const { mocks } = useMocks();
-  const { activeTab, setIsAddLiveMockOpen, setIsAddModalOpen } = useUIStore();
-  const { setMockToEdit } = useAppStateCtx();
+  const { activeTab, setIsAddLiveMockOpen, setIsAddModalOpen, setMockToEdit } = useUIStore();
+  ;
 
   const [dismissedLiveMocks, setDismissedLiveMocks] = useState<string[]>(
     JSON.parse(localStorage.getItem('dismissedLiveMocks') || '[]')

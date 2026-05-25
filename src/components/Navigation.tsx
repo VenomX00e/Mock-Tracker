@@ -22,8 +22,8 @@ import { usePwaInstall } from "../hooks/usePwaInstall";
 export default function Navigation() {
   const { user, signInWithGoogle } = useAuthCtx();
   const { profile } = useUserProfileCtx();
-  const { isOwner, isAdmin, adminPermissions, setMockToEdit } =
-    useAppStateCtx();
+  const { isOwner, isAdmin, adminPermissions } = useAppStateCtx();
+  const { setMockToEdit, setAdminEditNotice, setAdminEditCountdown } = useUIStore();
   const { isInstallable, installApp } = usePwaInstall();
   const {
     activeTab,
@@ -31,8 +31,6 @@ export default function Navigation() {
     setIsApiModalOpen,
     setIsAddModalOpen,
     setAdminTab,
-    setAdminEditNotice,
-    setAdminEditCountdown,
     setIsAdminModalOpen,
     setIsProfileModalOpen,
     theme,

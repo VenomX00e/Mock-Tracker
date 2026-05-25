@@ -8,7 +8,8 @@ import { motion } from 'motion/react';
 export function CountdownsPage() {
   const { countdowns, pinnedCountdowns, selectedCategory, togglePin } = useSystemDataCtx();
   const { adminPermissions } = useAppStateCtx();
-  const { setAdminEditCountdown, setAdminTab, setIsAdminModalOpen, setActiveTab } = useUIStore();
+
+  const { setAdminTab, setIsAdminModalOpen, setActiveTab, setAdminEditCountdown } = useUIStore();
   
   const [tappedCountdownId, setTappedCountdownId] = useState<string | null>(null);
   const [now, setNow] = useState(new Date().getTime());

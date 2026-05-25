@@ -110,7 +110,7 @@ app.post("/api/extract-mock", async (req, res) => {
     }
 
     const response = await fetchWithRetry(() => aiClient.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-lite",
       contents: contents,
       config: {
         responseMimeType: "application/json",
@@ -198,7 +198,7 @@ app.post("/api/extract-scorecard", async (req, res) => {
     }
 
     const response = await fetchWithRetry(() => aiClient.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-lite",
       contents: contents,
       config: {
         responseMimeType: "application/json",
@@ -286,7 +286,7 @@ app.post("/api/generate-badge", async (req, res) => {
     const textPrompt = `You are a designer. Create a short name for a badge based on this description: "${actualPrompt}". Max 4-5 words. Return ONLY a JSON object: {"name": "The Name"}`;
     
     const nameResponse = await fetchWithRetry(() => aiClient.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-lite",
       contents: [{ role: 'user', parts: [{ text: textPrompt }] }],
       config: {
         responseMimeType: "application/json",

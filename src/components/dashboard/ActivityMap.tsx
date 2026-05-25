@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useMocks } from '../../hooks/useMocks';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -10,7 +10,17 @@ export function ActivityMap() {
     const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
     // Generate map data based on mocks
-    const { days, totalMocks, periodLabel } = useMemo(() => {
+    const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Defer the heavy map rendering so the route transition doesn't stutter.
+    const timer = setTimeout(() => setIsReady(true), 150);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const { days, totalMocks, periodLabel } = useMemo(() => {
+    if (!isReady) return { days: [], totalMocks: 0, periodLabel: '' };
+
     // Group mocks by date
     const mocksByDate: Record<string, number> = {};
     mocks.forEach(mock => {
@@ -85,7 +95,7 @@ export function ActivityMap() {
       daysAdded++;
     }
     return { days: data, totalMocks: totalMocksInPeriod, periodLabel: label };
-  }, [mocks, viewMode, periodOffset]);
+  }, [mocks, viewMode, periodOffset, isReady]);
 
   const getIntensityClass = (level: number, isFuture: boolean) => {
     if (isFuture) return 'bg-slate-50 dark:bg-slate-800/20'; // completely dim for future

@@ -1,0 +1,29 @@
+44:    | "liveMock"
+76:    | "liveMock"
+146:  const [liveMockData, setLiveMockData] = useState({
+251:  const [liveMocks, setLiveMocks] = useState<any[]>([]);
+276:        } else if (data.type === "liveMock") {
+394:      if (!liveMockData.mockName || !liveMockData.examType) {
+403:          : `liveMock_${Date.now()}`);
+407:          type: "liveMock",
+408:          ...liveMockData,
+410:          title: `Live: ${liveMockData.mockName}`,
+411:          description: `Join the community in taking the ${liveMockData.examType} ${liveMockData.examRole} ${liveMockData.examPhase} mock on ${liveMockData.platform || "any platform"}.`,
+867:                value={liveMockData.examType || ""}
+884:                  value={liveMockData.examType}
+903:                value={liveMockData.examRole || ""}
+920:                  value={liveMockData.examRole}
+943:                value={liveMockData.examPhase || ""}
+960:                  value={liveMockData.examPhase}
+981:              value={liveMockData.examScope || ""}
+999:            value={liveMockData.mockName}
+1013:              value={liveMockData.platform || ""}
+1030:                value={liveMockData.platform}
+1054:            value={liveMockData.date}
+1098:        ? liveMocks.filter((m) => m.categoryId === adminCategoryScope)
+1099:        : liveMocks.filter((m) => !m.categoryId)
+1109:              ? liveMocks.filter((m) => m.categoryId === adminCategoryScope)
+1110:              : liveMocks.filter((m) => !m.categoryId)
+1940:                      setActiveTab("liveMock");
+1945:                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "liveMock" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+2423:          {activeTab === "liveMock" &&

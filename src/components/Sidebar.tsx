@@ -18,16 +18,15 @@ import { useUIStore } from '../store/uiStore';
 export function Sidebar() {
   const { user } = useAuthCtx();
   const { profile } = useUserProfileCtx();
-  const { isOwner, isAdmin, adminPermissions, setMockToEdit } = useAppStateCtx();
+  const { isOwner, isAdmin, adminPermissions } = useAppStateCtx();
+  const { setMockToEdit, setAdminEditNotice, setAdminEditCountdown } = useUIStore();
 
   const { 
     activeTab, 
     setActiveTab, 
     isSidebarCollapsed, 
     setIsSidebarCollapsed,
-    setAdminTab,
-    setAdminEditNotice,
-    setAdminEditCountdown
+    setAdminTab
   } = useUIStore();
 
   const [localActiveTab, setLocalActiveTab] = React.useState<string>(activeTab);
@@ -106,7 +105,7 @@ export function Sidebar() {
 
   return (
     <div 
-      className={`hidden md:flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-50 relative flex-shrink-0 transition-[width] duration-300 ease-in-out whitespace-nowrap ${
+      className={`hidden md:flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-50 relative flex-shrink-0 transition-[width] duration-150 ease-out whitespace-nowrap ${
         isSidebarCollapsed ? "w-[80px]" : "w-[240px]"
       }`}
     >
@@ -121,7 +120,7 @@ export function Sidebar() {
           </div>
           
           <h1 
-            className={`text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 shrink-0 transition-opacity duration-300 ml-3 ${
+            className={`text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 shrink-0 transition-opacity duration-150 ml-3 ${
               isSidebarCollapsed ? "opacity-0" : "opacity-100"
             }`}
           >
@@ -160,7 +159,7 @@ export function Sidebar() {
                 <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'neon-active-icon' : ''}`} strokeWidth={isActive ? 3 : 2} />
               </div>
               
-              <span className={`flex-1 text-left transition-opacity duration-300 ml-3 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
+              <span className={`flex-1 text-left transition-opacity duration-150 ml-3 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
                 {item.label}
               </span>
               
@@ -188,7 +187,7 @@ export function Sidebar() {
             <div className="w-6 flex shrink-0 items-center justify-center">
               <Shield className={`w-5 h-5 shrink-0 ${localActiveTab === "admin" ? 'neon-active-icon' : ''}`} strokeWidth={localActiveTab === "admin" ? 3 : 2} />
             </div>
-            <span className={`flex-1 text-left transition-opacity duration-300 ml-3 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
+            <span className={`flex-1 text-left transition-opacity duration-150 ml-3 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
               {isOwner ? "Owner Panel" : "Admin Panel"}
             </span>
 
@@ -211,7 +210,7 @@ export function Sidebar() {
           <div className="w-6 flex shrink-0 items-center justify-center">
             <Users className={`w-5 h-5 shrink-0 ${localActiveTab === "community" ? 'neon-active-icon' : ''}`} strokeWidth={localActiveTab === "community" ? 3 : 2} />
           </div>
-          <span className={`flex-1 text-left transition-opacity duration-300 ml-3 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
+          <span className={`flex-1 text-left transition-opacity duration-150 ml-3 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
             Community
           </span>
           
@@ -237,7 +236,7 @@ export function Sidebar() {
               <UserCircle className={`w-7 h-7 shrink-0 ${localActiveTab === "profile" ? 'neon-active-icon' : ''}`} strokeWidth={localActiveTab === "profile" ? 3 : 2} />
             )}
           </div>
-          <span className={`flex-1 text-left transition-opacity duration-300 ml-2 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
+          <span className={`flex-1 text-left transition-opacity duration-150 ml-2 ${isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
             {profile?.displayName || user.displayName || 'Profile'}
           </span>
 

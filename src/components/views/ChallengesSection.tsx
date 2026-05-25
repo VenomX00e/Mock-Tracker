@@ -9,15 +9,13 @@ import { ChallengeCard } from '../ChallengeCard';
 export function ChallengesSection() {
   const { user } = useAuthCtx();
   const { challenges, pinnedChallenges, selectedCategory, deletedChallenges } = useSystemDataCtx();
-  const { 
-      activeTab, 
+  const { activeTab, 
       setActiveTab,
       setIsCreateChallengeOpen, 
       setIsHiddenChallengesModalOpen, 
       setIsRequestsModalOpen, 
       setIsChallengeRecycleBinOpen,
-      setShowTasksModal
-  } = useUIStore();
+      setShowTasksModal, setEditingChallenge } = useUIStore();
   const { 
       dismissedChallenges, 
       dismissChallenge, 
@@ -26,7 +24,7 @@ export function ChallengesSection() {
   } = useChallengesManagerCtx();
   const { profile } = useUserProfileCtx();
   const { mocks, updateMock } = useMocks();
-  const { adminPermissions, handleUpdateProfileTasks, setEditingChallenge } = useAppStateCtx();
+  const { adminPermissions, handleUpdateProfileTasks } = useAppStateCtx();
 
   const handleUpdateReflection = async (id: string, updates: any) => {
     const mockToUpdate = mocks.find(m => m.id === id);

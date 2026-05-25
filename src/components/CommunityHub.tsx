@@ -1,23 +1,27 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CommunityHubTrashModal } from './community/CommunityHubTrashModal';
+import { useCommunityUI } from './community/useCommunityPosts';
 import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, addDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
-import { UserProfile, MockScore } from '../types';
+import { UserProfile, MockScore, CommunityLeaderboardProps, CommunityFeedProps, CommunityChatProps } from '../types';
 import { Trophy, Flame, Target, Users, Calendar, ArrowRight, Trash2, ShieldAlert, ArchiveRestore, Send, MessageSquare, Pencil, X, Reply, BarChart2, CheckCircle2, CheckSquare, Pin, PinOff } from 'lucide-react';
+import { CommunityViewProvider, useCommunityView, CommunityViewContextType } from "./community/CommunityContext";
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 import { getErrorMessage } from '../lib/errorUtils';
+import { getSub } from '../lib/subjectUtils';
 import { ChallengeCard } from './ChallengeCard';
+import { Card } from './ui/Card';
 import { useAuthCtx, useAppStateCtx, useSystemDataCtx, useChallengesManagerCtx } from '../context/AppContext';
 import { useUIStore } from '../store/uiStore';
 
 export default function CommunityHub() {
 
   const { user } = useAuthCtx();
-  const { adminPermissions, isOwner, setMockToEdit, setEditingChallenge, localCategory: categoryId } = useAppStateCtx();
+  const { adminPermissions, isOwner, localCategory: categoryId } = useAppStateCtx();
   const { challenges, categories, pinnedChallenges } = useSystemDataCtx();
-  const { setActivePublicProfile, setIsCreateChallengeOpen, setIsRequestsModalOpen, setIsAddModalOpen } = useUIStore();
+  const { setIsCreateChallengeOpen, setIsRequestsModalOpen, setIsAddModalOpen, setMockToEdit, setEditingChallenge, setActivePublicProfile } = useUIStore();
   const { handlePinChallenge, handleDeleteChallenge, dismissChallenge } = useChallengesManagerCtx();
   
   const onUserClick = setActivePublicProfile;
@@ -41,837 +45,37 @@ export default function CommunityHub() {
     { id: 'ga', name: 'GA', short: 'GA' }
   ];
 
-  const getSub = (mock: any, id: string) => {
-    if (['quant', 'reasoning', 'english', 'ga', 'computer'].includes(id)) return mock[id];
-    if (mock.dynamicSubjects?.[id] != null) return mock.dynamicSubjects[id];
-    
-    const subj = subjects.find((s: any) => s.id === id);
-    if (subj) {
-       const n = subj.name.toLowerCase();
-       const sh = (subj.short || '').toLowerCase();
-       if (n.includes('quant') || sh === 'q') return mock.quant;
-       if (n.includes('reason') || sh === 'r') return mock.reasoning;
-       if (n.includes('english') || sh === 'e') return mock.english;
-       if (n.includes('ga') || n.includes('general') || sh === 'ga') return mock.ga;
-       if (n.includes('computer') || sh === 'c') return mock.computer;
-    }
-    return null;
-  };
 
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: 'avgPercentile', direction: 'desc' });
-  const [feedSort, setFeedSort] = useState<{ key: string | null, direction: 'asc'|'desc'|null }>({ key: null, direction: null });
-  const [selectedPhase, setSelectedPhase] = useState<string>('All');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('7 Days');
-  const [feedLogs, setFeedLogs] = useState<any[]>([]);
-  const [allFeedMocks, setAllFeedMocks] = useState<any[]>([]);
-  const [loadingTop, setLoadingTop] = useState(true);
-  const [loadingFeed, setLoadingFeed] = useState(true);
-  const [daysVisible, setDaysVisible] = useState(1);
-  const [userMap, setUserMap] = useState<Record<string, UserProfile>>({});
-  const [reactions, setReactions] = useState<Record<string, { count: number, hasReacted: boolean }>>({});
-  const [showTrash, setShowTrash] = useState(false);
-  const [deletedMocks, setDeletedMocks] = useState<MockScore[]>([]);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [replyingTo, setReplyingTo] = useState<any>(null);
-  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
-  const [activeActionsMsgId, setActiveActionsMsgId] = useState<string | null>(null);
-  const [showPollVotersForId, setShowPollVotersForId] = useState<string | null>(null);
-  const [chatError, setChatError] = useState<string>('');
-  const [isSending, setIsSending] = useState(false);
-  const [showPollMaker, setShowPollMaker] = useState(false);
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptions, setPollOptions] = useState<{id: string, text: string, isCorrect: boolean}[]>([{id: '1', text: '', isCorrect: false}, {id: '2', text: '', isCorrect: false}]);
-  const [pollIsMulti, setPollIsMulti] = useState(false);
-  const [activeReactionView, setActiveReactionView] = useState<string | null>(null);
-  const [customEmojiOpenForId, setCustomEmojiOpenForId] = useState<string | null>(null);
-  const [customEmojiInput, setCustomEmojiInput] = useState('');
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const uiState = useCommunityUI(user, isAdmin, categoryId, activeCategory);
   
-  const isFirstLoad = useRef(true);
+  const {
+    allUsers, feedLogs, setFeedLogs, allFeedMocks, setAllFeedMocks, loadingTop, loadingFeed, userMap,
+    deletedMocks, setDeletedMocks, chatMessages, sortConfig, setSortConfig, daysVisible, setDaysVisible,
+    feedSort, setFeedSort, selectedPhase, setSelectedPhase, selectedPeriod, setSelectedPeriod, reactions, setReactions,
+    showTrash, setShowTrash, newMessage, setNewMessage, editingMessageId, setEditingMessageId, replyingTo, setReplyingTo,
+    activeMsgId, setActiveMsgId, activeActionsMsgId, setActiveActionsMsgId, showPollVotersForId, setShowPollVotersForId,
+    chatError, setChatError, isSending, setIsSending, showPollMaker, setShowPollMaker, pollQuestion, setPollQuestion,
+    pollOptions, setPollOptions, pollIsMulti, setPollIsMulti, activeReactionView, setActiveReactionView,
+    customEmojiOpenForId, setCustomEmojiOpenForId, customEmojiInput, setCustomEmojiInput, chatBottomRef,
+    
+    handleSendMessage, handleDeleteMessage, handlePinMessage, handleChatReact, handlePollVote, handleSort, handleFeedSort,
+    getFeedSortConfig, availablePhases, activeAllUsers, sortedLeaderboard, filteredFeedLogs, handleAdminRestore,
+    handleAdminPermanentDelete, handleAdminChangeGlobalSort, handleReact
+  } = uiState;
 
-  // Global sort config effect
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const d = await getDoc(doc(db, 'system', 'leaderboardSettings'));
-        if (d.exists()) {
-           const data = d.data();
-           if (data.defaultSortKey) {
-             setSortConfig({ key: data.defaultSortKey, direction: data.defaultSortDirection || 'desc' });
-           }
-        }
-      } catch(e) {}
+  const contextValue: CommunityViewContextType = {
+      Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isAdmin, isOwner, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame,
+      user, Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, getPlatformShort, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight,
+      MessageSquare, chatMessages, Pin, handlePinMessage, X, setActiveMsgId, setCustomEmojiOpenForId, setActiveReactionView, setActiveActionsMsgId, setShowPollVotersForId, userMap, activeActionsMsgId, setReplyingTo, activeMsgId, handlePollVote, CheckCircle2, CheckSquare, showPollVotersForId, activeReactionView, handleChatReact, customEmojiOpenForId, customEmojiInput, setCustomEmojiInput, setEditingMessageId, setNewMessage, setShowPollMaker, setPollQuestion, setPollIsMulti, setPollOptions, Pencil, handleDeleteMessage, Trash2, PinOff, chatBottomRef, chatError, replyingTo, handleSendMessage, editingMessageId, showPollMaker, BarChart2, pollIsMulti, pollQuestion, pollOptions, newMessage, isSending, Send
     };
-    fetchSettings();
-  }, []);
 
-  const handleAdminChangeGlobalSort = async (key: string) => {
-     if (!isOwner) return;
-     const direction = 'desc'; // Assuming desc by default for simplicity when changing
-     setSortConfig({ key, direction });
-     try {
-       await setDoc(doc(db, 'system', 'leaderboardSettings'), { defaultSortKey: key, defaultSortDirection: direction }, { merge: true });
-     } catch (e) { console.error("Error saving global sort", e); }
-  };
+    return (
+      <CommunityViewProvider value={contextValue}>
+        <div className="space-y-8 mt-6 lg:mt-8 mb-4">
+          <CommunityLeaderboard />
+          <CommunityFeed />
+          <CommunityChat />
 
-  const handleReact = (e: React.MouseEvent, mockId: string) => {
-    e.stopPropagation();
-    setReactions(prev => {
-      const current = prev[mockId] || { count: 0, hasReacted: false };
-      
-      if (current.hasReacted) {
-        return { ...prev, [mockId]: { count: Math.max(0, current.count - 1), hasReacted: false } };
-      } else {
-        return { ...prev, [mockId]: { count: current.count + 1, hasReacted: true } };
-      }
-    });
-  };
-
-  const handleAdminSoftDelete = async (e: React.MouseEvent, mock: MockScore) => {
-     e.stopPropagation();
-     if (!isAdmin || !mock.userId) return;
-     if (window.confirm('Hide this mock from the community feed?')) {
-        try {
-           // Optimistic UI updates
-           setFeedLogs(logs => {
-              return logs.map(day => ({
-                 ...day,
-                 mocks: day.mocks.filter((m: MockScore) => m.id !== mock.id)
-              })).filter(day => day.mocks.length > 0);
-           });
-           setDeletedMocks(prev => [mock, ...prev]);
-
-            await updateDoc(doc(db, 'users', mock.userId, 'mocks', mock.id), { isDeleted: true, updatedAt: serverTimestamp() });
-        } catch (err: any) {
-           console.error("Error soft deleting mock:", err);
-           alert("Failed to delete from database: " + getErrorMessage(err) + ". It is hidden for this session.");
-        }
-     }
-  };
-
-  const handleAdminRestore = async (mock: MockScore) => {
-     if (!isAdmin || !mock.userId) return;
-     try {
-        setDeletedMocks(prev => prev.filter(m => m.id !== mock.id));
-        await updateDoc(doc(db, 'users', mock.userId, 'mocks', mock.id), { isDeleted: false, updatedAt: serverTimestamp() });
-        window.location.reload();
-     } catch (err) {
-        console.error("Error restoring mock", err);
-     }
-  };
-
-  const handleAdminPermanentDelete = async (mock: MockScore) => {
-     if (!isAdmin) return;
-     if (window.confirm('Permanently delete this mock from the database? This cannot be undone.')) {
-        try {
-           await deleteDoc(doc(db, 'users', mock.userId, 'mocks', mock.id));
-           setDeletedMocks(prev => prev.filter(m => m.id !== mock.id));
-        } catch (err) {
-           console.error("Error permanently deleting mock", err);
-        }
-     }
-  };
-
-  useEffect(() => {
-    const timeLimit = Date.now() - 48 * 60 * 60 * 1000;
-    
-    // Cleanup old messages to save storage
-    const cleanupOldMessages = async () => {
-      if (!user) return;
-      try {
-        const oldMsgsQ = query(collection(db, 'community_chat'), where('createdAt', '<=', timeLimit));
-        const oldSnap = await getDocs(oldMsgsQ);
-        oldSnap.docs.forEach(d => {
-           if (isAdmin || d.data().userId === user.uid) {
-             deleteDoc(d.ref).catch(() => {});
-           }
-        });
-      } catch(e) {}
-    };
-    cleanupOldMessages();
-
-    const q = query(collection(db, 'community_chat'), where('createdAt', '>', timeLimit), orderBy('createdAt', 'asc'));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setChatMessages(messages);
-      
-      const hasNewMessages = snap.docChanges().some(change => change.type === 'added');
-      if (hasNewMessages || isFirstLoad.current) {
-        setTimeout(() => {
-           const chatDiv = document.getElementById('community-chat-scroll');
-           if (chatDiv) {
-             const isNearBottom = chatDiv.scrollHeight - chatDiv.scrollTop <= chatDiv.clientHeight + 150;
-             // Scroll to bottom if near bottom, or if it's initial load
-             if (isNearBottom || isFirstLoad.current) {
-               chatDiv.scrollTo({ top: chatDiv.scrollHeight, behavior: 'smooth' });
-             }
-           }
-           isFirstLoad.current = false;
-        }, 100);
-      }
-    }, (error: any) => {
-      if (error.code !== 'permission-denied') {
-        console.warn("Chat subscription error:", error);
-      }
-    });
-  return () => unsubscribe();
-  }, [user, isAdmin]);
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const hasText = newMessage.trim().length > 0;
-    const hasPoll = showPollMaker && pollQuestion.trim().length > 0 && pollOptions.filter(o => o.text.trim().length > 0).length >= 2;
-    if (!user || isSending || (!hasText && !hasPoll)) return;
-    
-    // UI Hardening: enforce maxLength on text as per DB rules
-    if (newMessage.trim().length > 2000) {
-      setChatError(`Message cannot exceed 2000 characters.`);
-      setTimeout(() => setChatError(''), 4000);
-      return;
-    }
-
-    if (hasPoll && pollQuestion.trim().length > 200) {
-      setChatError(`Poll question cannot exceed 200 characters.`);
-      setTimeout(() => setChatError(''), 4000);
-      return;
-    }
-    
-    // Check limit
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const startOfDay = midnight.getTime();
-    const userMsgCount = chatMessages.filter(m => m.userId === user.uid && m.createdAt > startOfDay).length;
-    
-    if (userMsgCount >= 10 && !isAdmin && !editingMessageId) {
-      setChatError(`You have reached the limit of 10 messages today. Try again tomorrow!`);
-      setTimeout(() => setChatError(''), 4000);
-      return;
-    }
-
-    setIsSending(true);
-    try {
-      if (editingMessageId) {
-        const updatePayload: any = {
-          text: newMessage.trim(),
-          isEdited: true,
-          updatedAt: Date.now()
-        };
-        if (hasPoll) {
-          const existingMsg = chatMessages.find(m => m.id === editingMessageId);
-          const existingPoll = existingMsg?.poll;
-          
-          updatePayload.poll = {
-            question: pollQuestion.trim(),
-            isMulti: pollIsMulti,
-            options: pollOptions.filter(o => o.text.trim().length > 0).map(o => {
-               const existingOpt = existingPoll?.options?.find((eo: any) => eo.id === o.id);
-               return {
-                 id: o.id,
-                 text: o.text.trim(),
-                 isCorrect: o.isCorrect,
-                 votes: existingOpt ? existingOpt.votes : {}
-               };
-            })
-          };
-        }
-        await updateDoc(doc(db, 'community_chat', editingMessageId), updatePayload);
-        setEditingMessageId(null);
-        setNewMessage('');
-        setShowPollMaker(false);
-        setPollQuestion('');
-        setPollOptions([{id: '1', text: '', isCorrect: false}, {id: '2', text: '', isCorrect: false}]);
-        setPollIsMulti(false);
-        setIsSending(false);
-        return;
-      }
-
-      const payload: any = {
-        userId: user.uid,
-        userName: user.displayName || 'Anonymous',
-        userPhoto: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'A'}`,
-        text: newMessage.trim(),
-        createdAt: Date.now()
-      };
-
-      if (hasPoll) {
-        payload.poll = {
-          question: pollQuestion.trim(),
-          isMulti: pollIsMulti,
-          options: pollOptions.filter(o => o.text.trim().length > 0).map(o => ({
-            id: o.id,
-            text: o.text.trim(),
-            isCorrect: o.isCorrect,
-            votes: {}
-          }))
-        };
-      }
-
-      if (replyingTo) {
-        payload.replyTo = {
-          id: replyingTo.id,
-          text: replyingTo.text,
-          userName: replyingTo.userId === user.uid ? 'You' : (userMap[replyingTo.userId]?.displayName || replyingTo.userName)
-        };
-      }
-
-      const validateChatMessage = (data: any) => {
-        if (!data.userId) throw new Error("Missing user ID");
-        if (data.userName && data.userName.length > 100) throw new Error("User name too long");
-        if (data.userPhoto && data.userPhoto.length > 500) throw new Error("User photo URL too long");
-        if (data.text && data.text.length > 2000) throw new Error("Message text too long");
-        if (data.poll && data.poll.question && data.poll.question.length > 200) throw new Error("Poll question too long");
-      };
-      
-      validateChatMessage(payload);
-
-      await addDoc(collection(db, 'community_chat'), payload);
-      try {
-        await setDoc(doc(db, 'users', user.uid), { userId: user.uid, lastActiveAt: Date.now() }, { merge: true });
-      } catch (e) { console.error(e); }
-      setNewMessage('');
-      setReplyingTo(null);
-      setShowPollMaker(false);
-      setPollQuestion('');
-      setPollOptions([{id: '1', text: '', isCorrect: false}, {id: '2', text: '', isCorrect: false}]);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleDeleteMessage = async (msgId: string, authorId: string) => {
-     if (user?.uid !== authorId && !isAdmin) return;
-     try {
-        await deleteDoc(doc(db, 'community_chat', msgId));
-     } catch (err: any) { 
-        console.error(err);
-        setChatError(getErrorMessage(err));
-        setTimeout(() => setChatError(''), 3000);
-     }
-  };
-
-  const handlePinMessage = async (msgId: string, currentPinStatus: boolean) => {
-     try {
-        await updateDoc(doc(db, 'community_chat', msgId), {
-           isPinned: !currentPinStatus
-        });
-     } catch (err: any) {
-        console.error(err);
-     }
-  };
-
-  const handleChatReact = async (msgId: string, emoji: string) => {
-    if (!user) return;
-    try {
-      const msg = chatMessages.find(m => m.id === msgId);
-      if (!msg) return;
-      
-      const reactions = { ...(msg.reactions || {}) };
-      
-      // Remove this user's reaction from any other emoji for this message
-      Object.keys(reactions).forEach(k => {
-        if (k !== emoji && reactions[k] && reactions[k][user.uid]) {
-          reactions[k] = { ...reactions[k] };
-          delete reactions[k][user.uid];
-        }
-      });
-      
-      const emojiReacts = reactions[emoji] || {};
-      const newEmojiReacts = { ...emojiReacts };
-      if (newEmojiReacts[user.uid]) {
-        delete newEmojiReacts[user.uid];
-      } else {
-        newEmojiReacts[user.uid] = true;
-      }
-      reactions[emoji] = newEmojiReacts;
-
-      setActiveMsgId(null);
-      await updateDoc(doc(db, 'community_chat', msgId), {
-        reactions
-      });
-    } catch (e) { console.error(e); }
-  };
-
-  const handlePollVote = async (msgId: string, optionId: string) => {
-    if (!user) return;
-    try {
-      const msg = chatMessages.find(m => m.id === msgId);
-      if (!msg || !msg.poll) return;
-
-      const newOptions = msg.poll.options.map((opt: any) => {
-        const votes = opt.votes || {};
-        const newVotes = { ...votes };
-        if (opt.id === optionId) {
-           if (newVotes[user.uid]) {
-             delete newVotes[user.uid];
-           } else {
-             newVotes[user.uid] = { timestamp: Date.now() };
-           }
-        } else if (!msg.poll.isMulti) {
-           delete newVotes[user.uid];
-        }
-        return { ...opt, votes: newVotes };
-      });
-
-      await updateDoc(doc(db, 'community_chat', msgId), {
-        'poll.options': newOptions
-      });
-    } catch (e) { console.error(e); }
-  };
-
-  // Global click listener for chat popups
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setActiveReactionView(null);
-      setActiveMsgId(null);
-      setCustomEmojiOpenForId(null);
-      setActiveActionsMsgId(null);
-      setShowPollVotersForId(null);
-    };
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, []);
-
-  // Fetch Leaderboard and Users
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
-      try {
-        // Query sorted by avgPercentile, limiting to top 150 to prevent massive client-side scans
-        const q = query(
-          collection(db, 'users'),
-          orderBy('avgPercentile', 'desc'),
-          limit(150)
-        );
-        const snap = await getDocs(q);
-        const users = snap.docs.map(d => d.data() as UserProfile);
-        
-        users.forEach(u => {
-           if (categoryId && categoryId !== 'All') {
-               if (u.categoryStats) {
-                   const cs = u.categoryStats[categoryId]?.allTime;
-                   if (cs) {
-                       u.avgPercentile = cs.avgPercentile || 0;
-                       u.totalTests = cs.totalTests || 0;
-                       u.avgAccuracy = cs.avgAccuracy || 0;
-                       u.avgQuantPercentile = cs.avgQuantPercentile || 0;
-                       u.avgReasoningPercentile = cs.avgReasoningPercentile || 0;
-                       u.avgEnglishPercentile = cs.avgEnglishPercentile || 0;
-                       u.avgGaPercentile = cs.avgGaPercentile || 0;
-                       u.dynamicAverages = cs.dynamicAverages || {};
-                   } else {
-                       u.avgPercentile = 0;
-                       u.totalTests = 0;
-                       u.avgAccuracy = 0;
-                       u.avgQuantPercentile = 0;
-                       u.avgReasoningPercentile = 0;
-                       u.avgEnglishPercentile = 0;
-                       u.avgGaPercentile = 0;
-                       u.dynamicAverages = {};
-                   }
-               } else if (u.categoryId === categoryId || (!u.categoryId && categoryId === 'banking')) {
-                   // Fallback for old stats that haven't been mapped yet
-                   u.dynamicAverages = u.dynamicAverages || {};
-               } else {
-                   u.avgPercentile = 0;
-                   u.totalTests = 0;
-                   u.avgAccuracy = 0;
-                   u.avgQuantPercentile = 0;
-                   u.avgReasoningPercentile = 0;
-                   u.avgEnglishPercentile = 0;
-                   u.avgGaPercentile = 0;
-                   u.dynamicAverages = {};
-               }
-           }
-        });
-
-        users.sort((a, b) => (b.avgPercentile || 0) - (a.avgPercentile || 0));
-        
-        // Filter out banned/muted users from leaderboard
-        let visibleUsers = users.filter((u) => !u.isBanned && !u.isMuted);
-        
-        const map: Record<string, UserProfile> = {};
-        users.forEach(u => map[u.userId] = u);
-        setUserMap(map);
-
-        if (categoryId && categoryId !== 'All') {
-          visibleUsers = visibleUsers.filter(u => u.categoryId === categoryId || (!u.categoryId && categoryId === 'banking') || (u.categoryStats && u.categoryStats[categoryId] && u.categoryStats[categoryId].allTime.totalTests > 0));
-        }
-        
-        visibleUsers = visibleUsers.filter(u => u.totalTests > 0);
-
-        // Deduplicate by email
-        const emailMap = new Map<string, UserProfile>();
-        const finalVisibleUsers: UserProfile[] = [];
-        for (const u of visibleUsers) {
-           if (u.email) {
-               if (!emailMap.has(u.email)) {
-                   emailMap.set(u.email, u);
-               } else {
-                   const existing = emailMap.get(u.email)!;
-                   if ((u.totalTests || 0) > (existing.totalTests || 0)) {
-                       emailMap.set(u.email, u);
-                   }
-               }
-           } else {
-               finalVisibleUsers.push(u);
-           }
-        }
-        for (const u of emailMap.values()) {
-            finalVisibleUsers.push(u);
-        }
-        
-        finalVisibleUsers.sort((a, b) => (b.avgPercentile || 0) - (a.avgPercentile || 0));
-
-        setAllUsers(finalVisibleUsers);
-      } catch (e) {
-        console.error(e);
-      }
-      setLoadingTop(false);
-    };
-    fetchLeaderboard();
-  }, [categoryId]);
-
-  // Fetch Feed
-  useEffect(() => {
-    const fetchFeed = async () => {
-      if (Object.keys(userMap).length === 0) return; // Wait for users to load
-      setLoadingFeed(true);
-      try {
-        const q = query(collectionGroup(db, 'mocks'), orderBy('date', 'desc'), limit(200));
-        const snap = await getDocs(q);
-        
-        let mocks = snap.docs.map(d => {
-            const data = d.data() as MockScore;
-            if (!data.id) {
-                data.id = d.id;
-            }
-            if (!data.userId) {
-                data.userId = d.ref.parent.parent?.id;
-            }
-            return data;
-        });
-        
-        // Setup deleted mocks separately for admin
-        if (isAdmin) {
-           setDeletedMocks(mocks.filter(m => (m as any).isDeleted === true));
-        }
-
-        // Filter out mocks from banned or muted users, and soft deleted mocks
-        mocks = mocks.filter(m => {
-           if ((m as any).isDeleted) return false;
-           
-           // If category filtering is active, only show mocks from that category
-           const p = userMap[m.userId!];
-           if (categoryId && categoryId !== 'All') { // Assuming 'All' could be a value, though usually it's specific
-             const mockCat = m.categoryId || 'banking';
-             const categoryMatch = mockCat === categoryId;
-             if (!categoryMatch) return false;
-           }
-
-           if (!p) return true;
-           if (p.isBanned || p.isMuted) return false;
-           return true;
-        });
-
-        setAllFeedMocks(mocks);
-
-        // Group by Date -> ExamName -> Mocks (sorted by percentile)
-        const profileToMocksMap: Record<string, MockScore[]> = {};
-        mocks.forEach(m => {
-          if (!profileToMocksMap[m.userId!]) profileToMocksMap[m.userId!] = [];
-          profileToMocksMap[m.userId!].push(m);
-        });
-        
-        // Dynamically calculate user active streak mapping for the feed to fix corrupt DB fields
-        const userDateToStreakMap: Record<string, number> = {};
-        for (const [userId, userMocks] of Object.entries(profileToMocksMap)) {
-           const midnights = [...new Set(userMocks.map(m => {
-              const d = parseLocalDate(m.date);
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-           }))].sort((a,b) => b - a);
-           
-           for (let idx = 0; idx < midnights.length; idx++) {
-               let streak = 1;
-               let currentDt = new Date(midnights[idx]);
-               for (let i = idx + 1; i < midnights.length; i++) {
-                  let prev = new Date(currentDt);
-                  prev.setDate(prev.getDate() - 1);
-                  if (midnights[i] === prev.getTime()) {
-                      streak++;
-                      currentDt = prev;
-                  } else {
-                      break;
-                  }
-               }
-               // key format: userId_Mon, Apr 20, 2026
-               const targetDt = new Date(midnights[idx]);
-               const dateStrKey = targetDt.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-               userDateToStreakMap[`${userId}_${dateStrKey}`] = streak;
-           }
-        }
-
-        const grouped: any = {};
-        mocks.forEach(m => {
-           
-          const mockDate = parseLocalDate(m.date);
-          const dateStr = mockDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-          if (!grouped[dateStr]) grouped[dateStr] = {};
-          if (!grouped[dateStr][m.mockName]) grouped[dateStr][m.mockName] = [];
-          
-          const profile = userMap[m.userId!] || {} as Partial<UserProfile>;
-          const key = m.userId + '_' + dateStr;
-          
-          grouped[dateStr][m.mockName].push({
-             ...m,
-             userName: profile.displayName || (m as any).userName || 'Anonymous',
-             userStreak: userDateToStreakMap[key] || 1,
-             userStreakActive: true, // Always active in feed since they posted a mock that day
-             userPhoto: profile.photoURL || `https://ui-avatars.com/api/?name=${(m as any).userName || 'A'}`,
-             userProfileRef: { ...profile, todaysMocks: profileToMocksMap[m.userId!].filter(tm => parseLocalDate(tm.date).toDateString() === new Date().toDateString()) }
-          });
-        });
-
-        // Convert to array format
-        const finalFeed = [];
-        for (const date of Object.keys(grouped).sort((a,b) => new Date(b).getTime() - new Date(a).getTime())) {
-          const examsObj = grouped[date];
-          const examsArray = [];
-          for (const examName of Object.keys(examsObj)) {
-            // Sort mocks inside exam by percentile desc
-            const sortedMocks = examsObj[examName].sort((a: MockScore, b: MockScore) => b.percentile - a.percentile);
-            // Calculate earliest time of this exam to sort exams later
-            const earliestTime = Math.min(...sortedMocks.map((m: MockScore) => parseLocalDate(m.date).getTime()));
-            examsArray.push({ examName, mocks: sortedMocks, earliestTime });
-          }
-          // Sort exams by earliest time descending (recent first, meaning first exam of the day is last) 
-          examsArray.sort((a, b) => b.earliestTime - a.earliestTime);
-          
-          const universalRows = [];
-          for (const eg of examsArray) {
-             universalRows.push(...eg.mocks);
-          }
-          finalFeed.push({ date, mocks: universalRows });
-        }
-        setFeedLogs(finalFeed);
-      } catch (e) {
-        console.error(e);
-      }
-      setLoadingFeed(false);
-    };
-    fetchFeed();
-  }, [daysVisible, userMap, categoryId]);
-
-  const handleSort = (key: string) => {
-    if (sortConfig.key === key) {
-      if (sortConfig.direction === 'desc') setSortConfig({ key, direction: 'asc' });
-      else if (sortConfig.direction === 'asc') setSortConfig({ key: null, direction: null });
-    } else {
-      setSortConfig({ key, direction: 'desc' });
-    }
-  };
-
-  const handleFeedSort = (key: string) => {
-    if (feedSort.key === key) {
-      if (feedSort.direction === 'desc') setFeedSort({ key, direction: 'asc' });
-      else if (feedSort.direction === 'asc') setFeedSort({ key: null, direction: null });
-    } else {
-      setFeedSort({ key, direction: 'desc' });
-    }
-  };
-
-  const getFeedSortConfig = (key: string) => {
-    if (feedSort.key !== key) return null;
-    return feedSort.direction === 'desc' ? '⬇' : '⬆';
-  };
-
-  const availablePhases = useMemo(() => {
-    // If we want all possible phases ever known statically, we can use a fixed list.
-    // However, keeping consistent with Dashboard, we can use a global list or extract from feed.
-    const phases = new Set<string>();
-    feedLogs.forEach(day => {
-        day.mocks?.forEach((m: any) => {
-            if (m.examPhase) phases.add(m.examPhase);
-        });
-    });
-    const catPhases = activeCategory?.phases || ['Prelims', 'Mains'];
-    catPhases.forEach((p: string) => phases.add(p));
-    
-    const sortedPhases = Array.from(phases).sort((a, b) => {
-      const idxA = catPhases.indexOf(a);
-      const idxB = catPhases.indexOf(b);
-      
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return a.localeCompare(b);
-    });
-    
-    return ['All', ...sortedPhases];
-  }, [feedLogs]);
-
-  const activeAllUsers = useMemo(() => {
-    let users = allUsers;
-    
-    // Check if it's a known period
-    const is30D = selectedPeriod === '30 Days' || selectedPeriod === 'Last 30 Days';
-    const is7D = selectedPeriod === '7 Days' || selectedPeriod === 'Last 7 Days';
-    const isAll = selectedPeriod === 'All Time' || selectedPeriod === 'All';
-    const isCustom = !is30D && !is7D && !isAll;
-
-    if (selectedPhase === 'All' && isAll) {
-      // Nothing special doing, proceed to the regular filtering at the bottom
-    } else {
-      const userStats: Record<string, any> = {};
-      
-      let cutoffTime = 0;
-      if (is30D) {
-         const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 30); cutoffTime = d.getTime();
-      } else if (is7D) {
-         const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - 7); cutoffTime = d.getTime();
-      } else if (isCustom) {
-         const parsed = parseInt(selectedPeriod);
-         if (!isNaN(parsed) && parsed > 0) {
-           const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - parsed); cutoffTime = d.getTime();
-         }
-      }
-
-      allFeedMocks.forEach(m => {
-         if (selectedPhase !== 'All' && m.examPhase !== selectedPhase) return;
-         if (cutoffTime > 0) {
-            const d = parseLocalDate(m.date);
-            if (d.getTime() < cutoffTime) return;
-         }
-         const uid = m.userId;
-         if (!uid) return;
-         if (!userStats[uid]) {
-            const u = userMap[uid] || {} as any;
-            userStats[uid] = {
-               ...u, 
-               totalTests: 0,
-               pCount: 0, pSum: 0,
-               dynamicSums: {}
-            };
-         }
-         const stat = userStats[uid];
-         stat.totalTests++;
-         
-         if ((!m.examScope || m.examScope === 'Full') && m.percentile > 0) {
-            stat.pSum += m.percentile; stat.pCount++;
-         }
-         
-         const allSubs = { ...m, ...m.dynamicSubjects };
-         Object.keys(allSubs).forEach(key => {
-            const val = allSubs[key];
-            if (val && typeof val === 'object' && val.percentile > 0) {
-               if (!stat.dynamicSums[key]) stat.dynamicSums[key] = { sum: 0, count: 0 };
-               stat.dynamicSums[key].sum += val.percentile;
-               stat.dynamicSums[key].count++;
-            }
-         });
-      });
-
-      const finalizeStat = (stat: any) => {
-         const finalObj = {
-            ...stat,
-            avgPercentile: stat.pCount > 0 ? Number((stat.pSum / stat.pCount).toFixed(2)) : 0,
-            dynamicAverages: {} as Record<string, number>,
-         };
-         if (stat.dynamicSums) {
-            Object.keys(stat.dynamicSums).forEach(k => {
-               finalObj.dynamicAverages[k] = Number((stat.dynamicSums[k].sum / stat.dynamicSums[k].count).toFixed(2));
-            });
-            // Keep aliases for backward compatibility with existing hardcoded columns if needed
-            finalObj.avgQuantPercentile = finalObj.dynamicAverages['quant'] || finalObj.dynamicAverages['bank_quant'] || finalObj.dynamicAverages['ssc_maths'] || 0;
-            finalObj.avgReasoningPercentile = finalObj.dynamicAverages['reasoning'] || finalObj.dynamicAverages['bank_reasoning'] || finalObj.dynamicAverages['ssc_reasoning'] || 0;
-            finalObj.avgEnglishPercentile = finalObj.dynamicAverages['english'] || finalObj.dynamicAverages['bank_english'] || finalObj.dynamicAverages['ssc_english'] || 0;
-         }
-         return finalObj;
-      };
-
-      if (selectedPhase === 'All') {
-         users = allUsers.map(u => {
-            const uid = u.userId;
-            const catKey = categoryId !== 'All' ? categoryId : null;
-            if (is30D) {
-                if (catKey && (u as any).categoryStats?.[catKey]?.stats30D) return { ...u, ...((u as any).categoryStats[catKey].stats30D) };
-                if (!catKey && (u as any).stats30D) return { ...u, ...((u as any).stats30D) };
-            }
-            if (is7D) {
-                if (catKey && (u as any).categoryStats?.[catKey]?.stats7D) return { ...u, ...((u as any).categoryStats[catKey].stats7D) };
-                if (!catKey && (u as any).stats7D) return { ...u, ...((u as any).stats7D) };
-            }
-            
-            const stat = userStats[uid];
-            if (!stat) return { ...u, totalTests: 0 };
-            return finalizeStat(stat);
-         }).filter(u => u.totalTests > 0);
-      } else {
-        users = Object.values(userStats).map((stat: any) => finalizeStat(stat)).filter((u: any) => u.avgPercentile > 0 || u.totalTests > 0);
-      }
-    }
-    
-    return users;
-  }, [allUsers, allFeedMocks, selectedPhase, selectedPeriod, userMap]);
-
-  const sortedLeaderboard = [...activeAllUsers].sort((a, b) => {
-    if (!sortConfig.key || !sortConfig.direction) return 0;
-    
-    let aVal;
-    let bVal;
-    if (sortConfig.key.includes('.')) {
-      const parts = sortConfig.key.split('.');
-      aVal = (a as any)[parts[0]]?.[parts[1]];
-      bVal = (b as any)[parts[0]]?.[parts[1]];
-    } else {
-      aVal = (a as any)[sortConfig.key];
-      bVal = (b as any)[sortConfig.key];
-    }
-    
-    if (aVal == null) aVal = 0;
-    if (bVal == null) bVal = 0;
-    
-    // Fix streak sorting by using 0 if the streak is broken (older than yesterday)
-    if (sortConfig.key === 'streak') {
-      const todayDt = new Date();
-      const today = new Date(todayDt.getFullYear(), todayDt.getMonth(), todayDt.getDate()).getTime();
-      
-      if (a.lastMockDate) {
-         const dA = parseLocalDate(a.lastMockDate);
-         const lastDtA = new Date(dA.getFullYear(), dA.getMonth(), dA.getDate()).getTime();
-         if (lastDtA < today - 86400000) aVal = 0;
-      } else { aVal = 0; }
-      
-      if (b.lastMockDate) {
-         const dB = parseLocalDate(b.lastMockDate);
-         const lastDtB = new Date(dB.getFullYear(), dB.getMonth(), dB.getDate()).getTime();
-         if (lastDtB < today - 86400000) bVal = 0;
-      } else { bVal = 0; }
-    }
-    
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  const filteredFeedLogs = useMemo(() => {
-    if (selectedPhase === 'All') return feedLogs;
-    return feedLogs.map(dg => ({
-       ...dg,
-       mocks: dg.mocks.filter((m: any) => m.examPhase === selectedPhase)
-    })).filter(dg => dg.mocks.length > 0);
-  }, [feedLogs, selectedPhase]);
-
-  return (
-    <div className="space-y-8 mt-6 lg:mt-8 mb-4">
-      <CommunityLeaderboard Trophy={Trophy} CustomDropdown={CustomDropdown} selectedPeriod={selectedPeriod} setSelectedPeriod={setSelectedPeriod} isAdmin={isAdmin} isOwner={isOwner} sortConfig={sortConfig} handleAdminChangeGlobalSort={handleAdminChangeGlobalSort} selectedPhase={selectedPhase} availablePhases={availablePhases} setSelectedPhase={setSelectedPhase} setDoc={setDoc} doc={doc} db={db} loadingTop={loadingTop} handleSort={handleSort} subjects={subjects} sortedLeaderboard={sortedLeaderboard} parseLocalDate={parseLocalDate} onUserClick={onUserClick} getHeatmapColor={getHeatmapColor} Flame={Flame} />
-
-      <CommunityFeed Users={Users} loadingFeed={loadingFeed} filteredFeedLogs={filteredFeedLogs} daysVisible={daysVisible} feedSort={feedSort} handleFeedSort={handleFeedSort} getFeedSortConfig={getFeedSortConfig} subjects={subjects} sortedLeaderboard={sortedLeaderboard} onUserClick={onUserClick} Flame={Flame} getPlatformShort={getPlatformShort} getHeatmapColor={getHeatmapColor} getSub={getSub} handleReact={handleReact} reactions={reactions} Calendar={Calendar} setDaysVisible={setDaysVisible} ArrowRight={ArrowRight} />
-      
-      <CommunityChat MessageSquare={MessageSquare} chatMessages={chatMessages} Pin={Pin} handlePinMessage={handlePinMessage} X={X} setActiveMsgId={setActiveMsgId} setCustomEmojiOpenForId={setCustomEmojiOpenForId} setActiveReactionView={setActiveReactionView} setActiveActionsMsgId={setActiveActionsMsgId} setShowPollVotersForId={setShowPollVotersForId} userMap={userMap} user={user} activeActionsMsgId={activeActionsMsgId} setReplyingTo={setReplyingTo} activeMsgId={activeMsgId} handlePollVote={handlePollVote} CheckCircle2={CheckCircle2} CheckSquare={CheckSquare} showPollVotersForId={showPollVotersForId} activeReactionView={activeReactionView} handleChatReact={handleChatReact} customEmojiOpenForId={customEmojiOpenForId} customEmojiInput={customEmojiInput} setCustomEmojiInput={setCustomEmojiInput} setEditingMessageId={setEditingMessageId} setNewMessage={setNewMessage} setShowPollMaker={setShowPollMaker} setPollQuestion={setPollQuestion} setPollIsMulti={setPollIsMulti} setPollOptions={setPollOptions} Pencil={Pencil} isAdmin={isAdmin} handleDeleteMessage={handleDeleteMessage} Trash2={Trash2} PinOff={PinOff} chatBottomRef={chatBottomRef} chatError={chatError} replyingTo={replyingTo} handleSendMessage={handleSendMessage} editingMessageId={editingMessageId} showPollMaker={showPollMaker} BarChart2={BarChart2} pollIsMulti={pollIsMulti} pollQuestion={pollQuestion} pollOptions={pollOptions}    newMessage={newMessage} isSending={isSending} Send={Send} />
       
       {showTrash && isAdmin && (
         <CommunityHubTrashModal
@@ -884,6 +88,7 @@ export default function CommunityHub() {
         />
       )}
     </div>
+      </CommunityViewProvider>
   );
 }
 
@@ -892,9 +97,16 @@ export default function CommunityHub() {
 // Phase 9: Monolithic View Decomposition
 // ==========================================
 
-function CommunityLeaderboard(props: any) {
-  const { Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isOwner, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame } = props;
-  return <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+function CommunityLeaderboard() {
+  const { Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isOwner, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame } = useCommunityView();
+
+  const handleUserRowClick = (user: any, idx: number) => {
+    if (onUserClick) {
+       onUserClick({ ...user, leaderboardRank: idx + 1, periodContext: selectedPeriod });
+    }
+  };
+
+  return <Card noPadding className="border border-slate-100 dark:border-slate-700">
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-3 sm:flex-row sm:items-center justify-between rounded-t-2xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
              <div className="flex items-center justify-between w-full sm:w-auto">
@@ -973,7 +185,25 @@ function CommunityLeaderboard(props: any) {
         </div>
         <div className="overflow-x-auto">
           {loadingTop ? (
-            <div className="p-8 text-center text-slate-400 dark:text-slate-500">Loading Leaderboard...</div>
+            <div className="animate-pulse w-full border border-slate-100 dark:border-slate-700 rounded-lg overflow-hidden">
+              <div className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 h-10 w-full flex items-center px-4 gap-4">
+                <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-12"></div>
+                <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-24 mx-4"></div>
+                <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-16 ml-auto"></div>
+                <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-16 ml-4"></div>
+              </div>
+              {[1, 2, 3, 4, 5].map((row) => (
+                <div key={row} className="bg-white dark:bg-slate-800 border-b border-slate-50 dark:border-slate-700/50 h-14 w-full flex items-center px-4">
+                  <div className="h-3 bg-slate-100 dark:bg-slate-700 rounded w-6"></div>
+                  <div className="flex items-center gap-3 ml-6">
+                    <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-32"></div>
+                  </div>
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-10 ml-auto mx-4"></div>
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-10 ml-4"></div>
+                </div>
+              ))}
+            </div>
           ) : (
             <table className="w-full text-left">
               <thead>
@@ -1021,11 +251,7 @@ function CommunityLeaderboard(props: any) {
                     <td className="p-4">
                       <div 
                          className="flex items-center gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-1.5 rounded-lg transition-colors inline-flex"
-                         onClick={() => {
-                            if (onUserClick) {
-                               onUserClick({ ...user, leaderboardRank: idx + 1 });
-                            }
-                         }}
+                         onClick={() => handleUserRowClick(user, idx)}
                       >
                         <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700" />
                         <div>
@@ -1085,14 +311,14 @@ function CommunityLeaderboard(props: any) {
             </table>
           )}
         </div>
-      </div>
+      </Card>
 }
 
-function CommunityFeed(props: any) {
-  const { Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, subjects, sortedLeaderboard, onUserClick, Flame, getPlatformShort, getHeatmapColor, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight } = props;
+function CommunityFeed() {
+  const { user, Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, subjects, sortedLeaderboard, onUserClick, Flame, getPlatformShort, getHeatmapColor, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight } = useCommunityView();
   return <>
     {/* FEED */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <Card noPadding className="border border-slate-100 dark:border-slate-700 overflow-hidden">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
           <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Users className="w-5 h-5 text-blue-500" /> Community Log
@@ -1100,7 +326,34 @@ function CommunityFeed(props: any) {
         </div>
         <div className="p-4 bg-slate-50 dark:bg-slate-900">
           {loadingFeed ? (
-            <div className="p-8 text-center text-slate-400 dark:text-slate-500">Loading community logs...</div>
+            <div className="space-y-6">
+              {[1, 2].map((group) => (
+                <div key={group} className="animate-pulse">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-32 mb-4 mx-2"></div>
+                  <div className="w-full border border-slate-100 dark:border-slate-700 rounded-lg overflow-hidden">
+                    <div className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 h-10 w-full flex items-center px-4 gap-4">
+                      <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-20"></div>
+                      <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-24"></div>
+                      <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-16"></div>
+                    </div>
+                    {[1, 2, 3].map((row) => (
+                      <div key={row} className="bg-white dark:bg-slate-800 border-b border-slate-50 dark:border-slate-700/50 h-16 w-full flex items-center px-4 gap-6">
+                        <div className="flex items-center gap-3 w-1/4">
+                          <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                          <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24"></div>
+                        </div>
+                        <div className="flex flex-col gap-2 w-1/4">
+                          <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-32"></div>
+                          <div className="flex gap-1.5"><div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-10"></div></div>
+                        </div>
+                        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-12 mx-auto"></div>
+                        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-12 mx-auto"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="space-y-8">
               {(() => {
@@ -1169,18 +422,18 @@ function CommunityFeed(props: any) {
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const rank = sortedLeaderboard.findIndex(u => u.userId === m.userId) + 1;
-                                        if (onUserClick && (m as any).userProfileRef) {
-                                            onUserClick({ ...(m as any).userProfileRef, leaderboardRank: rank > 0 ? rank : undefined });
+                                        if (onUserClick && m.userProfileRef) {
+                                            onUserClick({ ...m.userProfileRef, leaderboardRank: rank > 0 ? rank : undefined });
                                         }
                                     }}
                                   >
-                                    <img src={(m as any).userPhoto} alt="" className="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700" />
-                                    <span className="text-slate-800 dark:text-slate-200">{(m as any).userName}</span>
-                                    {(m as any).userStreak > 0 && (
-                                       <span className={`flex items-center ml-1 ${(m as any).userStreakActive ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`}>
-                                         <Flame className={`w-3 h-3 ${(m as any).userStreakActive ? 'animate-pulse' : ''}`} /> {(m as any).userStreak}
+                                    <img src={m.userPhoto} alt="" className="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700" />
+                                    <span className="text-slate-800 dark:text-slate-200">{m.userName}</span>
+                                    {m.userStreak && m.userStreak > 0 ? (
+                                       <span className={`flex items-center ml-1 ${m.userStreakActive ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`}>
+                                         <Flame className={`w-3 h-3 ${m.userStreakActive ? 'animate-pulse' : ''}`} /> {m.userStreak}
                                        </span>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </td>
                                 <td className="px-4 py-3">
@@ -1219,7 +472,7 @@ function CommunityFeed(props: any) {
                                   </div>
                                 </td>
                                 {subjects.map((s: any) => {
-                                  const sub = getSub(m, s.id);
+                                  const sub = getSub(m, s.id, subjects);
                                   return (
                                     <td key={s.id} className="px-4 py-3 text-center align-middle">
                                        <div className="flex flex-col items-center">
@@ -1235,11 +488,11 @@ function CommunityFeed(props: any) {
                                 <td className="px-4 py-3 text-center align-middle">
                                     <div className="flex justify-end items-center gap-2 pr-2">
                                       <button 
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-full transition-colors text-xs font-medium text-slate-700 dark:text-slate-300"
-                                        onClick={(e) => handleReact(e, m.id)}
+                                        onClick={(e) => handleReact(e, m.id, m.userId)}
+                                        className={"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-colors text-xs font-medium " + (user && m.likes?.includes(user.uid) ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400" : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300")}
                                       >
                                         <span className="text-sm">🔥</span> 
-                                        <span>{reactions[m.id]?.count ?? 0}</span>
+                                        <span>{m.likes?.length || 0}</span>
                                       </button>
                                     </div>
                                 </td>
@@ -1298,15 +551,65 @@ function CommunityFeed(props: any) {
             </div>
           )}
         </div>
-      </div>
+      </Card>
   </>
 }
 
-function CommunityChat(props: any) {
-  const { MessageSquare, chatMessages, Pin, handlePinMessage, X, setActiveMsgId, setCustomEmojiOpenForId, setActiveReactionView, setActiveActionsMsgId, setShowPollVotersForId, userMap, user, activeActionsMsgId, setReplyingTo, activeMsgId, handlePollVote, CheckCircle2, CheckSquare, showPollVotersForId, activeReactionView, handleChatReact, customEmojiOpenForId, customEmojiInput, setCustomEmojiInput, setEditingMessageId, setNewMessage, setShowPollMaker, setPollQuestion, setPollIsMulti, setPollOptions, Pencil, isAdmin, handleDeleteMessage, Trash2, PinOff, chatBottomRef, chatError, replyingTo, handleSendMessage, editingMessageId, showPollMaker, BarChart2, pollIsMulti, pollQuestion, pollOptions, newMessage, isSending, Send } = props;
+function CommunityChat() {
+  const { MessageSquare, chatMessages, Pin, handlePinMessage, X, setActiveMsgId, setCustomEmojiOpenForId, setActiveReactionView, setActiveActionsMsgId, setShowPollVotersForId, userMap, user, activeActionsMsgId, setReplyingTo, activeMsgId, handlePollVote, CheckCircle2, CheckSquare, showPollVotersForId, activeReactionView, handleChatReact, customEmojiOpenForId, customEmojiInput, setCustomEmojiInput, setEditingMessageId, setNewMessage, setShowPollMaker, setPollQuestion, setPollIsMulti, setPollOptions, Pencil, isAdmin, handleDeleteMessage, Trash2, PinOff, chatBottomRef, chatError, replyingTo, handleSendMessage, editingMessageId, showPollMaker, BarChart2, pollIsMulti, pollQuestion, pollOptions, newMessage, isSending, Send } = useCommunityView();
+
+  const handleScrollToPinnedMessage = (msgId: string) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const handleChatBackgroundClick = () => {
+    setActiveMsgId(null);
+    setCustomEmojiOpenForId(null);
+    setActiveReactionView(null);
+    setActiveActionsMsgId(null);
+    setShowPollVotersForId(null);
+  };
+
+  const handleToggleReactionView = (msgId: string) => {
+    if (activeReactionView === msgId) {
+      setActiveReactionView(null);
+    } else {
+      setActiveReactionView(msgId);
+    }
+  };
+
+  const handleRemoveReaction = (msgId: string, emoji: string) => {
+    handleChatReact(msgId, emoji);
+    setActiveReactionView(null);
+  };
+
+  const handleQuickReact = (msgId: string, emoji: string) => {
+    handleChatReact(msgId, emoji);
+    setActiveMsgId(null);
+  };
+
+  const handleOpenCustomEmoji = (msgId: string) => {
+    setCustomEmojiOpenForId(msgId);
+    setCustomEmojiInput("");
+  };
+
+  const handleCancelEditing = () => {
+    setEditingMessageId(null);
+    setNewMessage("");
+  };
+
+  const handleTogglePollOptionCorrectness = (optId: string) => {
+    if (!pollIsMulti) {
+       setPollOptions(pollOptions.map(o => ({ ...o, isCorrect: o.id === optId ? !o.isCorrect : false })));
+    } else {
+       setPollOptions(pollOptions.map(o => o.id === optId ? { ...o, isCorrect: !o.isCorrect } : o));
+    }
+  };
+
   return <>
     {/* CHAT SECTION */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[550px]">
+      <Card noPadding className="border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[550px]">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0">
             <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500" /> Community Chat
@@ -1318,10 +621,7 @@ function CommunityChat(props: any) {
           <div className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-100 dark:border-amber-900 px-4 py-2 flex flex-col gap-1 max-h-24 overflow-y-auto custom-scrollbar">
             {chatMessages.filter(m => m.isPinned).map(msg => (
                <div key={`pin-${msg.id}`} className="flex items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-200">
-                  <div className="flex items-center gap-2 overflow-hidden cursor-pointer" onClick={() => {
-                     const el = document.getElementById(`msg-${msg.id}`);
-                     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }}>
+                  <div className="flex items-center gap-2 overflow-hidden cursor-pointer" onClick={() => handleScrollToPinnedMessage(msg.id)}>
                      <Pin className="w-3.5 h-3.5 shrink-0" />
                      <span className="truncate opacity-90">{msg.text || (msg.poll ? `📊 ${msg.poll.question}` : '')}</span>
                   </div>
@@ -1336,13 +636,7 @@ function CommunityChat(props: any) {
         <div 
           id="community-chat-scroll" 
           className="flex-1 p-4 overflow-y-auto overflow-x-hidden space-y-4 custom-scrollbar bg-slate-50/30 dark:bg-slate-900/30"
-          onClick={() => {
-            setActiveMsgId(null);
-            setCustomEmojiOpenForId(null);
-            setActiveReactionView(null);
-            setActiveActionsMsgId(null);
-            setShowPollVotersForId(null);
-          }}
+          onClick={handleChatBackgroundClick}
         >
           {chatMessages.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">Say hi to everyone!</div>
@@ -1511,13 +805,7 @@ function CommunityChat(props: any) {
                              return (
                                <button
                                  key={emoji}
-                                 onClick={() => { 
-                                   if (activeReactionView === msg.id) {
-                                     setActiveReactionView(null);
-                                   } else {
-                                     setActiveReactionView(msg.id); 
-                                   }
-                                 }}
+                                 onClick={() => handleToggleReactionView(msg.id)}
                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs shadow-sm transition-colors ${hasVoted ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700' : 'bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
                                >
                                  <span>{emoji}</span><span>{cnt}</span>
@@ -1545,7 +833,7 @@ function CommunityChat(props: any) {
                                           <span className="text-xs text-slate-700 dark:text-slate-300 truncate">{isMe ? 'You' : (profile?.displayName || 'Anonymous')}</span>
                                         </div>
                                         {isMe && (
-                                          <button onClick={() => { handleChatReact(msg.id, reactEmoji); setActiveReactionView(null); }} className="text-[10px] text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 px-2 py-1 rounded transition-colors font-medium">Remove</button>
+                                          <button onClick={() => handleRemoveReaction(msg.id, reactEmoji)} className="text-[10px] text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 px-2 py-1 rounded transition-colors font-medium">Remove</button>
                                         )}
                                       </div>
                                     );
@@ -1562,7 +850,7 @@ function CommunityChat(props: any) {
                           {['👍', '👎', '❤️', '🔥', '😕'].map(emoji => (
                              <button
                                key={emoji}
-                               onClick={() => { handleChatReact(msg.id, emoji); setActiveMsgId(null); }}
+                               onClick={() => handleQuickReact(msg.id, emoji)}
                                className="text-xl hover:scale-125 transition-transform origin-bottom"
                              >
                                {emoji}
@@ -1594,10 +882,7 @@ function CommunityChat(props: any) {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => {
-                                setCustomEmojiOpenForId(msg.id);
-                                setCustomEmojiInput('');
-                              }}
+                              onClick={() => handleOpenCustomEmoji(msg.id)}
                               className="text-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors w-6 h-6 flex items-center justify-center font-bold"
                             >
                               +
@@ -1695,7 +980,7 @@ function CommunityChat(props: any) {
           )}
           <form onSubmit={handleSendMessage} className={`p-3 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-end gap-2 ${replyingTo ? 'pt-2' : ''} relative`}>
             {editingMessageId ? (
-               <button type="button" onClick={() => { setEditingMessageId(null); setNewMessage(''); }} className="p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+               <button type="button" onClick={handleCancelEditing} className="p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                  <X className="w-5 h-5" />
                </button>
             ) : (
@@ -1724,13 +1009,7 @@ function CommunityChat(props: any) {
                     <div key={opt.id} className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-0">
                        <button
                          type="button"
-                         onClick={() => {
-                            if (!pollIsMulti) {
-                               setPollOptions(pollOptions.map(o => ({ ...o, isCorrect: o.id === opt.id ? !o.isCorrect : false })));
-                            } else {
-                               setPollOptions(pollOptions.map(o => o.id === opt.id ? { ...o, isCorrect: !o.isCorrect } : o));
-                            }
-                         }}
+                         onClick={() => handleTogglePollOptionCorrectness(opt.id)}
                          className={`p-1.5 rounded-md transition-colors ${opt.isCorrect ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                          title="Mark as correct option"
                        >
@@ -1785,6 +1064,6 @@ function CommunityChat(props: any) {
             </button>
           </form>
         </div>
-      </div>
+      </Card>
   </>
 }
