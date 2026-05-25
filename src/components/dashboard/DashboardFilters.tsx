@@ -61,7 +61,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
                   initial={false}
                   whileHover={{ backgroundColor: 'rgba(99, 102, 241, 0.05)' }}
                   transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-                  className="absolute inset-0 rounded-xl border border-current -z-10"
+                  className="absolute inset-0 rounded-xl -z-10"
                 />
               )}
               <span className="relative z-10">{type}</span>

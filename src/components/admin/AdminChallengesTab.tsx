@@ -44,6 +44,15 @@ export function AdminChallengesTab({
   handleEditChallenge, deleteChallenge,
   adminCategoryScope, challenges, isOwner
 }: AdminChallengesTabProps) {
+  
+  const visibleChallenges = challenges.filter(c => {
+    if (!isOwner && c.visibility === 'personal') return false;
+    if (adminCategoryScope) {
+      return c.categoryId === adminCategoryScope;
+    }
+    return !c.categoryId;
+  });
+
   return (
     <div className="flex flex-col h-full w-full">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-white dark:bg-slate-900 z-30 shrink-0">
@@ -279,10 +288,7 @@ export function AdminChallengesTab({
             )}
           </div>
 
-          {(adminCategoryScope
-            ? challenges.filter((c) => c.categoryId === adminCategoryScope)
-            : challenges.filter((c) => !c.categoryId)
-          ).length > 0 && (
+          {visibleChallenges.length > 0 && (
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
               <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">
                 {adminCategoryScope
@@ -290,10 +296,7 @@ export function AdminChallengesTab({
                   : "Active Challenges"}
               </h4>
               <ul className="space-y-3">
-                {(adminCategoryScope
-                  ? challenges.filter((c) => c.categoryId === adminCategoryScope)
-                  : challenges.filter((c) => !c.categoryId)
-                ).map((c) => (
+                {visibleChallenges.map((c) => (
                   <li
                     key={c.id}
                     className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl flex flex-col md:flex-row gap-4 md:items-center justify-between"

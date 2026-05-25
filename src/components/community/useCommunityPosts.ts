@@ -645,9 +645,9 @@ export function useCommunityUI(user: any, isAdmin: boolean, categoryId: string |
 
   const currentCommunityHash = useMemo(() => {
     const userHash = allUsers.length + '_' + allUsers.reduce((sum, u) => sum + (u.avgPercentile || 0), 0);
-    const mockHash = allFeedMocks.length;
+    const mockHash = allFeedMocks.length + '_' + allFeedMocks.reduce((sum, m: any) => sum + (m.likes?.length || 0), 0);
     return `${userHash}_${mockHash}_${selectedPhase}_${selectedPeriod}_${sortConfig.key}_${sortConfig.direction}_${categoryId}`;
-  }, [allUsers, allFeedMocks.length, selectedPhase, selectedPeriod, sortConfig.key, sortConfig.direction, categoryId]);
+  }, [allUsers, allFeedMocks, selectedPhase, selectedPeriod, sortConfig.key, sortConfig.direction, categoryId]);
 
   const activeAllUsers = useMemo(() => {
     if (cache.isCommunityCached && cache.communityHash === currentCommunityHash && cache.activeAllUsers?.length > 0) return cache.activeAllUsers;

@@ -153,6 +153,10 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
         idPrefix = `${prefix.replace(/_$/, '').toUpperCase()}_CHALLENGE`;
       }
 
+      if (!initialData && visibility === 'personal') {
+        idPrefix += '_PER';
+      }
+
       const id = initialData?.id || `${idPrefix}_${Date.now()}`;
       await setDoc(doc(db, 'challenges', id), payload, { merge: true });
       
