@@ -5,7 +5,8 @@ import {
   Shield, 
   Plus,
   FileText,
-  CheckSquare
+  CheckSquare,
+  GraduationCap
 } from 'lucide-react';
 import { useAuthCtx, useAppStateCtx } from '../context/AppContext';
 import { useUIStore } from '../store/uiStore';
@@ -46,19 +47,18 @@ export function BottomNav() {
         <span className="text-[10px] font-medium">Mocks</span>
       </button>
 
-      {/* Floating Action Button overlapping Bottom Nav */}
-      <div className="flex items-center justify-center -mt-6">
-        <button
-          onClick={() => {
-            setMockToEdit(undefined);
-            setActiveTab("add-mock");
-            window.scrollTo(0, 0);
-          }}
-          className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full shadow-lg shadow-indigo-500/30 neon-action-btn transition-transform hover:scale-105 active:scale-95"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
-      </div>
+      <button
+        onClick={() => {
+          setActiveTab("learning");
+          window.scrollTo(0, 0);
+        }}
+        className={`flex flex-col items-center justify-center w-16 h-full transition-colors ${
+          activeTab === "learning" ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-300"
+        }`}
+      >
+        <GraduationCap className="w-5 h-5 mb-1" />
+        <span className="text-[10px] font-medium">Learn</span>
+      </button>
 
       <button
         onClick={() => {

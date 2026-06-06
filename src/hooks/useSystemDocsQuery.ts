@@ -12,6 +12,7 @@ async function fetchSystemDocs() {
   let noticePins: string[] = [];
   let pinnedChallenges: string[] = [];
   let quotesConfig: any = null;
+  let speedMathConfig: any = null;
   const nowTs = new Date().getTime();
 
   snap.forEach(d => {
@@ -22,6 +23,8 @@ async function fetchSystemDocs() {
       pinnedChallenges = data.pinnedChallenges || [];
     } else if (d.id === 'quotesConfig') {
       quotesConfig = data;
+    } else if (d.id === 'speedMathConfig') {
+      speedMathConfig = data;
     } else if (data.type === 'notice') {
       if (data.date && new Date(data.date).getTime() < nowTs) return;
       activeNotices.push({ id: d.id, ...data });
@@ -46,7 +49,8 @@ async function fetchSystemDocs() {
     pinnedCountdowns: pins,
     pinnedNotices: noticePins,
     pinnedChallenges,
-    quotesConfig
+    quotesConfig,
+    speedMathConfig
   };
 }
 
@@ -63,6 +67,7 @@ export function useSystemDocsQuery() {
     pinnedNotices: data?.pinnedNotices || [],
     pinnedChallenges: data?.pinnedChallenges || [],
     quotesConfig: data?.quotesConfig || null,
+    speedMathConfig: data?.speedMathConfig || null,
     mutateSystemDocs: mutate
   };
 }

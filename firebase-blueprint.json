@@ -106,6 +106,31 @@
         "createdAt": { "type": "number" }
       },
       "required": ["userId", "userName", "userPhoto", "text", "createdAt"]
+    },
+    "app_update": {
+      "title": "App Update",
+      "description": "Collection storing application changelog features and version info.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "releaseDate": { "type": "string" },
+        "title": { "type": "string" },
+        "badgeText": { "type": "string" },
+        "featuresGroupA": { "type": "object" },
+        "featuresGroupB": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["version", "title", "createdAt"]
+    },
+    "ReleaseMetadata": {
+      "title": "ReleaseMetadata",
+      "description": "Pointer to the latest app release version",
+      "type": "object",
+      "properties": {
+        "latestVersion": { "type": "string" }
+      },
+      "required": ["latestVersion"]
     }
   },
   "firestore": {
@@ -120,6 +145,14 @@
     "community_chat/{messageId}": {
       "schema": { "$ref": "#/entities/CommunityChat" },
       "description": "Community chat messages"
+    },
+    "app_updates/{updateId}": {
+      "schema": { "$ref": "#/entities/app_update" },
+      "description": "Dynamic changelog store."
+    },
+    "metadata/release": {
+      "schema": { "$ref": "#/entities/ReleaseMetadata" },
+      "description": "Pointer to the latest app release version"
     }
   }
 }

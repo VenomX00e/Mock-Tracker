@@ -17,8 +17,12 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     const msg = err.error || '';
-    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID')) {
-       throw new Error("API Key missing or invalid. Click the app logo in the top left to configure your free key.");
+    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+       if (customKey) {
+         throw new Error("Your personal Gemini API key is invalid. Please update it in the AI Tutor Settings or clear it to use the default app key.");
+       } else {
+         throw new Error("App Gemini API key is missing or invalid. Please check the backend configuration.");
+       }
     }
     throw new Error(msg || 'Failed to extract mock details from server');
   }
@@ -43,8 +47,12 @@ export async function generateBadge(promptText: string): Promise<{ name: string,
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     const msg = err.error || '';
-    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID')) {
-       throw new Error("API Key missing or invalid. Click the app logo in the top left to configure your free key.");
+    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+       if (customKey) {
+         throw new Error("Your personal Gemini API key is invalid. Please update it in the AI Tutor Settings or clear it to use the default app key.");
+       } else {
+         throw new Error("App Gemini API key is missing or invalid. Please check the backend configuration.");
+       }
     }
     throw new Error(msg || 'Failed to generate badge');
   }
@@ -85,8 +93,12 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
     const msg = (err as any).error || response.statusText || (rawText ? rawText.substring(0, 50) : '') || 'Unknown Server Error';
     const status = response.status;
     
-    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID')) {
-       throw new Error("API Key missing or invalid. Click the app logo in the top left to configure your free key.");
+    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+       if (customKey) {
+         throw new Error("Your personal Gemini API key is invalid. Please update it in the AI Tutor Settings or clear it to use the default app key.");
+       } else {
+         throw new Error("App Gemini API key is missing or invalid. Please check the backend configuration.");
+       }
     }
     
     if (status === 413) {

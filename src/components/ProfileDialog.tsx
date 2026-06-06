@@ -353,28 +353,28 @@ export default function ProfileDialog({
                     {/* Basic Info Card */}
                     <div className="p-5 sm:p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/50 space-y-5">
                       <div>
-                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 block">
+                        <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 block">
                           Display Name
                         </label>
                         <div className="relative">
-                          <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                          <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
                           <input
                             type="text"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
+                            className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-3 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
                             placeholder="Enter your name"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                        <div className="flex justify-between items-center mb-1.5 sm:mb-2">
+                          <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                             Bio
                           </label>
                           <span
-                            className={`text-xs font-medium ${bio.length > 70 ? "text-rose-500" : "text-slate-400"}`}
+                            className={`text-[10px] sm:text-xs font-medium ${bio.length > 70 ? "text-rose-500" : "text-slate-400"}`}
                           >
                             {bio.length}/70
                           </span>
@@ -392,7 +392,7 @@ export default function ProfileDialog({
                             }
                           }}
                           maxLength={70}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                          className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
                           placeholder="Tell us a bit about yourself"
                         />
                       </div>
@@ -402,7 +402,7 @@ export default function ProfileDialog({
                     <div className="p-5 sm:p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/50 space-y-5">
                       <div className="grid sm:grid-cols-2 gap-5">
                         <div>
-                          <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <Target className="w-3.5 h-3.5" /> Sector
                           </label>
                           <CustomDropdown
@@ -423,7 +423,7 @@ export default function ProfileDialog({
                         </div>
 
                         <div>
-                          <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <Target className="w-3.5 h-3.5" /> Targeted Exam
                           </label>
                           {!isCustomExam ? (
@@ -452,7 +452,7 @@ export default function ProfileDialog({
                                 onChange={(e) =>
                                   setTargetedExam(e.target.value)
                                 }
-                                className="w-full px-4 py-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm pr-10"
+                                className="w-full px-3 sm:px-4 py-2 sm:py-[11px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-xs sm:text-sm pr-8 sm:pr-10"
                                 placeholder="Enter targeted exam"
                               />
                               <button

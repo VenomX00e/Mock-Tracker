@@ -298,6 +298,7 @@ export function AdminAdminsTab({
                                     "canManageCountdowns",
                                     "canManageSettings",
                                     "canManageQuotes",
+                                    "canManageLearning",
                                   ].map((perm) => (
                                     <label
                                       key={perm}

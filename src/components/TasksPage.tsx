@@ -171,20 +171,20 @@ export function TasksPage() {
                       className="hidden md:block p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 rounded-xl transition-colors"
                       title="Back to Dashboard"
                     >
-                      <ArrowLeft className="w-5 h-5" />
+                      <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
                     </button>
-                    <div className="p-2 sm:p-2.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                      <CheckSquare className="w-5 h-5" />
+                    <div className="p-1.5 md:p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-lg md:rounded-xl">
+                      <CheckSquare className="w-4 h-4 md:w-5 md:h-5" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-slate-800 dark:text-white">Action Items</h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Manage and track your tasks</p>
+                      <h2 className="text-lg md:text-xl font-bold text-slate-800 dark:text-white">Action Items</h2>
+                      <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400">Manage and track your tasks</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-4">
                     <button
                       onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-                      className={`font-medium px-3 py-1.5 rounded-lg transition-colors text-xs sm:text-sm select-none flex items-center gap-2 ${
+                      className={`font-medium px-2 py-1 md:px-3 md:py-1.5 rounded-lg transition-colors text-[10px] md:text-sm select-none flex items-center gap-1 md:gap-2 ${
                         showCompletedTasks 
                         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/70' 
                         : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
@@ -201,7 +201,7 @@ export function TasksPage() {
                 
                 <div className="flex flex-col gap-6 w-full">
                       <div className="space-y-8 flex flex-col h-full w-full">
-                        {/* Global Tasks section */}
+                         {/* Global Tasks section */}
                         <div className="flex flex-col gap-4">
                            <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow">
                              <input 
@@ -210,17 +210,17 @@ export function TasksPage() {
                                onChange={e => setNewTaskText(e.target.value)} 
                                onKeyDown={e => e.key === 'Enter' && handleAddGlobalTask()}
                                placeholder="Add a new general task..."
-                               className="flex-1 px-4 py-3 bg-transparent focus:outline-none text-slate-800 dark:text-slate-200 text-sm placeholder:text-slate-400"
+                               className="flex-1 px-3 py-2 md:px-4 md:py-3 bg-transparent focus:outline-none text-slate-800 dark:text-slate-200 text-xs md:text-sm placeholder:text-slate-400"
                              />
-                             <button onClick={handleAddGlobalTask} disabled={!newTaskText.trim()} className="px-5 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Add</button>
+                             <button onClick={handleAddGlobalTask} disabled={!newTaskText.trim()} className="px-3 py-2 md:px-5 md:py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-semibold text-xs md:text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Add</button>
                            </div>
                            
                            {globalTasks.length > 0 && (
                              <div className="space-y-2">
                                 {globalTasks.map(task => (
-                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item group flex items-start gap-4 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
-                                      <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-5 h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
-                                        {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
+                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item group flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
+                                      <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-4 h-4 md:w-5 md:h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
+                                        {task.completed && <Check className="w-3 h-3 md:w-3.5 md:h-3.5 text-white" />}
                                       </button>
                                       <div className="flex-1 min-w-0">
                                          {editingGlobalTaskId === task.id ? (
@@ -237,12 +237,12 @@ export function TasksPage() {
                                              onCancel={() => setEditingGlobalTaskId(null)}
                                            />
                                          ) : (
-                                           <div className="flex items-start justify-between gap-3">
-                                              <span className={`text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
+                                           <div className="flex items-start justify-between gap-2 md:gap-3">
+                                              <span className={`text-xs md:text-sm leading-relaxed select-none ${task.completed ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{task.text}</span>
                                               <div className="flex items-center">
                                                 <div className={`flex items-center gap-1 transition-all shrink-0 overflow-hidden ${activeActionsTaskId === task.id ? 'opacity-100 w-auto ml-1 visible' : 'opacity-0 w-0 invisible'}`}>
-                                                   <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setActiveActionsTaskId(null); }} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-4 h-4" /></button>
-                                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                                   <button onClick={(e) => { e.stopPropagation(); setEditingGlobalTaskId(task.id); setActiveActionsTaskId(null); }} className="p-1 md:p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Edit2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                                                   <button onClick={(e) => { e.stopPropagation(); handleDeleteGlobalTask(task.id); }} className="p-1 md:p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 bg-slate-50 dark:bg-slate-800 rounded-md transition-colors"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                                                    <TaskProgressDisk 
                                                      task={task} 
                                                      variant="inline"

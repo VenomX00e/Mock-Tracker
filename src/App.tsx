@@ -18,6 +18,10 @@ import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/views/HomeView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewManager } from './components/ViewManager';
+import UpdateChangelogModal from './components/UpdateChangelogModal';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from './services/firebase';
+import { useVersionStore } from './store/versionStore';
 
 function AppContent() {
   const { activeTab, setActiveTab, adminTab, isAdminModalOpen, theme, setTheme, mockToEdit, setMockToEdit } = useUIStore();
@@ -32,6 +36,22 @@ function AppContent() {
   const contentAnimation = useAnimation();
   
   const isAppReady = !loading && (!user || !!profile);
+
+  // Sync latest release version pointer in real-time
+  useEffect(() => {
+    const releaseDocRef = doc(db, 'metadata', 'release');
+    const unsubscribe = onSnapshot(releaseDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && data.latestVersion) {
+          useVersionStore.getState().setLatestCloudVersion(data.latestVersion);
+        }
+      }
+    }, (error) => {
+      console.warn("Could not subscribe to release metadata dynamically", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useLayoutEffect(() => {
      if (!isAppReady) return;
@@ -152,6 +172,7 @@ function AppContent() {
 
         <BottomNav />
         <ModalsSection />
+        <UpdateChangelogModal />
       </div>
     </div>
   );

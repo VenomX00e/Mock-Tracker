@@ -6,6 +6,7 @@ import AdminDialog from './AdminDialog';
 import AddMockDialog from './AddMockDialog';
 import ProfileDialog from './ProfileDialog';
 import { CountdownsPage } from './views/CountdownsPage';
+import { LearningView } from './learning/LearningView';
 import { useUIStore } from '../store/uiStore';
 import { AppStateCtx, SystemDataCtx } from '../context/AppContext';
 import { useMocks } from '../hooks/useMocks';
@@ -100,6 +101,8 @@ export const ViewManager = () => {
         return <CommunityHub />;
       case 'countdowns':
         return <CountdownsPage />;
+      case 'learning':
+        return <LearningView />;
       default:
         return null;
     }

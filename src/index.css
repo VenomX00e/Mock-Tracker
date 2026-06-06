@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:is(.dark, .dark *));
 
 @theme {
   @keyframes shuttle {
@@ -1281,6 +1281,8 @@ input[type="search"]::-webkit-search-results-decoration {
 :is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
     html.hero-miles) [class*="hover:bg-slate-100"]:hover,
 :is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
+    html.hero-miles) [class*="hover:bg-slate-200"]:hover,
+:is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
     html.hero-miles) [class*="dark:hover:bg-slate-700/"]:hover,
 :is(html.cyber, html.cyber-green, html.cyber-lavender, html.cyber-pink, html.cyber-orange,
     html.hero-miles) [class*="dark:hover:bg-slate-800"]:hover {
@@ -1464,3 +1466,74 @@ html.hero-miles .neon-telegram-btn:hover {
 :is(html[class*="-light"]) .avg-percentile-bar {
   background-color: var(--neon-dark) !important;
 }
+
+/* Markdown Typography */
+.markdown-body {
+  word-break: break-word;
+}
+.markdown-body p {
+  margin-bottom: 0.75em;
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body strong {
+  font-weight: 800 !important;
+  color: inherit;
+}
+.markdown-body em {
+  font-style: italic;
+}
+.markdown-body ul {
+  list-style-type: outside;
+  padding-left: 1.2em;
+  margin-bottom: 0.75em;
+  list-style-position: outside;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+.markdown-body li {
+  margin-bottom: 0.25em;
+  padding-left: 0.25em;
+}
+.markdown-body ul > li::marker {
+  content: "•";
+  color: inherit;
+}
+.markdown-body code {
+  background-color: rgba(150, 150, 150, 0.15);
+  padding: 0.2em 0.4em;
+  border-radius: 0.25rem;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+.markdown-body pre {
+  background-color: rgba(150, 150, 150, 0.1);
+  padding: 1em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-bottom: 0.75em;
+}
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+}
+.markdown-body a {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+.dark .markdown-body a {
+  color: #818cf8;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  color: inherit;
+}
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { font-size: 1.25em; }
+.markdown-body h3 { font-size: 1.1em; }

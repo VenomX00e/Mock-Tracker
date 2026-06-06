@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Users, X, Flame, CheckCircle2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { CustomSelect } from './ui/CustomSelect';
 
 export interface ChallengeParticipantsDialogProps {
   showUsers: boolean;
@@ -298,19 +299,23 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
                      </div>
                      <div>
                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Color Theme</label>
-                       <select value={awardColor} onChange={e => {
-                          const val = e.target.value;
-                          setAwardColor(val);
-                          if (val.includes('yellow')) { setAwardBg('bg-yellow-100 dark:bg-yellow-900/30'); setAwardBorder('border-yellow-200 dark:border-yellow-800'); }
-                          else if (val.includes('emerald')) { setAwardBg('bg-emerald-100 dark:bg-emerald-900/30'); setAwardBorder('border-emerald-200 dark:border-emerald-800'); }
-                          else if (val.includes('blue')) { setAwardBg('bg-blue-100 dark:bg-blue-900/30'); setAwardBorder('border-blue-200 dark:border-blue-800'); }
-                          else if (val.includes('purple')) { setAwardBg('bg-purple-100 dark:bg-purple-900/30'); setAwardBorder('border-purple-200 dark:border-purple-800'); }
-                       }} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300">
-                         <option value="text-yellow-600 dark:text-yellow-400">Gold / Yellow</option>
-                         <option value="text-emerald-600 dark:text-emerald-400">Emerald / Green</option>
-                         <option value="text-blue-600 dark:text-blue-400">Sapphire / Blue</option>
-                         <option value="text-purple-600 dark:text-purple-400">Amethyst / Purple</option>
-                       </select>
+                       <CustomSelect 
+                         value={awardColor} 
+                         onChange={(val) => {
+                           setAwardColor(val);
+                           if (val.includes('yellow')) { setAwardBg('bg-yellow-100 dark:bg-yellow-900/30'); setAwardBorder('border-yellow-200 dark:border-yellow-800'); }
+                           else if (val.includes('emerald')) { setAwardBg('bg-emerald-100 dark:bg-emerald-900/30'); setAwardBorder('border-emerald-200 dark:border-emerald-800'); }
+                           else if (val.includes('blue')) { setAwardBg('bg-blue-100 dark:bg-blue-900/30'); setAwardBorder('border-blue-200 dark:border-blue-800'); }
+                           else if (val.includes('purple')) { setAwardBg('bg-purple-100 dark:bg-purple-900/30'); setAwardBorder('border-purple-200 dark:border-purple-800'); }
+                         }} 
+                         options={[
+                           { value: "text-yellow-600 dark:text-yellow-400", label: "Gold / Yellow" },
+                           { value: "text-emerald-600 dark:text-emerald-400", label: "Emerald / Green" },
+                           { value: "text-blue-600 dark:text-blue-400", label: "Sapphire / Blue" },
+                           { value: "text-purple-600 dark:text-purple-400", label: "Amethyst / Purple" }
+                         ]}
+                         className="mb-1"
+                       />
                      </div>
                   </div>
                   

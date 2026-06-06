@@ -178,7 +178,7 @@ export const RecentMocksTable: React.FC<RecentMocksTableProps> = ({
                     </div>
                 </td>
                 <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 align-middle">
-                  <div className="flex flex-col max-w-[140px] sm:max-w-none">
+                  <div className="flex flex-col min-w-[160px] max-w-[260px] sm:max-w-none">
                       <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 -mb-1">
                         <span className="whitespace-nowrap shrink-0 max-w-[120px] sm:max-w-[250px] truncate">{mock.mockName}</span>
                       </div>

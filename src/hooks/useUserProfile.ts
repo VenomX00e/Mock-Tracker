@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
@@ -63,7 +63,7 @@ export function useUserProfile() {
     }
   };
 
-  const updateProfile = async (updates: Partial<UserProfile>) => {
+  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
     if (!user) return;
     try {
       validateUserProfile(updates);
@@ -77,7 +77,7 @@ export function useUserProfile() {
       console.error(err);
       throw err; // Rethrow to UI
     }
-  };
+  }, [user]);
 
-  return useMemo(() => ({ profile, loading, updateProfile }), [profile, loading]);
+  return useMemo(() => ({ profile, loading, updateProfile }), [profile, loading, updateProfile]);
 }

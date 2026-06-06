@@ -118,29 +118,29 @@ export function ActivityMap() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6 relative z-10 -mt-16 pt-16">
          <div>
            <div className="flex items-center gap-2 mb-2">
-             <div className="w-2.5 h-2.5 rounded-sm bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
-             <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Activity Map</h3>
+             <div className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-sm bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
+             <h3 className="text-xs md:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Activity Map</h3>
            </div>
            <div className="flex items-center flex-wrap gap-2">
-              <span className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white inline-block min-w-[1.5em] text-left tabular-nums">{totalMocks}</span>
-              <span className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-500 dark:text-slate-400">mocks</span>
+              <span className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 dark:text-white inline-block min-w-[1.5em] text-left tabular-nums">{totalMocks}</span>
+              <span className="text-xl sm:text-3xl font-bold tracking-tight text-slate-500 dark:text-slate-400">mocks</span>
               
               <div className="flex items-center gap-1.5 ml-2 mt-1 sm:mt-0">
                 <button onClick={() => setPeriodOffset(p => p - 1)} className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-md">
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5 md:w-4 md:h-4" />
                 </button>
-                <span className="text-sm text-slate-600 dark:text-slate-300 font-mono font-medium min-w-[80px] text-center">{periodLabel}</span>
+                <span className="text-xs md:text-sm text-slate-600 dark:text-slate-300 font-mono font-medium min-w-[80px] text-center">{periodLabel}</span>
                 <button onClick={() => setPeriodOffset(p => p + 1)} disabled={periodOffset >= 0} className={`p-1 transition-colors rounded-md ${periodOffset >= 0 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
                 </button>
               </div>
            </div>
          </div>
          
          <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
-           <button onClick={() => handleModeChange('weekly')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors uppercase tracking-wider ${viewMode === 'weekly' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Weekly</button>
-           <button onClick={() => handleModeChange('monthly')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors uppercase tracking-wider ${viewMode === 'monthly' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Monthly</button>
-           <button onClick={() => handleModeChange('yearly')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors uppercase tracking-wider ${viewMode === 'yearly' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Yearly</button>
+           <button onClick={() => handleModeChange('weekly')} className={`px-2 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs font-bold rounded-lg transition-colors uppercase tracking-wider ${viewMode === 'weekly' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Weekly</button>
+           <button onClick={() => handleModeChange('monthly')} className={`px-2 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs font-bold rounded-lg transition-colors uppercase tracking-wider ${viewMode === 'monthly' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Monthly</button>
+           <button onClick={() => handleModeChange('yearly')} className={`px-2 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs font-bold rounded-lg transition-colors uppercase tracking-wider ${viewMode === 'yearly' ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Yearly</button>
          </div>
        </div>
 

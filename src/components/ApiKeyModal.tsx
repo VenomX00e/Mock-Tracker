@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ApiKeyModalProps {
   isOpen: boolean;
@@ -11,11 +12,11 @@ export interface ApiKeyModalProps {
 export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKeyInput, setApiKeyInput, onSave }) => {
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl animate-in fade-in zoom-in-95">
         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Configure Gemini API Key</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">To use the AI image extraction feature, paste your free Gemini API key below.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">To use the AI tutor, paste your free Gemini API key below.</p>
         
         <div className="space-y-4">
           <div>
@@ -57,4 +58,10 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose, apiKe
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 };
+

@@ -23,6 +23,7 @@ interface UIState {
     | "add-mock"
     | "admin-panel"
     | "profile"
+    | "learning"
     | "countdowns";
   setActiveTab: (
     tab:
@@ -34,6 +35,7 @@ interface UIState {
       | "add-mock"
       | "admin-panel"
       | "profile"
+      | "learning"
       | "countdowns",
   ) => void;
 

@@ -418,8 +418,8 @@ export default function Dashboard() {
         <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-400 dark:text-slate-500">
           <Target className="w-10 h-10" />
         </div>
-        <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">No mocks added yet</h2>
-        <p className="text-slate-500 dark:text-slate-400 max-w-md">Click the "Add Mock" button above to upload a scorecard image and start tracking your progress.</p>
+        <h2 className="text-xl md:text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">No mocks added yet</h2>
+        <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 max-w-md px-4">Click the "Add Mock" button above to upload a scorecard image and start tracking your progress.</p>
       </div>
     );
   }
@@ -430,8 +430,8 @@ export default function Dashboard() {
         <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-400 dark:text-slate-500">
           <Target className="w-10 h-10" />
         </div>
-        <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">No mocks added yet</h2>
-        <p className="text-slate-500 dark:text-slate-400 max-w-md">Click the "Add Mock" button above to upload a scorecard image and start tracking your progress.</p>
+        <h2 className="text-xl md:text-2xl font-semibold text-slate-800 dark:text-slate-200 mb-2">No mocks added yet</h2>
+        <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 max-w-md px-4">Click the "Add Mock" button above to upload a scorecard image and start tracking your progress.</p>
         
         <button 
            onClick={() => setShowRecycleBin(true)}

@@ -247,8 +247,8 @@ export function HomeView() {
          >
              {/* decorative blobs */}
              <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none rounded-[2rem]">
-                <div className="absolute -top-32 -right-32 w-[300px] h-[300px] bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-[64px] group-hover:bg-indigo-500/20 transition-colors duration-700"></div>
-                <div className="absolute -bottom-32 -left-32 w-[300px] h-[300px] bg-purple-500/10 dark:bg-purple-500/5 rounded-full blur-[64px] group-hover:bg-purple-500/20 transition-colors duration-700"></div>
+                <div className={`absolute -top-32 -right-32 w-[300px] h-[300px] rounded-full blur-[64px] transition-colors duration-700 ${quoteControlsVisible ? 'bg-indigo-500/20' : 'bg-indigo-500/10 dark:bg-indigo-500/5 group-hover:bg-indigo-500/20'}`}></div>
+                <div className={`absolute -bottom-32 -left-32 w-[300px] h-[300px] rounded-full blur-[64px] transition-colors duration-700 ${quoteControlsVisible ? 'bg-purple-500/20' : 'bg-purple-500/10 dark:bg-purple-500/5 group-hover:bg-purple-500/20'}`}></div>
              </div>
 
              {/* Admin Controls */}
@@ -280,11 +280,11 @@ export function HomeView() {
                </div>
              )}
              
-             <h3 className="theme-quote-text text-xl sm:text-2xl md:text-3xl font-serif italic text-slate-800 dark:text-slate-200 mb-6 z-10 leading-relaxed px-4 transition-opacity duration-300">
+             <h3 className="theme-quote-text text-lg sm:text-2xl md:text-3xl font-serif italic text-slate-800 dark:text-slate-200 mb-6 z-10 leading-relaxed px-4 transition-opacity duration-300">
                 "{activeQuote.text}"
              </h3>
              {activeQuote.author && (
-               <div className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-3 sm:gap-6 z-10">
+               <div className="text-[9px] sm:text-xs uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400 font-bold flex items-center gap-3 sm:gap-6 z-10">
                   <div className="h-px w-10 sm:w-16 bg-slate-300 dark:bg-slate-700"></div>
                   {activeQuote.author.toUpperCase()}
                   <div className="h-px w-10 sm:w-16 bg-slate-300 dark:bg-slate-700"></div>

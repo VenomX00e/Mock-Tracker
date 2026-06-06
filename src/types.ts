@@ -44,6 +44,7 @@ export interface UserProfile {
     canManageCountdowns?: boolean;
     canManageSettings?: boolean;
     canManageQuotes?: boolean;
+    canManageLearning?: boolean;
   };
   tasks?: ReflectionTask[];
 }
@@ -209,4 +210,29 @@ export interface CommunityChatProps {
   newMessage: string;
   isSending: boolean;
   Send: any;
+}
+
+export interface LearningModuleModel {
+  id: string;
+  title: string;
+  content: string;
+  order: number;
+}
+
+export interface LearningCourse {
+  id: string;
+  title: string;
+  description: string;
+  modulesCount: number;
+  modules?: LearningModuleModel[];
+  createdAt?: any;
+  createdBy?: string;
+}
+
+export interface LearningUserProgress {
+  userId: string;
+  courseId: string;
+  completedModuleIds: string[];
+  progressPercentage: number;
+  lastAccessed?: any;
 }

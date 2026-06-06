@@ -18,6 +18,7 @@ import {
 } from "../context/AppContext";
 import { useUIStore } from "../store/uiStore";
 import { usePwaInstall } from "../hooks/usePwaInstall";
+import { useVersionStore } from "../store/versionStore";
 
 export default function Navigation() {
   const { user, signInWithGoogle } = useAuthCtx();
@@ -37,16 +38,24 @@ export default function Navigation() {
     setTheme,
   } = useUIStore();
 
+  const { hasUnreadUpdate, setUpdateModalOpen } = useVersionStore();
+
   return (
     <header className="w-full relative z-40 transition-colors duration-0 py-2 sm:py-2">
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-12">
-          <div className={`flex items-center gap-3 group cursor-pointer ${!user ? '' : 'md:hidden'}`} onClick={() => setIsApiModalOpen(true)}>
+          <div className={`flex items-center gap-3 group cursor-pointer ${!user ? '' : 'md:hidden'}`} onClick={() => setUpdateModalOpen(true)}>
             <div className="relative">
               <div className="absolute inset-0 m-auto w-6 h-6 rounded-full blur-[10px] opacity-70 scale-[1.3] z-0 logo-glow-layer neon-icon-blur"></div>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-10 transition-all">
                 <img src="/icon-192.svg" alt="MockSight" className="w-full h-full object-cover relative z-10" />
               </div>
+              {hasUnreadUpdate && (
+                <span className="absolute -top-1 -right-1 flex h-3 w-3 z-30">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border border-white dark:border-slate-900"></span>
+                </span>
+              )}
             </div>
             <h1 className="text-lg sm:text-[21px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400">
               MockSight
@@ -67,6 +76,18 @@ export default function Navigation() {
                     <Download className="w-4 h-4 sm:w-5 sm:h-5" />
                   </button>
                 )}
+
+                <button
+                  className="p-1.5 sm:p-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-full transition-colors backdrop-blur-md shadow-sm border border-indigo-500 flex"
+                  title="Add Mock"
+                  onClick={() => {
+                    setMockToEdit(undefined);
+                    setActiveTab("add-mock");
+                    window.scrollTo(0, 0);
+                  }}
+                >
+                  <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
 
                 {(isOwner || isAdmin) && (
                   <button

@@ -271,5 +271,42 @@ service cloud.firestore {
         
       allow delete: if (isSignedIn() && request.auth.uid == userId && isValidId(mockId)) || isAnyAdmin();
     }
+    match /editorial_canvases/{canvasId} {
+      allow read: if isSignedIn();
+      allow write: if isAnyAdmin();
+    }
+
+    match /learning_courses/{courseId} {
+      allow read: if isSignedIn();
+      allow write: if isAnyAdmin();
+    }
+
+    match /learning_modules/{moduleId} {
+      allow read: if isSignedIn();
+      allow write: if isAnyAdmin();
+    }
+
+    match /learning_progress/{progressId} {
+      allow read: if isSignedIn() && (existing() == null || existing().userId == request.auth.uid);
+      allow create, update: if isSignedIn() && incoming().userId == request.auth.uid && progressId == request.auth.uid + "_" + incoming().courseId;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /app_updates/{updateId} {
+      // Everyone can view existing update logs
+      allow read: if true;
+      
+      // ONLY the authentic owner account is allowed to publish or rewrite logs
+      allow write: if request.auth != null && 
+                   request.auth.token.email == 'mrityunjoyk29@gmail.com' &&
+                   request.auth.token.email_verified == true;
+    }
+    
+    match /metadata/release {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                   request.auth.token.email == 'mrityunjoyk29@gmail.com' &&
+                   request.auth.token.email_verified == true;
+    }
   }
 }

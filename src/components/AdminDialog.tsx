@@ -36,6 +36,7 @@ import { AdminCountdownsTab } from "./admin/AdminCountdownsTab";
 import { AdminChallengesTab } from "./admin/AdminChallengesTab";
 import { AdminSettingsTab } from "./admin/AdminSettingsTab";
 import { AdminAdminsTab } from "./admin/AdminAdminsTab";
+import { AdminLearningTab } from "./admin/AdminLearningTab";
 import { AdminSidebarNav } from "./admin/AdminSidebarNav";
 import { AdminMigrationTool } from "./AdminMigrationTool";
 import { useAdminUsers } from "../hooks/useAdminUsers";
@@ -61,6 +62,7 @@ interface AdminDialogProps {
     | "settings"
     | "quotes"
     | "categories"
+    | "learning"
     | "admins";
   editNoticeData?: any;
   editCountdownData?: any;
@@ -93,6 +95,7 @@ export default function AdminDialog({
     | "settings"
     | "categories"
     | "admins"
+    | "learning"
     | "quotes"
   >(initialTab as any);
   const [adminCategoryScope, setAdminCategoryScope] = useState<string | null>(
@@ -479,6 +482,11 @@ export default function AdminDialog({
           {activeTab === "quotes" &&
             (isOwner || adminPermissions?.canManageQuotes) && (
               <AdminQuotesTab />
+          )}
+
+          {activeTab === "learning" &&
+            (isOwner || adminPermissions?.canManageLearning) && (
+              <AdminLearningTab />
           )}
 
           {activeTab === "settings" &&

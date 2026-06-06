@@ -10,10 +10,12 @@ import {
   Home,
   FileText,
   UserCircle,
-  CheckSquare
+  CheckSquare,
+  GraduationCap
 } from 'lucide-react';
 import { useAuthCtx, useAppStateCtx, useUserProfileCtx } from '../context/AppContext';
 import { useUIStore } from '../store/uiStore';
+import { useVersionStore } from '../store/versionStore';
 
 export function Sidebar() {
   const { user } = useAuthCtx();
@@ -28,6 +30,8 @@ export function Sidebar() {
     setIsSidebarCollapsed,
     setAdminTab
   } = useUIStore();
+
+  const { hasUnreadUpdate, setUpdateModalOpen } = useVersionStore();
 
   const [localActiveTab, setLocalActiveTab] = React.useState<string>(activeTab);
 
@@ -86,6 +90,12 @@ export function Sidebar() {
       onClick: () => navigateToTab("dashboard")
     },
     {
+      id: "learning",
+      label: "Learning",
+      icon: GraduationCap,
+      onClick: () => navigateToTab("learning")
+    },
+    {
       id: "tasks",
       label: "Tasks",
       icon: CheckSquare,
@@ -111,22 +121,32 @@ export function Sidebar() {
     >
       {/* Sidebar Header */}
       <div className="flex items-center h-16 shrink-0 pl-6 pr-4">
-        <div className="flex items-center w-full">
+        <button 
+          onClick={() => setUpdateModalOpen(true)}
+          className="group flex items-center w-full text-left relative focus:outline-none"
+          title="App Version Info & Update"
+        >
           <div className="relative shrink-0">
             <div className="absolute inset-0 m-auto w-6 h-6 rounded-full blur-[10px] opacity-70 scale-[1.3] z-0 logo-glow-layer neon-icon-blur"></div>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-10 transition-all">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm relative overflow-hidden bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 z-10 transition-all group-hover:scale-105 group-hover:border-indigo-300 dark:group-hover:border-indigo-500">
               <img src="/icon-192.svg" alt="MockSight" className="w-full h-full object-cover relative z-10" />
             </div>
+            {hasUnreadUpdate && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3 z-30">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border border-white dark:border-slate-900"></span>
+              </span>
+            )}
           </div>
           
           <h1 
-            className={`text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 shrink-0 transition-opacity duration-150 ml-3 ${
+            className={`text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-400 dark:to-indigo-400 shrink-0 transition-all ml-3 group-hover:bg-gradient-to-r group-hover:from-indigo-600 group-hover:to-pink-600 dark:group-hover:from-indigo-400 dark:group-hover:to-pink-400 ${
               isSidebarCollapsed ? "opacity-0" : "opacity-100"
             }`}
           >
             MockSight
           </h1>
-        </div>
+        </button>
       </div>
 
       {/* Collapse Toggle inside Sidebar, just like trackly mockup if possible. Wait, in trackly, toggle is sometimes on the wrapper or inside. Let's place it here. */}

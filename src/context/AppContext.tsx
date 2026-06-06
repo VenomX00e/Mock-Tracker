@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../services/AuthContext';
 export const useAuthCtx = () => {
     return useAuth();
@@ -97,11 +97,12 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
     canManageCountdowns: isOwner || (isAdminUser && profile?.permissions?.canManageCountdowns),
     canManageSettings: isOwner || (isAdminUser && profile?.permissions?.canManageSettings),
     canManageQuotes: isOwner || (isAdminUser && profile?.permissions?.canManageQuotes),
+    canManageLearning: isOwner || (isAdminUser && profile?.permissions?.canManageLearning),
   }), [isOwner, isAdminUser, profile?.permissions]);
 
-  const handleUpdateProfileTasks = async (tasks: any[]) => {
+  const handleUpdateProfileTasks = useCallback(async (tasks: any[]) => {
     if (updateProfile) await updateProfile({ tasks });
-  };
+  }, [updateProfile]);
 
   const systemDataVal = useSystemData(user, profile, adminPermissions, isOwner);
   const { pinnedChallenges, fetchAnnouncement, notices, setNotices, categories } = systemDataVal;
@@ -122,7 +123,7 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
   const appStateVal = useMemo(() => ({
     handleUpdateProfileTasks,
     isOwner, isAdminUser, isAdmin, adminPermissions, setLocalCategory, localCategory,
-  }), [isOwner, isAdminUser, isAdmin, adminPermissions, localCategory]);
+  }), [handleUpdateProfileTasks, isOwner, isAdminUser, isAdmin, adminPermissions, localCategory]);
 
   return (
     <SystemDataCtx.Provider value={systemDataVal}>
