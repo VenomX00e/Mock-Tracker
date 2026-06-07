@@ -396,22 +396,32 @@ export default function UpdateChangelogModal() {
   const isUpToDate = currentLocalVersion.toLowerCase() === latestCloudVersion.toLowerCase();
 
   const handleUpdate = () => {
+    if (updating) return;
     setUpdating(true);
     setProgress(0);
     
+    let currentProgress = 0;
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setLocalVersion(latestCloudVersion);
-            setUpdating(false);
+      currentProgress += 10;
+      if (currentProgress >= 100) {
+        clearInterval(interval);
+        setProgress(100);
+        setTimeout(() => {
+          setLocalVersion(latestCloudVersion);
+          setUpdating(false);
+          // Try multiple reload strategies to bypass iframe/sandbox cache issues
+          try {
+            // Appends a query param to cachebust if needed, or just re-assigns href
+            const url = new URL(window.location.href);
+            url.searchParams.set('_t', Date.now().toString());
+            window.location.href = url.toString();
+          } catch(e) {
             window.location.reload();
-          }, 300);
-          return 100;
-        }
-        return prev + 10;
-      });
+          }
+        }, 300);
+      } else {
+        setProgress(currentProgress);
+      }
     }, 100);
   };
 
