@@ -45,9 +45,6 @@ export function ModalsSection() {
   const { adminPermissions, isOwner, isAdmin } = useAppStateCtx();
   const { mockToEdit, setMockToEdit, editingChallenge, setEditingChallenge, activePublicProfile, setActivePublicProfile, adminEditNotice, setAdminEditNotice, adminEditCountdown, setAdminEditCountdown } = useUIStore();
 
-  // Local state for API key input
-  const [apiKeyInput, setApiKeyInput] = useState(localStorage.getItem('geminiApiKey') || '');
-
   const handleCloseModal = () => {
     setIsAddModalOpen(false);
     setTimeout(() => setMockToEdit(undefined), 300);
@@ -62,11 +59,6 @@ export function ModalsSection() {
     setIsRequestsModalOpen(false);
     setEditingChallenge(challenge);
     setIsCreateChallengeOpen(true);
-  };
-
-  const handleSaveApiKey = () => {
-    localStorage.setItem('geminiApiKey', apiKeyInput);
-    setIsApiModalOpen(false);
   };
 
   const handleMuteUser = async (userId: string, isMuted: boolean) => {
@@ -225,9 +217,6 @@ export function ModalsSection() {
       <ApiKeyModal
         isOpen={isApiModalOpen}
         onClose={() => setIsApiModalOpen(false)}
-        apiKeyInput={apiKeyInput}
-        setApiKeyInput={setApiKeyInput}
-        onSave={handleSaveApiKey}
       />
     </>
   );

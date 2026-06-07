@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import { getActiveApiKey } from "../utils/apiKeyManager";
 
 export interface Citation {
   uri: string;
@@ -19,7 +20,7 @@ export interface ChatMessage {
 }
 
 export async function askLearningTutor(messages: ChatMessage[], useWebSearch: boolean = false, modelKey: string = 'gemini-3.1-flash-lite', chatMode: string = 'default', onMessageUpdate?: (text: string, citations?: Citation[]) => void): Promise<{ text: string, citations?: Citation[] }> {
-  const customKey = localStorage.getItem('geminiApiKey');
+  const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   

@@ -24,6 +24,8 @@ interface EditorialCanvasViewProps {
   onBack: () => void;
 }
 
+import { getActiveApiKey } from '../../utils/apiKeyManager';
+
 export function EditorialCanvasView({
   canvasId,
   onBack,
@@ -130,7 +132,7 @@ export function EditorialCanvasView({
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    if (!localStorage.getItem("geminiApiKey")) {
+    if (!getActiveApiKey()) {
       alert(
         "Please configure your Gemini API Key in the AI Settings (top right on Learning page).",
       );
@@ -462,7 +464,7 @@ export function EditorialCanvasView({
                   <div className="flex flex-col gap-1">
                     <button
                       onClick={() => {
-                        if (!localStorage.getItem("geminiApiKey")) {
+                        if (!getActiveApiKey()) {
                           alert("Please configure your Gemini API Key in the AI Settings.");
                           return;
                         }

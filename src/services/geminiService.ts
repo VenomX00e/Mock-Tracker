@@ -1,8 +1,9 @@
 import { MockScore } from "../types";
 import { auth } from "./firebase";
+import { getActiveApiKey } from "../utils/apiKeyManager";
 
 export async function parseMockAnnouncementImage(images: { base64: string, mimeType: string }[]): Promise<any> {
-  const customKey = localStorage.getItem('geminiApiKey');
+  const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
@@ -32,7 +33,7 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
 
 
 export async function generateBadge(promptText: string): Promise<{ name: string, imageBase64: string }> {
-  const customKey = localStorage.getItem('geminiApiKey');
+  const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
@@ -70,7 +71,7 @@ function extractNum(val: any): number | null {
 }
 
 export async function parseScorecardImage(images: { base64: string, mimeType: string }[], subjects?: { id: string, name: string }[]): Promise<Partial<MockScore>> {
-  const customKey = localStorage.getItem('geminiApiKey');
+  const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {

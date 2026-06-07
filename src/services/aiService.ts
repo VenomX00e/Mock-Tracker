@@ -29,12 +29,14 @@ export interface ExtractedDocumentContent {
   oneWordSubstitutions?: ExtractedPhraseItem[];
 }
 
+import { getActiveApiKey } from '../utils/apiKeyManager';
+
 /**
  * Retrieve credentials from local storage.
  * @returns { customApiKey: string | null, model: string }
  */
 function getAiSettings() {
-  const customApiKey = localStorage.getItem('geminiApiKey');
+  const customApiKey = getActiveApiKey();
   const model = localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
   return { customApiKey, model };
 }

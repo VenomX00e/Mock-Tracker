@@ -22,6 +22,8 @@ interface VocabWordBoxProps {
   canManageLearning?: boolean;
 }
 
+import { getActiveApiKey } from '../../utils/apiKeyManager';
+
 export function VocabWordBox({
   vocab,
   onUpdate,
@@ -54,7 +56,7 @@ export function VocabWordBox({
 
   const handleGenerateDetails = async () => {
     if (!vocab.word || !vocab.word.trim()) return;
-    if (!localStorage.getItem("geminiApiKey")) {
+    if (!getActiveApiKey()) {
       alert(
         "Please configure your Gemini API Key in the AI Settings (top right on Learning page).",
       );

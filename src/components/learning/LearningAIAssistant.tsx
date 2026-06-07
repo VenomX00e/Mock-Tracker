@@ -18,6 +18,8 @@ interface LearningAIAssistantProps {
   onToggleEnlarge?: () => void;
 }
 
+import { getActiveApiKey } from '../../utils/apiKeyManager';
+
 export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIAssistantProps) {
   const { setActiveTab } = useUIStore();
   const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton } = useChatStore();
@@ -96,7 +98,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     setMessages(chatMode, chatHistory);
     setIsLoading(true);
 
-    const customKey = localStorage.getItem('geminiApiKey');
+    const customKey = getActiveApiKey();
     if (!customKey) {
       setMessages(chatMode, [...chatHistory, { 
         role: 'model', 

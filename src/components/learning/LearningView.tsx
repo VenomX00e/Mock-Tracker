@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Cpu, ChevronDown, Check, Book } from 'lucide-react';
+import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2 } from 'lucide-react';
 import { LearningAIAssistant } from './LearningAIAssistant';
 import { VocabularyFeed } from './VocabularyFeed';
 import { SpeedMathHub } from './SpeedMathHub';
 import { useVocabularyStore } from '../../store/vocabularyStore';
 import { subscribeToCanvases } from '../../services/vocabularyFirebaseService';
+import { ApiKeyEntry, getApiKeys, saveApiKeys } from '../../utils/apiKeyManager';
 
 const MODELS = [
   { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Default)' },
@@ -18,7 +19,8 @@ export function LearningView() {
   const [activeTab, setActiveTab] = useState<'ai' | 'vocab' | 'math'>('ai');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
+  const [newKeyInput, setNewKeyInput] = useState('');
   const [selectedModel, setSelectedModel] = useState(MODELS[0].value);
   const [isEnlarged, setIsEnlarged] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -26,8 +28,7 @@ export function LearningView() {
   const setCanvases = useVocabularyStore(state => state.setCanvases);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem('geminiApiKey');
-    if (savedKey) setApiKeyInput(savedKey);
+    setKeys(getApiKeys());
     const savedModel = localStorage.getItem('geminiModel');
     if (savedModel) setSelectedModel(savedModel);
   }, []);
@@ -54,14 +55,39 @@ export function LearningView() {
     };
   }, []);
 
-  const handleSaveApiKey = () => {
-    if (apiKeyInput.trim()) {
-      localStorage.setItem('geminiApiKey', apiKeyInput.trim());
-    } else {
-      localStorage.removeItem('geminiApiKey');
-    }
+  const handleAddKey = () => {
+    if (!newKeyInput.trim()) return;
+    const newEntry: ApiKeyEntry = {
+      id: Date.now().toString(),
+      key: newKeyInput.trim(),
+      isActive: true,
+    };
+    const updatedKeys = [...keys, newEntry];
+    setKeys(updatedKeys);
+    saveApiKeys(updatedKeys);
+    setNewKeyInput('');
+  };
+
+  const handleToggleKey = (id: string) => {
+    const updatedKeys = keys.map(k => k.id === id ? { ...k, isActive: !k.isActive } : k);
+    setKeys(updatedKeys);
+    saveApiKeys(updatedKeys);
+  };
+
+  const handleDeleteKey = (id: string) => {
+    const updatedKeys = keys.filter(k => k.id !== id);
+    setKeys(updatedKeys);
+    saveApiKeys(updatedKeys);
+  };
+
+  const handleSaveSettings = () => {
     localStorage.setItem('geminiModel', selectedModel);
     setIsPopoverOpen(false);
+  };
+
+  const maskKey = (key: string) => {
+    if (key.length <= 10) return key;
+    return `${key.slice(0, 4)}...${key.slice(-4)}`;
   };
 
   return (
@@ -133,13 +159,56 @@ export function LearningView() {
                     </div>
 
                     <div>
-                      <input
-                        type="password"
-                        value={apiKeyInput}
-                        onChange={(e) => setApiKeyInput(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm"
-                        placeholder="AIzaSy..."
-                      />
+                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                        API Keys Manager
+                      </label>
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="password"
+                          value={newKeyInput}
+                          onChange={(e) => setNewKeyInput(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm"
+                          placeholder="Paste new key..."
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddKey}
+                          disabled={!newKeyInput.trim()}
+                          className="px-3 py-2 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="max-h-32 overflow-y-auto space-y-1 mb-2 pr-1 custom-scrollbar">
+                        {keys.length === 0 ? (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 italic text-center py-2">No keys added.</p>
+                        ) : (
+                          keys.map(entry => (
+                            <div key={entry.id} className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-2">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <input
+                                  type="checkbox"
+                                  checked={entry.isActive}
+                                  onChange={() => handleToggleKey(entry.id)}
+                                  className="w-3.5 h-3.5 text-indigo-600 rounded bg-slate-100 border-slate-300 dark:bg-slate-700 dark:border-slate-600 focus:ring-indigo-500"
+                                  title="Toggle active"
+                                />
+                                <span className={`font-mono text-xs truncate ${entry.isActive ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500 line-through'}`}>
+                                  {maskKey(entry.key)}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteKey(entry.id)}
+                                className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -151,10 +220,10 @@ export function LearningView() {
                       </button>
                       <button
                         type="button"
-                        onClick={handleSaveApiKey}
+                        onClick={handleSaveSettings}
                         className="flex-1 py-2 bg-slate-900 dark:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors shadow-md hover:bg-slate-800 dark:hover:bg-slate-600"
                       >
-                        Save Key
+                        Save Settings
                       </button>
                     </div>
                     

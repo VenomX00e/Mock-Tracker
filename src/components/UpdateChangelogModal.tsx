@@ -21,13 +21,14 @@ import {
   Globe,
   Lock,
   Wrench,
-  Check
+  Check,
+  Pencil
 } from 'lucide-react';
 import { useVersionStore } from '../store/versionStore';
 import { useUIStore } from '../store/uiStore';
 import { APP_CHANGELOG, LATEST_VERSION, VersionRelease, UpdateItem } from '../config/versionConfig';
 import { useAuth } from '../services/AuthContext';
-import { doc, getDoc, setDoc, getDocs, collection, query, orderBy } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocs, collection, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
 
 // Hardened Error Tracking
@@ -291,6 +292,7 @@ export default function UpdateChangelogModal() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Close on Escape key press
   useEffect(() => {
@@ -497,10 +499,14 @@ export default function UpdateChangelogModal() {
     setIsPublishing(true);
     const verId = rawVersion.toUpperCase();
     const verKey = rawVersion.toLowerCase();
+    
+    // Check if this is an older version being edited
+    const isExistingOld = allVersions.some(v => v.version.toLowerCase() === verKey && verKey !== latestCloudVersion.toLowerCase());
+
     const payload = {
       ...activeChangelogData,
       version: verId,
-      createdAt: new Date().toISOString()
+      createdAt: (activeChangelogData as any).createdAt || new Date().toISOString()
     };
 
     try {
@@ -508,16 +514,19 @@ export default function UpdateChangelogModal() {
       const docRef = doc(db, 'app_updates', verKey);
       await setDoc(docRef, payload);
 
-      // 2. Save pointer to latest pointer
-      const pointerRef = doc(db, 'metadata', 'release');
-      await setDoc(pointerRef, { latestVersion: verId });
+      // 2. Save pointer to latest pointer ONLY if not editing an older version
+      if (!isExistingOld) {
+        const pointerRef = doc(db, 'metadata', 'release');
+        await setDoc(pointerRef, { latestVersion: verId });
 
-      setSelectedVersion(verId);
-      setLocalVersion(verId); // Sync own local storage immediately
+        setSelectedVersion(verId);
+        setLocalVersion(verId); // Sync own local storage immediately
+      }
+      
       setIsEditMode(false);
       await fetchVersionsIndex();
 
-      alert(`Version ${verId} published successfully! Pulsating unread badge is now lit for all client environments.`);
+      alert(isExistingOld ? `Draft for ${verId} updated successfully!` : `Version ${verId} published successfully! Pulsating unread badge is now lit for all client environments.`);
     } catch (err) {
       console.error("Failed to commit release details:", err);
       try {
@@ -527,6 +536,43 @@ export default function UpdateChangelogModal() {
       }
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  const handleDeleteVersion = async (versionId: string) => {
+    try {
+      const verKey = versionId.toLowerCase();
+      
+      // 1. Delete from database
+      const docRef = doc(db, 'app_updates', verKey);
+      await deleteDoc(docRef);
+
+      // 2. Local State Cleanup
+      const updatedVersions = allVersions.filter(v => v.version.toLowerCase() !== verKey);
+      setAllVersions(updatedVersions);
+
+      // 3. Pointer Rollback (Crucial)
+      if (verKey === latestCloudVersion.toLowerCase()) {
+        const remainingLatest = updatedVersions.length > 0 ? updatedVersions[0].version : 'v1.0.0';
+        const pointerRef = doc(db, 'metadata', 'release');
+        await setDoc(pointerRef, { latestVersion: remainingLatest });
+      }
+
+      alert(`Version ${versionId} deleted successfully!`);
+
+      // 4. Force UI refresh
+      if (selectedVersion.toLowerCase() === verKey) {
+        if (updatedVersions.length > 0) {
+          setSelectedVersion(updatedVersions[0].version);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete release details:", err);
+      try {
+        handleFirestoreError(err, OperationType.DELETE, `app_updates/${versionId.toLowerCase()}`);
+      } catch (jsonErr: any) {
+        alert(`Delete Rejected: ${jsonErr.message}`);
+      }
     }
   };
 
@@ -886,6 +932,45 @@ export default function UpdateChangelogModal() {
                             <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono text-[10px] rounded border border-slate-200 dark:border-slate-700">
                               {historyLog.releaseDate}
                             </span>
+                            {isOwner && (
+                              <div className="ml-auto flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActiveChangelogData(historyLog);
+                                    setIsEditMode(true);
+                                    setShowHistory(false);
+                                  }}
+                                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg transition-colors relative z-50 pointer-events-auto"
+                                  title="Edit Update"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                {deleteConfirmId === historyLog.version && (
+                                  <span className="text-[10px] text-rose-500 font-medium animate-pulse">Click again to confirm</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (deleteConfirmId === historyLog.version) {
+                                      handleDeleteVersion(historyLog.version);
+                                      setDeleteConfirmId(null);
+                                    } else {
+                                      setDeleteConfirmId(historyLog.version);
+                                      setTimeout(() => setDeleteConfirmId(null), 3000);
+                                    }
+                                  }}
+                                  className={`p-1.5 rounded-lg transition-colors relative z-50 pointer-events-auto ${deleteConfirmId === historyLog.version ? 'bg-rose-500 text-white shadow-sm hover:bg-rose-600' : 'hover:bg-rose-100 dark:hover:bg-rose-500/20 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400'}`}
+                                  title="Delete Update"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           {/* Historical Group A */}
@@ -977,11 +1062,36 @@ export default function UpdateChangelogModal() {
                   ) : (
                     <>
                       <Globe className="w-4 h-4 animate-pulse" />
-                      Publish Update to All Users
+                      {allVersions.some(v => v.version.toLowerCase() === activeChangelogData?.version.toLowerCase() && activeChangelogData.version.toLowerCase() !== latestCloudVersion.toLowerCase()) ? "Update Historical Draft" : "Publish Update to All Users"}
                     </>
                   )}
                 </button>
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+                {isOwner && allVersions.some(v => v.version.toLowerCase() === activeChangelogData?.version.toLowerCase()) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (deleteConfirmId === activeChangelogData!.version) {
+                        handleDeleteVersion(activeChangelogData!.version);
+                        setDeleteConfirmId(null);
+                      } else {
+                        setDeleteConfirmId(activeChangelogData!.version);
+                        setTimeout(() => setDeleteConfirmId(null), 3000);
+                      }
+                    }}
+                    disabled={isPublishing}
+                    className={`w-full max-w-sm py-2 px-6 mt-1.5 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 border focus:outline-none transition-colors disabled:opacity-50 relative z-50 pointer-events-auto ${
+                      deleteConfirmId === activeChangelogData!.version 
+                      ? 'bg-rose-500 hover:bg-rose-600 text-white border-rose-600 animate-pulse'
+                      : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-600 border-rose-500/20'
+                    }`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    {deleteConfirmId === activeChangelogData!.version ? "Click to Confirm Deletion" : "Delete Published Version"}
+                  </button>
+                )}
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 mt-2">
                   <Lock className="w-3 h-3 text-emerald-500" />
                   Only authenticated owners can commit update nodes. Rules validated.
                 </div>

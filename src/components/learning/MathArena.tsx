@@ -58,6 +58,9 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   const [activeMultiInput, setActiveMultiInput] = useState<0 | 1>(0);
   const [prefilledIndex, setPrefilledIndex] = useState<0 | 1 | null>(null);
 
+  const inputValRef = useRef("");
+  const multiInputsRef = useRef<[string, string]>(["", ""]);
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile(); // Check initially
@@ -186,6 +189,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
     setQuestion(newQuestion);
     setQuestionStartTime(Date.now());
     setInputVal("");
+    inputValRef.current = "";
     let randIdx: 0 | 1 | null = null;
     if (newQuestion.multiAnswer) {
       randIdx = Math.random() < 0.5 ? 0 : 1;
@@ -193,10 +197,12 @@ export function MathArena({ config, onClose }: MathArenaProps) {
       const initialVals: [string, string] = ["", ""];
       initialVals[randIdx] = newQuestion.multiAnswer[randIdx].toString();
       setMultiInputs(initialVals);
+      multiInputsRef.current = initialVals;
       setActiveMultiInput(randIdx === 0 ? 1 : 0);
     } else {
       setPrefilledIndex(null);
       setMultiInputs(["", ""]);
+      multiInputsRef.current = ["", ""];
       setActiveMultiInput(0);
     }
 
@@ -304,8 +310,9 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   };
 
   const handleMultiInputChange = (index: 0 | 1, val: string) => {
-    const newVals: [string, string] = [...multiInputs] as [string, string];
+    const newVals: [string, string] = [...multiInputsRef.current] as [string, string];
     newVals[index] = val;
+    multiInputsRef.current = newVals;
     setMultiInputs(newVals);
 
     if (question && question.multiAnswer) {
@@ -338,6 +345,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
             resetVals[prefilledIndex] =
               question.multiAnswer[prefilledIndex].toString();
           }
+          multiInputsRef.current = resetVals;
           setMultiInputs(resetVals);
           if (prefilledIndex === 0) box2Ref.current?.focus();
           else box1Ref.current?.focus();
@@ -352,18 +360,19 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   ) => {
     if (effectiveVirtualKeyboard) {
       if (e.key === "Backspace") {
-        handleMultiInputChange(index, multiInputs[index].slice(0, -1));
+        handleMultiInputChange(index, multiInputsRef.current[index].slice(0, -1));
         return;
       }
       if (/^[0-9.-]$/.test(e.key)) {
-        handleMultiInputChange(index, multiInputs[index] + e.key);
+        handleMultiInputChange(index, multiInputsRef.current[index] + e.key);
         return;
       }
     } else {
-      if (e.key === "Enter" && multiInputs[0] !== "" && multiInputs[1] !== "") {
+      const currentInputs = multiInputsRef.current;
+      if (e.key === "Enter" && currentInputs[0] !== "" && currentInputs[1] !== "") {
         e.preventDefault();
-        const parsed1 = parseFloat(multiInputs[0]);
-        const parsed2 = parseFloat(multiInputs[1]);
+        const parsed1 = parseFloat(currentInputs[0]);
+        const parsed2 = parseFloat(currentInputs[1]);
         if (question && question.multiAnswer) {
           if (
             parsed1 === question.multiAnswer[0] &&
@@ -376,7 +385,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
               ...m,
               {
                 q: question.displayString,
-                userAns: `${multiInputs[0]}, ${multiInputs[1]}`,
+                userAns: `${currentInputs[0]}, ${currentInputs[1]}`,
                 actual: question.multiAnswer!.join(", "),
               },
             ]);
@@ -385,6 +394,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
               resetVals[prefilledIndex] =
                 question.multiAnswer[prefilledIndex].toString();
             }
+            multiInputsRef.current = resetVals;
             setMultiInputs(resetVals);
             if (prefilledIndex === 0) box2Ref.current?.focus();
             else box1Ref.current?.focus();
@@ -396,6 +406,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    inputValRef.current = val;
     setInputVal(val);
 
     if (question && val.trim() !== "") {
@@ -418,6 +429,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
             actual: question.correctAnswer,
           },
         ]);
+        inputValRef.current = "";
         setInputVal("");
       }
     }
@@ -426,12 +438,12 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (effectiveVirtualKeyboard) {
       if (e.key === "Backspace") {
-        setInputVal((v) => v.slice(0, -1));
+        const dummyEvent = { target: { value: inputValRef.current.slice(0, -1) } };
+        handleInputChange(dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>);
         return;
       }
       if (/^[0-9.-]$/.test(e.key)) {
-        setInputVal((v) => v + e.key);
-        const dummyEvent = { target: { value: inputVal + e.key } };
+        const dummyEvent = { target: { value: inputValRef.current + e.key } };
         handleInputChange(
           dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>,
         );
@@ -439,8 +451,8 @@ export function MathArena({ config, onClose }: MathArenaProps) {
       }
     }
 
-    if (e.key === "Enter" && inputVal.trim() !== "" && question) {
-      const parsedVal = parseFloat(inputVal);
+    if (e.key === "Enter" && inputValRef.current.trim() !== "" && question) {
+      const parsedVal = parseFloat(inputValRef.current);
       if (
         parsedVal !== question.correctAnswer &&
         !(
@@ -453,13 +465,14 @@ export function MathArena({ config, onClose }: MathArenaProps) {
           ...m,
           {
             q: question.displayString,
-            userAns: inputVal,
+            userAns: inputValRef.current,
             actual: question.correctAnswer,
           },
         ]);
+        inputValRef.current = "";
         setInputVal("");
       } else {
-        processAnswer(inputVal, false, true);
+        processAnswer(inputValRef.current, false, true);
       }
     }
   };
@@ -725,10 +738,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                     if (prefilledIndex === activeMultiInput) return;
                     handleMultiInputChange(
                       activeMultiInput,
-                      multiInputs[activeMultiInput] + key,
+                      multiInputsRef.current[activeMultiInput] + key,
                     );
                   } else {
-                    const dummyEvent = { target: { value: inputVal + key } };
+                    const dummyEvent = { target: { value: inputValRef.current + key } };
                     handleInputChange(
                       dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>,
                     );
@@ -739,11 +752,11 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                     if (prefilledIndex === activeMultiInput) return;
                     handleMultiInputChange(
                       activeMultiInput,
-                      multiInputs[activeMultiInput].slice(0, -1),
+                      multiInputsRef.current[activeMultiInput].slice(0, -1),
                     );
                   } else {
                     const dummyEvent = {
-                      target: { value: inputVal.slice(0, -1) },
+                      target: { value: inputValRef.current.slice(0, -1) },
                     };
                     handleInputChange(
                       dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>,
