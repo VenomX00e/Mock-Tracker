@@ -310,7 +310,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   };
 
   const handleMultiInputChange = (index: 0 | 1, val: string) => {
-    const newVals: [string, string] = [...multiInputsRef.current] as [string, string];
+    const newVals: [string, string] = [...multiInputsRef.current] as [
+      string,
+      string,
+    ];
     newVals[index] = val;
     multiInputsRef.current = newVals;
     setMultiInputs(newVals);
@@ -360,7 +363,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   ) => {
     if (effectiveVirtualKeyboard) {
       if (e.key === "Backspace") {
-        handleMultiInputChange(index, multiInputsRef.current[index].slice(0, -1));
+        handleMultiInputChange(
+          index,
+          multiInputsRef.current[index].slice(0, -1),
+        );
         return;
       }
       if (/^[0-9.-]$/.test(e.key)) {
@@ -369,7 +375,11 @@ export function MathArena({ config, onClose }: MathArenaProps) {
       }
     } else {
       const currentInputs = multiInputsRef.current;
-      if (e.key === "Enter" && currentInputs[0] !== "" && currentInputs[1] !== "") {
+      if (
+        e.key === "Enter" &&
+        currentInputs[0] !== "" &&
+        currentInputs[1] !== ""
+      ) {
         e.preventDefault();
         const parsed1 = parseFloat(currentInputs[0]);
         const parsed2 = parseFloat(currentInputs[1]);
@@ -438,8 +448,12 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (effectiveVirtualKeyboard) {
       if (e.key === "Backspace") {
-        const dummyEvent = { target: { value: inputValRef.current.slice(0, -1) } };
-        handleInputChange(dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>);
+        const dummyEvent = {
+          target: { value: inputValRef.current.slice(0, -1) },
+        };
+        handleInputChange(
+          dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>,
+        );
         return;
       }
       if (/^[0-9.-]$/.test(e.key)) {
@@ -523,9 +537,9 @@ export function MathArena({ config, onClose }: MathArenaProps) {
       <div
         className={`flex flex-col justify-center min-h-[500px] w-full max-w-2xl p-8 rounded-2xl border shadow-xl transition-all duration-300 ${numpadAlignment === "center" ? "items-center" : numpadAlignment === "left" ? "items-start" : "items-end"} ${
           flash === "success"
-            ? "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30"
+            ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-500/30"
             : flash === "error"
-              ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30"
+              ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-500/30"
               : "bg-white dark:bg-[#1E1F25] border-slate-200 dark:border-slate-800"
         }`}
       >
@@ -656,7 +670,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
               }`}
               style={{
                 fontSize: `clamp(1rem, min(8vw, calc(3.5rem - ${Math.max(0, question.displayString.length - 12) * 0.08}rem)), 4.5rem)`,
-                lineHeight: "1.3"
+                lineHeight: "1.3",
               }}
             >
               <MathRenderer expr={question.displayString} />
@@ -741,7 +755,9 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                       multiInputsRef.current[activeMultiInput] + key,
                     );
                   } else {
-                    const dummyEvent = { target: { value: inputValRef.current + key } };
+                    const dummyEvent = {
+                      target: { value: inputValRef.current + key },
+                    };
                     handleInputChange(
                       dummyEvent as unknown as React.ChangeEvent<HTMLInputElement>,
                     );

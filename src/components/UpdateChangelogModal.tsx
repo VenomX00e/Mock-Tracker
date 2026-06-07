@@ -406,6 +406,7 @@ export default function UpdateChangelogModal() {
           setTimeout(() => {
             setLocalVersion(latestCloudVersion);
             setUpdating(false);
+            window.location.reload();
           }, 300);
           return 100;
         }
