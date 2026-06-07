@@ -406,12 +406,34 @@ export default function UpdateChangelogModal() {
       if (currentProgress >= 100) {
         clearInterval(interval);
         setProgress(100);
-        setTimeout(() => {
+        setTimeout(async () => {
           setLocalVersion(latestCloudVersion);
           setUpdating(false);
-          // Try multiple reload strategies to bypass iframe/sandbox cache issues
+          
+          // 1. Unregister all service workers
+          if ('serviceWorker' in navigator) {
+            try {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              for (const registration of registrations) {
+                await registration.unregister();
+              }
+            } catch (e) {
+              console.error('Failed to unregister SW:', e);
+            }
+          }
+          
+          // 2. Clear all cache-storage to ensure fresh files
+          if ('caches' in window) {
+            try {
+              const cacheKeys = await caches.keys();
+              await Promise.all(cacheKeys.map(key => caches.delete(key)));
+            } catch (e) {
+              console.error('Failed to clear caches:', e);
+            }
+          }
+
+          // 3. Force hard reload (appends cache-bust if possible)
           try {
-            // Appends a query param to cachebust if needed, or just re-assigns href
             const url = new URL(window.location.href);
             url.searchParams.set('_t', Date.now().toString());
             window.location.href = url.toString();
@@ -741,8 +763,9 @@ export default function UpdateChangelogModal() {
             ) : (
               <>
                 {/* Features Group A */}
-                <div>
-                  <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-900 pb-1.5">
+                {(isEditMode || activeChangelogData.featuresGroupA.items.length > 0) && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-900 pb-1.5">
                     {isEditMode ? (
                       <input 
                         type="text"
@@ -824,15 +847,17 @@ export default function UpdateChangelogModal() {
                         )}
                       </div>
                     ))}
-                    {activeChangelogData.featuresGroupA.items.length === 0 && (
+                    {isEditMode && activeChangelogData.featuresGroupA.items.length === 0 && (
                       <p className="text-xs text-slate-400 text-center py-2">No items listed in this cluster. Toggle Edit mode to insert nodes.</p>
                     )}
                   </div>
                 </div>
+                )}
 
                 {/* Features Group B */}
-                <div>
-                  <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-900 pb-1.5">
+                {(isEditMode || activeChangelogData.featuresGroupB.items.length > 0) && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-900 pb-1.5">
                     {isEditMode ? (
                       <input 
                         type="text"
@@ -914,11 +939,12 @@ export default function UpdateChangelogModal() {
                         )}
                       </div>
                     ))}
-                    {activeChangelogData.featuresGroupB.items.length === 0 && (
+                    {isEditMode && activeChangelogData.featuresGroupB.items.length === 0 && (
                       <p className="text-xs text-slate-400 text-center py-2">No items listed in this cluster. Toggle Edit mode to insert nodes.</p>
                     )}
                   </div>
                 </div>
+                )}
               </>
             )}
 
