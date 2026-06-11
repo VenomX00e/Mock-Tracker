@@ -162,7 +162,7 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
 
         <div className="p-6 space-y-4">
           <div className="flex items-center gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 rounded-xl relative overflow-hidden group">
-            <input type="file" multiple accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="file" multiple accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"   autoCorrect="off" spellCheck={false}     />
             <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
               {isProcessingImage ? <div className="w-5 h-5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /> : <ImageIcon className="w-5 h-5" />}
             </div>
@@ -203,13 +203,13 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider flex items-center gap-2">Mock Name*</label>
             <div className="relative">
               <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="search" autoComplete="off" spellCheck="false" autoCorrect="off" autoCapitalize="none" data-1p-ignore="true" data-lpignore="true" data-form-type="x-dummy" value={liveMockData.mockName} onChange={(e) => setLiveMockData({ ...liveMockData, mockName: e.target.value })} placeholder="E.g. SBI PO Prelims Mock 1" className="w-full pl-9 text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200" />
+              <textarea value={liveMockData.mockName} onChange={(e) => setLiveMockData({ ...liveMockData, mockName: e.target.value })} placeholder="E.g. SBI PO Prelims Mock 1" className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 dark:text-slate-200 resize-none overflow-hidden" rows={1} autoCorrect="off" spellCheck={false} />
             </div>
           </div>
           
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">Live Until (Optional)</label>
-            <input type="datetime-local" value={liveMockData.date} onChange={(e) => setLiveMockData({ ...liveMockData, date: e.target.value })} className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200" />
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="datetime-local" value={liveMockData.date} onChange={(e) => setLiveMockData({ ...liveMockData, date: e.target.value })} className="w-full text-sm border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-slate-800 dark:text-slate-200" />
           </div>
         </div>
 

@@ -122,7 +122,7 @@ export function OperationConfigurator({
 
           {baseSettings.mode === "TIME" ? (
             <div className="flex gap-2 mt-3 w-full">
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="number"
                 className="flex-1 min-w-0 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-indigo-500 text-sm"
                 value={baseSettings.duration ?? 60}
@@ -149,7 +149,7 @@ export function OperationConfigurator({
             </div>
           ) : (
             <div className="mt-3">
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="number"
                 placeholder="No. of questions"
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-indigo-500 text-sm"
@@ -192,7 +192,7 @@ export function OperationConfigurator({
 
           {!opSettings.mode || opSettings.mode === "TIME" ? (
             <div className="flex gap-2 w-full">
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="number"
                 className="flex-1 min-w-0 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md outline-none focus:border-indigo-500 text-xs"
                 placeholder="Time (sec)"
@@ -212,7 +212,7 @@ export function OperationConfigurator({
             </div>
           ) : (
             <div className="w-full">
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="number"
                 placeholder="No. of questions"
                 className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md outline-none focus:border-indigo-500 text-xs"
@@ -263,7 +263,7 @@ export function OperationConfigurator({
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">
               Number Range
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               placeholder="e.g. 10-20, 25, 30-35"
               className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-indigo-500 text-sm"

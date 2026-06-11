@@ -204,7 +204,7 @@ export function TasksPage() {
                          {/* Global Tasks section */}
                         <div className="flex flex-col gap-4">
                            <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow">
-                             <input 
+                             <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                                type="text" 
                                value={newTaskText} 
                                onChange={e => setNewTaskText(e.target.value)} 
@@ -449,7 +449,7 @@ export function TasksPage() {
                                   )}
                                   {addingTaskToMockId === mock.id && (
                                     <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/50 pl-8">
-                                      <input autoFocus type="text" value={newMockTaskText} onChange={e => setNewMockTaskText(e.target.value)} onKeyDown={async e => {
+                                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" autoFocus type="text" value={newMockTaskText} onChange={e => setNewMockTaskText(e.target.value)} onKeyDown={async e => {
                                         if (e.key === 'Enter') {
                                           if (newMockTaskText.trim()) {
                                               const newTasks = [...(mock.tasks||[]), { id: Math.random().toString(36).substr(2, 9), text: newMockTaskText.trim(), completed: false }];

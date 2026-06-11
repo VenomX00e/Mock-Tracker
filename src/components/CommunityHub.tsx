@@ -253,7 +253,7 @@ function CommunityLeaderboard() {
                          className="flex items-center gap-2 sm:gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-1 sm:p-1.5 rounded-lg transition-colors inline-flex"
                          onClick={() => handleUserRowClick(user, idx)}
                       >
-                        <img src={user.photoURL} alt="" className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+                        <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'U'}`} alt="" className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-slate-200 dark:bg-slate-700 object-cover" />
                         <div>
                           <div className="font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                             {user.displayName}
@@ -427,7 +427,7 @@ function CommunityFeed() {
                                         }
                                     }}
                                   >
-                                    <img src={m.userPhoto} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-slate-200 dark:border-slate-700" />
+                                    <img src={m.userPhoto || `https://ui-avatars.com/api/?name=${m.userName || 'U'}`} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-slate-200 dark:border-slate-700 object-cover" />
                                     <span className="text-slate-800 dark:text-slate-200 text-xs sm:text-base">{m.userName}</span>
                                     {m.userStreak && m.userStreak > 0 ? (
                                        <span className={`flex items-center ml-0.5 sm:ml-1 text-[10px] sm:text-xs ${m.userStreakActive ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`}>
@@ -660,10 +660,10 @@ function CommunityChat() {
                        // Swipe to reply logic is lost but we have action menus for reply.
                     }}
                   >
-                  <img src={photoURL} alt="" className="hidden sm:block w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover pointer-events-none mt-1 sm:mt-0" />
+                  <img src={photoURL || `https://ui-avatars.com/api/?name=${uProfile?.displayName || msg.userName || 'U'}`} alt="" className="hidden sm:block w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover pointer-events-none mt-1 sm:mt-0" />
                   <div className={`flex flex-col gap-1 w-full max-w-full ${msg.userId === user?.uid ? 'items-end' : 'items-start'}`}>
                     <div className={`flex items-center gap-1.5 ${msg.userId === user?.uid ? 'flex-row-reverse sm:flex-row' : ''}`}>
-                      <img src={photoURL} alt="" className="sm:hidden w-5 h-5 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover pointer-events-none" />
+                      <img src={photoURL || `https://ui-avatars.com/api/?name=${uProfile?.displayName || msg.userName || 'U'}`} alt="" className="sm:hidden w-5 h-5 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-200 object-cover pointer-events-none" />
                       <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{displayName}</span>
                       <span className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(msg.createdAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
@@ -867,7 +867,7 @@ function CommunityChat() {
                                setCustomEmojiInput('');
                                setActiveMsgId(null);
                             }} className="flex items-center gap-1">
-                              <input 
+                              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                                 type="text"
                                 autoFocus
                                 value={customEmojiInput}
@@ -994,12 +994,12 @@ function CommunityChat() {
                 <div className="flex justify-between items-center mb-2">
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 cursor-pointer">
-                      <input type="checkbox" checked={pollIsMulti} onChange={e => setPollIsMulti(e.target.checked)} className="rounded text-indigo-600 cursor-pointer" /> Multi-select
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="checkbox" checked={pollIsMulti} onChange={e => setPollIsMulti(e.target.checked)} className="rounded text-indigo-600 cursor-pointer" /> Multi-select
                     </label>
                   </div>
                   <button type="button" onClick={() => setShowPollMaker(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><X className="w-4 h-4"/></button>
                 </div>
-                <input 
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                   type="text" value={pollQuestion} onChange={e => setPollQuestion(e.target.value)}
                   placeholder="Ask a question..."
                   className="w-full mb-3 px-3 py-2 bg-slate-100 dark:bg-slate-900 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-200 font-medium"
@@ -1015,7 +1015,7 @@ function CommunityChat() {
                        >
                          <CheckCircle2 className="w-4 h-4" />
                        </button>
-                       <input 
+                       <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                          type="text" value={opt.text} onChange={e => setPollOptions(pollOptions.map(o => o.id === opt.id ? { ...o, text: e.target.value } : o))}
                          placeholder={`Option ${i+1}`}
                          className="flex-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-200"
@@ -1031,9 +1031,7 @@ function CommunityChat() {
                 )}
               </div>
             )}
-            <textarea 
-              autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="x-dummy"
-              spellCheck="false"
+            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               name="chatMsg"
               id="chatMsg"
               maxLength={2000}

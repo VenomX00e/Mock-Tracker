@@ -1,7 +1,9 @@
 import express from "express";
 import { GoogleGenAI, Type } from "@google/genai";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import { createRequire } from "module";
+import { v2 as cloudinary } from "cloudinary";
 
 const require = createRequire(import.meta.url);
 
@@ -16,7 +18,27 @@ if (!admin.apps.length && firebaseConfig.projectId) {
   admin.initializeApp({ projectId: firebaseConfig.projectId });
 }
 
+const getAdminDb = () => {
+  return firebaseConfig.firestoreDatabaseId 
+    ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId) 
+    : admin.firestore();
+};
+
+const writeWebhookLog = async (data: any) => {
+  try {
+    const timestamp = new Date().toISOString(); 
+    await getAdminDb().collection("cloudinary_webhook_logs").add({
+      ...data,
+      timestamp: timestamp,
+      createdAt: admin.firestore.FieldValue.serverTimestamp() // Keep accurate db time
+    });
+  } catch (error) {
+    console.error("Failed to write webhook log to Firestore:", error);
+  }
+};
+
 const app = express();
+
 app.use((req, res, next) => {
   // If Vercel already parsed it into an object that is not a Buffer
   if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
@@ -24,7 +46,22 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ 
+  limit: "50mb",
+  verify: (req, res, buf) => {
+    (req as any).rawBody = buf.toString();
+  }
+}));
+
+// Initialize Cloudinary (Lazy / Environment Based)
+if (process.env.CLOUDINARY_CLOUD_NAME) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true,
+  });
+}
 
 // Helper
 const getAiClient = (customApiKey?: string) => {
@@ -474,12 +511,14 @@ Provide concise, clear, and educational responses. If explaining complex topics,
 CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
 - DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
 - ONLY provide explanations of app features and markdown navigation buttons IF AND ONLY IF the user explicitly asks about the app's features, navigation, what the app can do, OR if they send a very generic greeting (like "hi", "hello" without asking a question).
+- When asked if there are math exercises or speed math, ALWAYS mention that there is a "Speed Math" practice feature in the Learning section.
+- You can inform the user that they can apply updates directly from the app via the "bell" status icon on the top navigation bar or sidebar.
 - Available pages and their relative URLs for markdown links:
   - Home: [Go to Home](/home)
   - Dashboard: [View Dashboard](/dashboard)
   - Action Items / Tasks: [Go to Tasks](/tasks)
   - Community: [Explore Community](/community)
-  - Learning: [Learning Hub](/learning)
+  - Learning: [Learning Hub](/learning) (Includes Speed Math practice)
   - Profile: [View Profile](/profile)`;
 
     const contents = messages.map((m: any) => {
@@ -600,12 +639,14 @@ Provide concise, clear, and educational responses. If explaining complex topics,
 CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
 - DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
 - ONLY provide explanations of app features and markdown navigation buttons IF AND ONLY IF the user explicitly asks about the app's features, navigation, what the app can do, OR if they send a very generic greeting (like "hi", "hello" without asking a question).
+- When asked if there are math exercises or speed math, ALWAYS mention that there is a "Speed Math" practice feature in the Learning section.
+- You can inform the user that they can apply updates directly from the app via the "bell" status icon on the top navigation bar or sidebar.
 - Available pages and their relative URLs for markdown links:
   - Home: [Go to Home](/home)
   - Dashboard: [View Dashboard](/dashboard)
   - Action Items / Tasks: [Go to Tasks](/tasks)
   - Community: [Explore Community](/community)
-  - Learning: [Learning Hub](/learning)
+  - Learning: [Learning Hub](/learning) (Includes Speed Math practice)
   - Profile: [View Profile](/profile)`;
 
     const contents = messages.map((m: any) => {
@@ -869,6 +910,257 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
     res.json(JSON.parse(finalJSON));
   } catch (error: any) {
     res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
+// Cloudinary API Routes
+
+import { Request, Response, NextFunction } from "express";
+
+const requireAdminStorageAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+    const decodedToken = await admin.auth().verifyIdToken(token);
+
+    // Validate if Cloudinary is configured
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(500).json({ error: "Cloudinary configuration is missing on server" });
+    }
+
+    // We require email match for admin
+    if (!decodedToken.email) {
+      return res.status(403).json({ error: "Forbidden: Missing email" });
+    }
+
+    (req as any).user = decodedToken;
+    next();
+  } catch (error: any) {
+    console.error("Storage Auth Middleware Error:", error);
+    res.status(401).json({ error: "Unauthorized" });
+  }
+};
+
+app.post("/api/cloudinary/createFolder", requireAdminStorageAuth, async (req, res) => {
+  try {
+    const { folderPath } = req.body;
+    if (!folderPath) return res.status(400).json({ error: "Missing folderPath" });
+
+    const result = await cloudinary.api.create_folder(folderPath);
+    res.json({ success: true, result });
+  } catch (error: any) {
+    console.error("Cloudinary create folder error:", error);
+    res.status(500).json({ error: error.message || "Failed to create folder" });
+  }
+});
+
+app.post("/api/cloudinary/generateSignature", requireAdminStorageAuth, async (req, res) => {
+  try {
+    const { paramsToSign } = req.body; 
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    
+    // Mix in timestamp
+    const signature = cloudinary.utils.api_sign_request({ ...paramsToSign, timestamp }, process.env.CLOUDINARY_API_SECRET!);
+
+    res.json({ signature, timestamp, cloudName: process.env.CLOUDINARY_CLOUD_NAME, apiKey: process.env.CLOUDINARY_API_KEY });
+  } catch (error: any) {
+    console.error("Cloudinary generate signature error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate signature" });
+  }
+});
+
+app.post("/api/cloudinary/deleteResource", requireAdminStorageAuth, async (req, res) => {
+  try {
+    const decodedToken = (req as any).user;
+
+    const { public_id, folderPath, resourceType, cloudResourceType = 'image' } = req.body; // resourceType: 'file' or 'folder'
+
+    // Security verify: strict owner check
+    if (decodedToken.email !== "mrityunjoyk29@gmail.com") {
+      return res.status(403).json({ error: "Forbidden: Only owners can delete resources via API" });
+    }
+
+    let result;
+    if (resourceType === 'folder' && folderPath) {
+      // First wipe all files inside the folder across all resource types
+      try {
+        await Promise.all([
+          cloudinary.api.delete_resources_by_prefix(folderPath, { resource_type: 'image' }),
+          cloudinary.api.delete_resources_by_prefix(folderPath, { resource_type: 'video' }),
+          cloudinary.api.delete_resources_by_prefix(folderPath, { resource_type: 'raw' })
+        ]);
+      } catch (err) {
+        console.warn("Failed to delete some resources by prefix, folder might not be completely empty:", err);
+      }
+      
+      result = await cloudinary.api.delete_folder(folderPath);
+      
+      // Simulate webhook locally if Cloudinary fails to trigger it for folder deletes, 
+      // ensuring our Step 1 cascade still runs.
+      try {
+        const webhookUrl = `http://127.0.0.1:3000/api/cloudinary/webhook`;
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            notification_type: 'delete_folder',
+            folder: folderPath
+          })
+        }).catch(() => {});
+      } catch (e) {}
+    } else if (resourceType === 'file' && public_id) {
+      const webhookUrl = `https://${req.get('host')}/api/cloudinary/webhook`;
+      result = await cloudinary.uploader.destroy(public_id, { resource_type: cloudResourceType, notification_url: webhookUrl } as any);
+      if (result.result !== 'ok' && cloudResourceType !== 'raw') {
+        console.warn(`Destroy returned ${result.result} with ${cloudResourceType}, retrying with 'raw'`);
+        result = await cloudinary.uploader.destroy(public_id, { resource_type: 'raw', notification_url: webhookUrl } as any);
+      }
+      if (result.result !== 'ok' && cloudResourceType !== 'video') {
+         console.warn(`Destroy returned ${result.result} with 'raw', retrying with 'video'`);
+         result = await cloudinary.uploader.destroy(public_id, { resource_type: 'video', notification_url: webhookUrl } as any);
+      }
+      if (result.result !== 'ok' && cloudResourceType !== 'image') {
+         result = await cloudinary.uploader.destroy(public_id, { resource_type: 'image', notification_url: webhookUrl } as any);
+      }
+    } else {
+      return res.status(400).json({ error: "Invalid parameters for deletion" });
+    }
+
+    res.json({ success: true, result });
+  } catch (error: any) {
+    console.error("Cloudinary delete resource error:", error);
+    res.status(500).json({ error: error.message || "Failed to delete resource" });
+  }
+});
+
+app.post("/api/cloudinary/webhook", async (req, res) => {
+  try {
+    const timestamp = req.headers["x-cld-timestamp"] as string;
+    const signature = req.headers["x-cld-signature"] as string;
+
+    if (!timestamp || !signature) {
+      return res.status(401).json({ error: "Missing Cloudinary signature headers" });
+    }
+
+    if (!process.env.CLOUDINARY_API_SECRET) {
+      return res.status(500).json({ error: "Cloudinary configuration is missing on server" });
+    }
+
+    // Verify Signature
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    
+    // Cloudinary SDK method for webhook signature validation
+    const isValid = cloudinary.utils.verifyNotificationSignature(
+      rawBody,
+      Number(timestamp),
+      signature
+    );
+
+    if (!isValid) {
+      try {
+        await writeWebhookLog({
+          notificationType: "signature_failed",
+          publicId: "failed validation",
+          timestamp: null,
+          status: "Failed Signature",
+          rawPayload: "Signature validation failed"
+        });
+      } catch(e) {}
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+
+    const { notification_type, resources } = req.body;
+
+    let publicIds: string[] = [];
+    let folderPaths: string[] = [];
+
+    if (resources && Array.isArray(resources) && resources.length > 0) {
+       publicIds = resources.map((r: any) => r.public_id).filter(Boolean);
+    } else if (req.body.public_ids && Array.isArray(req.body.public_ids)) {
+       publicIds = [...req.body.public_ids];
+    } else if (req.body.folder) {
+       folderPaths = [req.body.folder];
+    } else if (req.body.public_id) {
+       publicIds = [req.body.public_id];
+    }
+
+    const mergedIds = [...publicIds, ...folderPaths];
+
+    if ((notification_type === "delete" || notification_type === "delete_folder") && mergedIds.length > 0) {
+      console.log("Cloudinary webhook received for deletes:", mergedIds);
+      try {
+        if (publicIds.length > 0) {
+          const chunks = [];
+          for (let i = 0; i < publicIds.length; i += 10) {
+            chunks.push(publicIds.slice(i, i + 10));
+          }
+
+          const chunkPromises = chunks.map(async (chunk) => {
+            if (chunk.length === 0) return;
+            const snapshot = await getAdminDb().collection("practice_files")
+              .where("fileMeta.cloudPublicId", "in", chunk)
+              .get();
+            
+            if (!snapshot.empty) {
+              console.log(`Found ${snapshot.docs.length} practice_files matching chunk. Deleting...`);
+              const deletePromises = snapshot.docs.map(docSnap => {
+                console.log(`Deleted Firestore doc ${docSnap.id}`);
+                return docSnap.ref.delete();
+              });
+              await Promise.all(deletePromises);
+            }
+          });
+
+          await Promise.all(chunkPromises);
+        }
+
+        if (folderPaths.length > 0) {
+          const folderPromises = folderPaths.map(async (folderPath) => {
+            if (!folderPath) return;
+            const snapshot = await getAdminDb().collection("practice_files")
+              .where("fileMeta.cloudPublicId", ">=", folderPath + "/")
+              .where("fileMeta.cloudPublicId", "<=", folderPath + "/\uf8ff")
+              .get();
+            
+            if (!snapshot.empty) {
+              console.log(`Found ${snapshot.docs.length} practice_files in folder ${folderPath}. Deleting...`);
+              const deletePromises = snapshot.docs.map(docSnap => {
+                console.log(`Deleted Firestore doc cascade ${docSnap.id}`);
+                return docSnap.ref.delete();
+              });
+              await Promise.all(deletePromises);
+            }
+          });
+
+          await Promise.all(folderPromises);
+        }
+      } catch (err) {
+        console.error("Error sweeping practice_files in webhook:", err);
+      }
+    }
+    
+    try {
+      const statusStr = req.body.status || "success";
+
+      await writeWebhookLog({
+        notificationType: notification_type || "unknown",
+        publicId: mergedIds.length > 0 ? mergedIds.join(", ") : "",
+        publicIds: mergedIds,
+        timestamp: null,
+        status: statusStr,
+        rawPayload: JSON.stringify(req.body)
+      });
+    } catch (dbError) {
+      console.error("Failed to write to cloudinary_webhook_logs", dbError);
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Cloudinary webhook error:", error);
+    res.status(500).json({ error: error.message || "Failed to process webhook" });
   }
 });
 

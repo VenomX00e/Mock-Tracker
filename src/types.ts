@@ -36,6 +36,7 @@ export interface UserProfile {
   badges?: any[];
   stats7D?: any;
   stats30D?: any;
+  completedPracticeFiles?: string[];
   permissions?: {
     canManageUsers?: boolean;
     canManageNotices?: boolean;
@@ -43,6 +44,7 @@ export interface UserProfile {
     canManageLiveMocks?: boolean;
     canManageCountdowns?: boolean;
     canManageSettings?: boolean;
+    canManageFeatures?: boolean;
     canManageQuotes?: boolean;
     canManageLearning?: boolean;
   };
@@ -212,6 +214,41 @@ export interface CommunityChatProps {
   Send: any;
 }
 
+export interface PracticeFolder {
+  id: string;
+  subjectId: string;
+  parentId: string | null;
+  name: string;
+  order: number;
+  cloudFolderPath?: string;
+  createdAt: any;
+  isDeleted?: boolean;
+  deletedAt?: any;
+}
+
+export interface PracticeFile {
+  id: string;
+  folderId: string;
+  subjectId?: string; // Added for recycle bin querying
+  name: string;
+  type: 'firebase_file' | 'external_link';
+  fileMeta: {
+    url: string;
+    sizeBytes?: number;
+    mimeType?: string;
+    cloudPublicId?: string;
+  };
+  attribution?: {
+    channelName: string;
+    channelLink: string;
+  };
+  difficulty?: 'Easy' | 'Moderate' | 'Hard';
+  isHidden?: boolean;
+  createdAt: any;
+  isDeleted?: boolean;
+  deletedAt?: any;
+}
+
 export interface LearningModuleModel {
   id: string;
   title: string;
@@ -235,4 +272,13 @@ export interface LearningUserProgress {
   completedModuleIds: string[];
   progressPercentage: number;
   lastAccessed?: any;
+}
+
+export interface CloudinaryWebhookLog {
+  id: string;
+  notificationType: string;
+  publicId?: string;
+  timestamp: any;
+  status: 'success' | 'failure';
+  rawPayload: string;
 }

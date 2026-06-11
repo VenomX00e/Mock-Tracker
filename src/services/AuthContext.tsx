@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth, db } from './firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getErrorMessage } from '../lib/errorUtils';
 
 interface AuthContextType {
@@ -29,7 +29,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentUser) {
         // Track activity when opening app / auth state loading
         try {
-          await setDoc(doc(db, 'users', currentUser.uid), { userId: currentUser.uid, lastActiveAt: Date.now() }, { merge: true });
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (!userSnap.exists()) {
+            await setDoc(userRef, { 
+              userId: currentUser.uid, 
+              email: currentUser.email || null,
+              displayName: currentUser.displayName || 'Anonymous',
+              photoURL: currentUser.photoURL || null,
+              lastActiveAt: Date.now() 
+            });
+          } else {
+            await setDoc(userRef, { 
+              userId: currentUser.uid, 
+              email: currentUser.email || null,
+              lastActiveAt: Date.now() 
+            }, { merge: true });
+          }
         } catch (e) {
           console.error("Failed to update activity on load", e);
         }
@@ -44,7 +61,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, provider);
       if (result.user) {
-        await setDoc(doc(db, 'users', result.user.uid), { userId: result.user.uid, lastActiveAt: Date.now() }, { merge: true });
+        const userRef = doc(db, 'users', result.user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) {
+          await setDoc(userRef, { 
+            userId: result.user.uid, 
+            email: result.user.email || null,
+            displayName: result.user.displayName || 'Anonymous',
+            photoURL: result.user.photoURL || null,
+            lastActiveAt: Date.now() 
+          });
+        } else {
+          await setDoc(userRef, { 
+            userId: result.user.uid, 
+            email: result.user.email || null,
+            lastActiveAt: Date.now() 
+          }, { merge: true });
+        }
       }
     } catch (error: any) {
       console.error("Error signing in with Google:", error);

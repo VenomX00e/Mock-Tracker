@@ -60,7 +60,7 @@ export function AdminUsersTab({
         </h3>
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             type="text"
             placeholder="Search users..."
             value={userSearch}
@@ -257,13 +257,15 @@ export function AdminUsersTab({
                                   "canManageLiveMocks",
                                   "canManageCountdowns",
                                   "canManageSettings",
+                                  "canManageFeatures",
                                   "canManageQuotes",
+                                  "canManageLearning",
                                 ].map((perm) => (
                                   <label
                                     key={perm}
                                     className={`text-[10px] flex items-center justify-center font-medium px-2 py-1 rounded-md cursor-pointer transition-colors border select-none ${!!(user.permissions as any)?.[perm] ? "bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-800/50 dark:text-indigo-300" : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
                                   >
-                                    <input
+                                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                                       type="checkbox"
                                       checked={!!(user.permissions as any)?.[perm]}
                                       onChange={() => handleTogglePermission(user, perm)}
@@ -354,7 +356,7 @@ export function AdminUsersTab({
                       <label className="text-xs text-slate-500 dark:text-slate-400">
                         Duration (Days):
                       </label>
-                      <input
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                         type="number"
                         min="1"
                         value={muteDurationDays}

@@ -35,6 +35,7 @@ export function AdminCategoriesTab({
   renderNotice,
   renderCountdown,
   renderChallenge,
+  renderPracticeSets,
 }: {
   onManageSection?: (section: string, categoryId: string) => void;
   onCategorySelect?: (categoryId: string | null) => void;
@@ -42,13 +43,14 @@ export function AdminCategoriesTab({
   renderNotice?: () => React.ReactNode;
   renderCountdown?: () => React.ReactNode;
   renderChallenge?: () => React.ReactNode;
+  renderPracticeSets?: () => React.ReactNode;
 }) {
   const [categories, setCategories] = useState<ExamCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false); // Used to determine if we are creating a *new* category
   const [subTab, setSubTab] = useState<
-    "details" | "liveMock" | "notice" | "countdown" | "challenge"
+    "details" | "liveMock" | "notice" | "countdown" | "challenge" | "practiceSets"
   >("details");
 
   // Local state for the currently selected/edited category
@@ -410,6 +412,15 @@ export function AdminCategoriesTab({
                   )}
                   <span className="relative z-10">Challenges</span>
                 </button>
+                <button
+                  onClick={() => setSubTab("practiceSets")}
+                  className={`shrink-0 md:flex-1 relative px-4 py-2 text-sm font-semibold rounded-lg transition-colors duration-200 z-10 whitespace-nowrap bg-transparent border-none outline-none ${subTab === "practiceSets" ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"}`}
+                >
+                  {subTab === "practiceSets" && (
+                    <motion.div layoutId="adminCategoryTab" transition={{ type: "spring", bounce: 0, duration: 0.3 }} className="absolute inset-0 rounded-lg border border-current -z-10" />
+                  )}
+                  <span className="relative z-10">Practice Sets</span>
+                </button>
               </div>
             )}
 
@@ -417,7 +428,7 @@ export function AdminCategoriesTab({
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
                 <div className="flex flex-col xl:flex-row justify-between items-start pb-6 border-b border-slate-100 dark:border-slate-800 gap-4 xl:gap-8">
                   <div className="w-full xl:flex-1 max-w-full xl:max-w-md">
-                    <input
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                       type="text"
                       value={workingCat.name || ""}
                       onChange={(e) =>
@@ -437,7 +448,7 @@ export function AdminCategoriesTab({
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0">
                           ID Starter
                         </label>
-                        <input
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="text"
                           value={workingCat.subjectPrefix || ""}
                           onChange={(e) =>
@@ -553,12 +564,12 @@ export function AdminCategoriesTab({
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                           Mock Name
                         </label>
-                        <input
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="text"
                           disabled
                           placeholder="Mock Name"
                           className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl"
-                        />
+                          autoCorrect="off" spellCheck={false}     />
                       </div>
                       <div className="space-y-1.5 col-span-1">
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -576,11 +587,11 @@ export function AdminCategoriesTab({
                         <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                           Date & Time
                         </label>
-                        <input
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="datetime-local"
                           disabled
                           className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl"
-                        />
+                          autoCorrect="off" spellCheck={false}     />
                       </div>
                     </div>
 
@@ -594,31 +605,31 @@ export function AdminCategoriesTab({
                           <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                             Score
                           </label>
-                          <input
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             type="text"
                             disabled
                             className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
-                          />
+                            autoCorrect="off" spellCheck={false}     />
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                             Percentile
                           </label>
-                          <input
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             type="text"
                             disabled
                             className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
-                          />
+                            autoCorrect="off" spellCheck={false}     />
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                             Accuracy %
                           </label>
-                          <input
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             type="text"
                             disabled
                             className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
-                          />
+                            autoCorrect="off" spellCheck={false}     />
                         </div>
                       </div>
                     </div>
@@ -659,6 +670,11 @@ export function AdminCategoriesTab({
             {subTab === "challenge" && selectedId !== "" && (
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
                 {renderChallenge?.()}
+              </div>
+            )}
+            {subTab === "practiceSets" && selectedId !== "" && (
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+                {renderPracticeSets?.()}
               </div>
             )}
           </div>

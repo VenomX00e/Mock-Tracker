@@ -32,7 +32,7 @@ export function AdminSettingsTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Telegram Support Link
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="url"
               value={telegramLink}
               onChange={(e) => setTelegramLink(e.target.value)}
@@ -48,7 +48,7 @@ export function AdminSettingsTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Telegram Button Text
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={telegramText}
               onChange={(e) => setTelegramText(e.target.value)}

@@ -85,7 +85,7 @@ export const EditCountdownDialog: React.FC<EditCountdownDialogProps> = ({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Title <span className="text-red-500">*</span>
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -97,7 +97,7 @@ export const EditCountdownDialog: React.FC<EditCountdownDialogProps> = ({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Target Date <span className="text-red-500">*</span>
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="datetime-local"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -108,7 +108,7 @@ export const EditCountdownDialog: React.FC<EditCountdownDialogProps> = ({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Note (Optional)
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={note}
               onChange={(e) => setNote(e.target.value)}

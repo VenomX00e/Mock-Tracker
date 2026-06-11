@@ -66,7 +66,7 @@ export function VocabularyFeed() {
           <form onSubmit={handleCreateCanvas} className="flex flex-col sm:flex-row gap-4 sm:items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Class/Canvas Title</label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="text"
                 autoFocus
                 required

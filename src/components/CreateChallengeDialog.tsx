@@ -190,12 +190,12 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
         <div className="p-6 overflow-y-auto custom-scrollbar space-y-5">
            <div>
              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Challenge Title</label>
-             <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. 50 Days Mock Challenge" />
+             <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. 50 Days Mock Challenge" />
            </div>
            
            <div>
              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-             <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. Can you maintain a mock streak for 50 days?" />
+             <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other" rows={3} value={description} onChange={e => setDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200" placeholder="e.g. Can you maintain a mock streak for 50 days?" />
            </div>
 
            <div className="grid grid-cols-2 gap-4">
@@ -231,7 +231,7 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
              <div className="space-y-3">
                <div className="flex items-center gap-4">
                  <label className="flex items-center gap-2 cursor-pointer w-fit select-none">
-                   <input type="checkbox" checked={generateBadge} onChange={(e) => setGenerateBadge(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                   <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="checkbox" checked={generateBadge} onChange={(e) => setGenerateBadge(e.target.checked)} className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Award Badge on Completion</span>
                  </label>
                  {generateBadge && customBadge && customBadge.imageBase64 && (
@@ -244,7 +244,7 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
                {generateBadge && (
                   <div className="flex flex-col gap-2 p-3 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl border border-indigo-100 dark:border-indigo-500/20">
                      <div className="flex gap-2">
-                       <input 
+                       <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                          type="text" 
                          value={badgePrompt} 
                          onChange={(e) => setBadgePrompt(e.target.value)} 
@@ -284,7 +284,7 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
            <div className="grid grid-cols-3 gap-2">
              <div>
                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
-               <input type="date" value={startDate} onChange={e => {
+               <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="date" value={startDate} onChange={e => {
                  const newStart = e.target.value;
                  setStartDate(newStart);
                  if (newStart && duration) {
@@ -302,7 +302,7 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
              </div>
              <div>
                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Duration</label>
-               <input type="number" placeholder="Days" value={duration} onChange={e => {
+               <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="number" placeholder="Days" value={duration} onChange={e => {
                  const newDuration = e.target.value;
                  setDuration(newDuration);
                  if (newDuration && startDate) {
@@ -314,7 +314,7 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
              </div>
              <div>
                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">End Date</label>
-               <input type="date" value={endDate} onChange={e => {
+               <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="date" value={endDate} onChange={e => {
                  const newEnd = e.target.value;
                  setEndDate(newEnd);
                  if (newEnd && startDate) {
@@ -345,7 +345,7 @@ export function CreateChallengeDialog({ isOpen, onClose, uid, initialData, categ
              <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
                {tasks.map((t, idx) => (
                  <div key={t.id} className="flex items-center gap-2">
-                   <input type="text" value={t.text} onChange={(e) => {
+                   <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text" value={t.text} onChange={(e) => {
                      const newTasks = [...tasks];
                      newTasks[idx].text = e.target.value;
                      setTasks(newTasks);

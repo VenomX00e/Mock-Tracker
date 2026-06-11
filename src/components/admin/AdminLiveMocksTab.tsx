@@ -54,14 +54,14 @@ export function AdminLiveMocksTab({
         </h3>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <div>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="file"
               accept="image/*"
               multiple
               className="hidden"
               id="adminFileUpload"
               onChange={handleFileChange}
-            />
+              autoCorrect="off" spellCheck={false}     />
             <label
               htmlFor="adminFileUpload"
               className={`text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors ${isProcessingImage ? "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed" : "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50"}`}
@@ -96,7 +96,7 @@ export function AdminLiveMocksTab({
                   />
                 ) : (
                   <div className="relative">
-                    <input
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                       type="search"
                       value={liveMockData.examType}
                       onChange={(e) =>
@@ -132,7 +132,7 @@ export function AdminLiveMocksTab({
                   />
                 ) : (
                   <div className="relative">
-                    <input
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                       type="search"
                       value={liveMockData.examRole}
                       onChange={(e) =>
@@ -172,7 +172,7 @@ export function AdminLiveMocksTab({
                   />
                 ) : (
                   <div className="relative">
-                    <input
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                       type="search"
                       value={liveMockData.examPhase}
                       onChange={(e) =>
@@ -211,7 +211,7 @@ export function AdminLiveMocksTab({
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Mock Name
               </label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="search"
                 value={liveMockData.mockName}
                 onChange={(e) =>
@@ -242,7 +242,7 @@ export function AdminLiveMocksTab({
                 />
               ) : (
                 <div className="relative">
-                  <input
+                  <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                     type="search"
                     value={liveMockData.platform}
                     onChange={(e) =>
@@ -266,7 +266,7 @@ export function AdminLiveMocksTab({
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Date & Time
               </label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="datetime-local"
                 value={liveMockData.date}
                 onChange={(e) =>

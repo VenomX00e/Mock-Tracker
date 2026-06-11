@@ -71,7 +71,7 @@ export const AdminCategoryDeleteModal: React.FC<AdminCategoryDeleteModalProps> =
                 {confirmText}
               </strong>
             </p>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               autoFocus
               value={deleteConfirmInput}

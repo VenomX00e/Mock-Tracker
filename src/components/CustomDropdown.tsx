@@ -156,7 +156,7 @@ export function CustomDropdown({
         )}
       >
         {editable ? (
-          <input
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -208,7 +208,7 @@ export function CustomDropdown({
       {menu}
       {/* Hidden input to handle required natively if needed */}
       {required && !value && (
-        <input
+        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
           type="text"
           className="absolute opacity-0 w-0 h-0 pointer-events-none"
           required

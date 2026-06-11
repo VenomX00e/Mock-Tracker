@@ -79,7 +79,7 @@ export function SpeedMathPresetModal({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
               Preset Name
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               required
               value={newPresetName}
@@ -193,7 +193,7 @@ export function SpeedMathPresetModal({
 
               {presetMode === "TIME" ? (
                 <div className="flex gap-2">
-                  <input
+                  <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                     type="number"
                     className="flex-1 min-w-0 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-indigo-500 text-sm"
                     value={timeLimit}
@@ -210,7 +210,7 @@ export function SpeedMathPresetModal({
                   </div>
                 </div>
               ) : (
-                <input
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                   type="number"
                   placeholder="No. of questions"
                   className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-indigo-500 text-sm"

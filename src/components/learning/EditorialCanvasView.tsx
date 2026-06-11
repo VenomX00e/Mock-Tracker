@@ -309,21 +309,21 @@ export function EditorialCanvasView({
       )}
 
       {/* Hidden file inputs */}
-      <input
+      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
         type="file"
         ref={imageInputRef}
         className="hidden"
         accept="image/*"
         multiple
         onChange={handleFileChange}
-      />
-      <input
+        autoCorrect="off" spellCheck={false}     />
+      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
         type="file"
         ref={pdfInputRef}
         className="hidden"
         accept="application/pdf"
         onChange={handleFileChange}
-      />
+        autoCorrect="off" spellCheck={false}     />
 
       {/* Header */}
       <div className="flex items-center gap-3 md:gap-4 px-3 md:px-6 py-3 md:py-4 bg-white dark:bg-[#1E1F25] border-b border-slate-200 dark:border-slate-800 flex-none sticky top-0 z-40 shadow-sm relative">
@@ -335,7 +335,7 @@ export function EditorialCanvasView({
         </button>
         <div className="flex-1">
           {canManageLearning ? (
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={canvas.title}
               onChange={(e) => updateCanvas(canvasId, { title: e.target.value })}
@@ -392,7 +392,7 @@ export function EditorialCanvasView({
                         <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                           Extract Pages (e.g. 1-3, 5)
                         </label>
-                        <input
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="text"
                           value={
                             pageRange === "All pages selected" ? "" : pageRange
@@ -436,7 +436,7 @@ export function EditorialCanvasView({
                       </button>
                     </div>
                     <div className="mb-3">
-                      <textarea
+                      <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                         value={pendingTextData}
                         onChange={(e) => setPendingTextData(e.target.value)}
                         placeholder="Paste vocabulary text here..."

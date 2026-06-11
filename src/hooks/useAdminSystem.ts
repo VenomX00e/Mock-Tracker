@@ -9,7 +9,15 @@ export function useAdminSystem() {
   const [challenges, setChallenges] = useState<any[]>([]);
   const [telegramLink, setTelegramLink] = useState("");
   const [telegramText, setTelegramText] = useState("Contact us");
+  const [apdfKeys, setApdfKeys] = useState<string[]>([]);
+  const [ilovePdfKeys, setIlovePdfKeys] = useState<string[]>([]);
+  const [cloudinaryCloudName, setCloudinaryCloudName] = useState("");
+  const [cloudinaryUploadPreset, setCloudinaryUploadPreset] = useState("");
   const [muteDurationDays, setMuteDurationDays] = useState<number | string>(7);
+  const [enableAiTutor, setEnableAiTutor] = useState(true);
+  const [enableVocabulary, setEnableVocabulary] = useState(true);
+  const [enableSpeedMath, setEnableSpeedMath] = useState(true);
+  const [enablePracticeLibrary, setEnablePracticeLibrary] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const fetchAnnouncement = useCallback(async () => {
@@ -26,7 +34,15 @@ export function useAdminSystem() {
         if (d.id === "settings") {
           setTelegramLink(data.telegramLink || "");
           setTelegramText(data.telegramText || "Contact us");
+          setApdfKeys(data.apdfKeys || []);
+          setIlovePdfKeys(data.ilovePdfKeys || []);
+          setCloudinaryCloudName(data.cloudinaryCloudName || "");
+          setCloudinaryUploadPreset(data.cloudinaryUploadPreset || "");
           setMuteDurationDays(data.muteDurationDays || 7);
+          setEnableAiTutor(data.enableAiTutor ?? true);
+          setEnableVocabulary(data.enableVocabulary ?? true);
+          setEnableSpeedMath(data.enableSpeedMath ?? true);
+          setEnablePracticeLibrary(data.enablePracticeLibrary ?? true);
         } else if (data.type === "notice") {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === "liveMock") {
@@ -61,7 +77,15 @@ export function useAdminSystem() {
           type: "settings",
           telegramLink,
           telegramText,
+          apdfKeys,
+          ilovePdfKeys,
+          cloudinaryCloudName,
+          cloudinaryUploadPreset,
           muteDurationDays: Number(muteDurationDays) || 1,
+          enableAiTutor,
+          enableVocabulary,
+          enableSpeedMath,
+          enablePracticeLibrary,
         },
         { merge: true },
       );
@@ -82,8 +106,24 @@ export function useAdminSystem() {
     setTelegramLink,
     telegramText,
     setTelegramText,
+    apdfKeys,
+    setApdfKeys,
+    ilovePdfKeys,
+    setIlovePdfKeys,
+    cloudinaryCloudName,
+    setCloudinaryCloudName,
+    cloudinaryUploadPreset,
+    setCloudinaryUploadPreset,
     muteDurationDays,
     setMuteDurationDays,
+    enableAiTutor,
+    setEnableAiTutor,
+    enableVocabulary,
+    setEnableVocabulary,
+    enableSpeedMath,
+    setEnableSpeedMath,
+    enablePracticeLibrary,
+    setEnablePracticeLibrary,
     fetchAnnouncement,
     savingSettings,
     saveSettings

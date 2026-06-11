@@ -135,7 +135,7 @@ export function TaskProgressDisk({
       onClick={e => e.stopPropagation()}
     >
       <div className="flex items-center gap-0.5 sm:gap-1">
-        <input 
+        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
           type="number" 
           min="0"
           max={Math.max(tp, 1)}
@@ -155,7 +155,7 @@ export function TaskProgressDisk({
           autoFocus={actualVariant === 'floating'}
         />
         <span className="text-slate-400 text-xs text-center hidden sm:block">/</span>
-        <input 
+        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
           type="number" 
           min="1"
           value={localTp} 

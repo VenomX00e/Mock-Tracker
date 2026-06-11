@@ -678,7 +678,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
 
             {question.multiAnswer ? (
               <div className="flex items-center gap-4">
-                <input
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                   ref={box1Ref}
                   type="tel"
                   inputMode={effectiveVirtualKeyboard ? "none" : "tel"}
@@ -706,7 +706,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                   {question.operation === "table" ? "×" : "/"}
                 </span>
 
-                <input
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                   ref={box2Ref}
                   type="tel"
                   inputMode={effectiveVirtualKeyboard ? "none" : "tel"}
@@ -731,7 +731,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                 />
               </div>
             ) : (
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 ref={inputRef}
                 type="tel"
                 inputMode={effectiveVirtualKeyboard ? "none" : "tel"}
@@ -742,7 +742,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                 onKeyDown={handleKeyDown}
                 placeholder="?"
                 className="w-full max-w-[200px] text-center text-4xl px-4 py-4 font-mono font-bold bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-2xl outline-none focus:border-indigo-500 dark:focus:border-indigo-500 text-slate-800 dark:text-white shadow-inner transition-colors"
-              />
+                autoCorrect="off" spellCheck={false}     />
             )}
 
             {effectiveVirtualKeyboard && (

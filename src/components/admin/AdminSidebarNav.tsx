@@ -1,5 +1,5 @@
 import React from "react";
-import { Shield, Users, Radio, FileText, Timer, Settings, ArrowLeft, Search, GraduationCap } from "lucide-react";
+import { Shield, Users, Radio, FileText, Timer, Settings, ArrowLeft, Search, GraduationCap, ToggleLeft } from "lucide-react";
 
 interface AdminSidebarNavProps {
   isOwner: boolean;
@@ -136,6 +136,19 @@ export function AdminSidebarNav({
                     <Timer className="w-4 h-4" /> Challenges
                   </button>
                 )}
+                {(isOwner || adminPermissions?.canManageFeatures) && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("features");
+                      setAdminCategoryScope(
+                        isForcedCategory ? currentCategory || null : null,
+                      );
+                    }}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "features" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                  >
+                    <ToggleLeft className="w-4 h-4" /> Features
+                  </button>
+                )}
                 {(isOwner || adminPermissions?.canManageSettings) && (
                   <button
                     onClick={() => {
@@ -147,6 +160,32 @@ export function AdminSidebarNav({
                     className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "settings" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <Settings className="w-4 h-4" /> Settings
+                  </button>
+                )}
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("keys");
+                      setAdminCategoryScope(
+                        isForcedCategory ? currentCategory || null : null,
+                      );
+                    }}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "keys" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                  >
+                    <Settings className="w-4 h-4" /> API Keys
+                  </button>
+                )}
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("webhooks");
+                      setAdminCategoryScope(
+                        isForcedCategory ? currentCategory || null : null,
+                      );
+                    }}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "webhooks" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                  >
+                    <Radio className="w-4 h-4" /> Webhooks
                   </button>
                 )}
                 {(isOwner || adminPermissions?.canManageQuotes) && (

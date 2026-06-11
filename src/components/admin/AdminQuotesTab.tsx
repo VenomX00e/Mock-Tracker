@@ -196,7 +196,7 @@ export default function AdminQuotesTab() {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Custom Duration (Hours)
                   </label>
-                  <input
+                  <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                     type="number"
                     min={1}
                     value={customDurationHours}
@@ -221,7 +221,7 @@ export default function AdminQuotesTab() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quote Text *</label>
-                <textarea
+                <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                   value={newQuoteText}
                   onChange={e => setNewQuoteText(e.target.value)}
                   placeholder="e.g. The only way to do great work is to love what you do."
@@ -230,7 +230,7 @@ export default function AdminQuotesTab() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Author Name (Optional)</label>
-                <input
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                   type="text"
                   value={newQuoteAuthor}
                   onChange={e => setNewQuoteAuthor(e.target.value)}
@@ -263,7 +263,7 @@ export default function AdminQuotesTab() {
                       <div className="space-y-4 w-full">
                         <div>
                           <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Quote Text</label>
-                          <textarea
+                          <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             value={editingQuoteText}
                             onChange={(e) => setEditingQuoteText(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 dark:text-slate-200 resize-none h-20"
@@ -271,7 +271,7 @@ export default function AdminQuotesTab() {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Author (Optional)</label>
-                          <input
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             type="text"
                             value={editingQuoteAuthor}
                             onChange={(e) => setEditingQuoteAuthor(e.target.value)}

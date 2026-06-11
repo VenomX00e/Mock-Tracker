@@ -4,6 +4,10 @@ import { db } from '../services/firebase';
 export function usePublicSettings() {
   const [telegramLink, setTelegramLink] = useState<string>('');
   const [telegramText, setTelegramText] = useState<string>('Contact us');
+  const [enableAiTutor, setEnableAiTutor] = useState<boolean>(true);
+  const [enableVocabulary, setEnableVocabulary] = useState<boolean>(true);
+  const [enableSpeedMath, setEnableSpeedMath] = useState<boolean>(true);
+  const [enablePracticeLibrary, setEnablePracticeLibrary] = useState<boolean>(true);
 
   useEffect(() => {
     let unsubscribe: any;
@@ -15,6 +19,10 @@ export function usePublicSettings() {
             const data = snap.data();
             setTelegramLink(data.telegramLink || '');
             setTelegramText(data.telegramText || 'Contact us');
+            setEnableAiTutor(data.enableAiTutor ?? true);
+            setEnableVocabulary(data.enableVocabulary ?? true);
+            setEnableSpeedMath(data.enableSpeedMath ?? true);
+            setEnablePracticeLibrary(data.enablePracticeLibrary ?? true);
           }
         }, (error: any) => {
           if (error.code !== 'permission-denied') {
@@ -31,5 +39,5 @@ export function usePublicSettings() {
     };
   }, []);
 
-  return useMemo(() => ({ telegramLink, telegramText }), [telegramLink, telegramText]);
+  return useMemo(() => ({ telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary }), [telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary]);
 }

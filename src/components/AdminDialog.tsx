@@ -34,7 +34,11 @@ import { AdminLiveMocksTab } from "./admin/AdminLiveMocksTab";
 import { AdminNoticesTab } from "./admin/AdminNoticesTab";
 import { AdminCountdownsTab } from "./admin/AdminCountdownsTab";
 import { AdminChallengesTab } from "./admin/AdminChallengesTab";
+import { AdminPracticeSetsTab } from "./admin/AdminPracticeSetsTab";
 import { AdminSettingsTab } from "./admin/AdminSettingsTab";
+import { AdminFeaturesTab } from "./admin/AdminFeaturesTab";
+import { AdminApiKeysTab } from "./admin/AdminApiKeysTab";
+import { AdminWebhooksTab } from "./admin/AdminWebhooksTab";
 import { AdminAdminsTab } from "./admin/AdminAdminsTab";
 import { AdminLearningTab } from "./admin/AdminLearningTab";
 import { AdminSidebarNav } from "./admin/AdminSidebarNav";
@@ -63,7 +67,9 @@ interface AdminDialogProps {
     | "quotes"
     | "categories"
     | "learning"
-    | "admins";
+    | "keys"
+    | "admins"
+    | "webhooks";
   editNoticeData?: any;
   editCountdownData?: any;
   asPage?: boolean;
@@ -93,10 +99,13 @@ export default function AdminDialog({
     | "countdown"
     | "challenge"
     | "settings"
+    | "features"
     | "categories"
     | "admins"
     | "learning"
     | "quotes"
+    | "keys"
+    | "webhooks"
   >(initialTab as any);
   const [adminCategoryScope, setAdminCategoryScope] = useState<string | null>(
     !isOwner && currentCategory ? currentCategory : null,
@@ -104,7 +113,7 @@ export default function AdminDialog({
   const isForcedCategory = !isOwner && currentCategory !== null;
 
   const { bannedUsers, mutedUsers, allAppUsers, allFirebaseUsers, loading, fetchUsers, recalculatingUserIds, handleUpdateUserRole, handleTogglePermission, handleUpdateUserStatus, handleRecalculateStats } = useAdminUsers(currentUser);
-  const { liveMocks, notices, countdowns, challenges, telegramLink, setTelegramLink, telegramText, setTelegramText, muteDurationDays, setMuteDurationDays, fetchAnnouncement, savingSettings: savingAnnouncement, saveSettings } = useAdminSystem();
+  const { liveMocks, notices, countdowns, challenges, telegramLink, setTelegramLink, telegramText, setTelegramText, enableAiTutor, setEnableAiTutor, enableVocabulary, setEnableVocabulary, enableSpeedMath, setEnableSpeedMath, enablePracticeLibrary, setEnablePracticeLibrary, apdfKeys, setApdfKeys, ilovePdfKeys, setIlovePdfKeys, cloudinaryCloudName, setCloudinaryCloudName, cloudinaryUploadPreset, setCloudinaryUploadPreset, muteDurationDays, setMuteDurationDays, fetchAnnouncement, savingSettings: savingAnnouncement, saveSettings } = useAdminSystem();
   
   const [adminManagementCategoryFilter, setAdminManagementCategoryFilter] = useState<string | "all">("all");
   const [adminSearch, setAdminSearch] = useState("");
@@ -282,6 +291,21 @@ export default function AdminDialog({
       isOwner={!!isOwner}
     />
   );
+  
+  const currentCatSubjects = categories.find(c => c.id === adminCategoryScope)?.subjects || [];
+  
+  const practiceSetsTabNode = (
+    <AdminPracticeSetsTab
+      adminCategoryScope={adminCategoryScope}
+      isOwner={!!isOwner}
+      subjects={currentCatSubjects}
+      apdfKeys={apdfKeys}
+      ilovePdfKeys={ilovePdfKeys}
+      cloudinaryCloudName={cloudinaryCloudName}
+      cloudinaryUploadPreset={cloudinaryUploadPreset}
+    />
+  );
+
   const challengesTabNode = (
     <AdminChallengesTab
       challengeTitle={challengeTitle}
@@ -476,6 +500,11 @@ export default function AdminDialog({
                   <div className="p-4 text-slate-500">Access Denied</div>
                 )
               }
+              renderPracticeSets={() =>
+                isOwner || adminPermissions?.canManageLearning ? practiceSetsTabNode : (
+                  <div className="p-4 text-slate-500">Access Denied</div>
+                )
+              }
             />
           )}
 
@@ -486,7 +515,29 @@ export default function AdminDialog({
 
           {activeTab === "learning" &&
             (isOwner || adminPermissions?.canManageLearning) && (
-              <AdminLearningTab />
+              <AdminLearningTab 
+                categories={categories}
+                adminCategoryScope={adminCategoryScope}
+                setAdminCategoryScope={setAdminCategoryScope}
+                practiceSetsTabNode={practiceSetsTabNode}
+                isForcedCategory={isForcedCategory}
+              />
+          )}
+
+          {activeTab === "features" &&
+            (isOwner || adminPermissions?.canManageFeatures) && (
+              <AdminFeaturesTab
+                enableAiTutor={enableAiTutor}
+                setEnableAiTutor={setEnableAiTutor}
+                enableVocabulary={enableVocabulary}
+                setEnableVocabulary={setEnableVocabulary}
+                enableSpeedMath={enableSpeedMath}
+                setEnableSpeedMath={setEnableSpeedMath}
+                enablePracticeLibrary={enablePracticeLibrary}
+                setEnablePracticeLibrary={setEnablePracticeLibrary}
+                savingSettings={savingAnnouncement}
+                saveSettings={saveSettings}
+              />
           )}
 
           {activeTab === "settings" &&
@@ -500,6 +551,25 @@ export default function AdminDialog({
                 saveSettings={saveSettings}
                 isOwner={!!isOwner}
               />
+          )}
+
+          {activeTab === "keys" && isOwner && (
+            <AdminApiKeysTab
+              apdfKeys={apdfKeys}
+              setApdfKeys={setApdfKeys}
+              ilovePdfKeys={ilovePdfKeys}
+              setIlovePdfKeys={setIlovePdfKeys}
+              cloudinaryCloudName={cloudinaryCloudName}
+              setCloudinaryCloudName={setCloudinaryCloudName}
+              cloudinaryUploadPreset={cloudinaryUploadPreset}
+              setCloudinaryUploadPreset={setCloudinaryUploadPreset}
+              savingSettings={savingAnnouncement}
+              saveSettings={saveSettings}
+            />
+          )}
+
+          {activeTab === "webhooks" && isOwner && (
+            <AdminWebhooksTab />
           )}
         </div>
       </div>

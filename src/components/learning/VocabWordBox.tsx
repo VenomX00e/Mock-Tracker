@@ -144,7 +144,7 @@ export function VocabWordBox({
           <span className="invisible whitespace-pre text-xl md:text-2xl font-bold min-w-[2ch]">
             {vocab.word || "Word"}
           </span>
-          <input
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             type="text"
             value={vocab.word}
             onChange={(e) => onUpdate({ word: e.target.value })}
@@ -246,7 +246,7 @@ export function VocabWordBox({
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
               Meaning
             </label>
-            <textarea
+            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               value={vocab.meaning}
               onChange={(e) => onUpdate({ meaning: e.target.value })}
               readOnly={!canManageLearning}
@@ -260,7 +260,7 @@ export function VocabWordBox({
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
               <Lightbulb className="w-3.5 h-3.5" /> Mnemonic
             </label>
-            <textarea
+            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               value={vocab.mnemonic}
               onChange={(e) => onUpdate({ mnemonic: e.target.value })}
               readOnly={!canManageLearning}
@@ -271,7 +271,7 @@ export function VocabWordBox({
           </div>
 
           <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="checkbox"
               id={`mastered-popup-${vocab.id}`}
               checked={vocab.isMastered}

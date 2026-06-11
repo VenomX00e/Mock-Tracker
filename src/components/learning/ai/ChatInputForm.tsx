@@ -139,14 +139,14 @@ export function ChatInputForm({ onSend, isLoading, showWebSearchButton, showProm
             </div>
           )}
           
-          <input 
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
             type="file" 
             accept="image/*" 
             className="hidden" 
             ref={imageInputRef} 
             onChange={(e) => handleFileChange(e, 'image')}
           />
-          <input 
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
             type="file" 
             accept="application/pdf" 
             className="hidden" 
@@ -191,7 +191,7 @@ export function ChatInputForm({ onSend, isLoading, showWebSearchButton, showProm
               {attachment.type === 'pdf' && (
                 <div className="w-full bg-white dark:bg-[#1E1F25] border border-slate-200 dark:border-white/10 rounded-lg p-2 shadow-sm animate-in fade-in slide-in-from-bottom-2">
                   <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-1 font-medium">Extract Pages (e.g. 1-3, 5)</label>
-                  <input
+                  <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                     type="text"
                     placeholder="All pages selected"
                     className="w-full px-2 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded flex-1 outline-none focus:border-indigo-500 dark:focus:border-indigo-500 text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500"
@@ -202,13 +202,26 @@ export function ChatInputForm({ onSend, isLoading, showWebSearchButton, showProm
               )}
             </div>
           )}
-          <input
-            type="text"
+          <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if ((input.trim() || attachment) && !isLoading) {
+                  handleSend();
+                }
+              }
+            }}
             disabled={isLoading}
             placeholder="Ask anything..."
-            className="w-full bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 text-sm rounded-xl py-3 pl-4 pr-12 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all disabled:opacity-50"
+            
+            autoCorrect="off"
+            
+            
+            
+            rows={1}
+            className="w-full bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 text-sm rounded-xl py-3 pl-4 pr-12 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all disabled:opacity-50 resize-none h-[46px] overflow-hidden leading-[20px]"
           />
           <button
             type="submit"

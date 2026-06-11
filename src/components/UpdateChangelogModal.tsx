@@ -634,7 +634,7 @@ export default function UpdateChangelogModal() {
             {/* Top row */}
             <div className="flex items-center justify-between mb-4">
               {isEditMode ? (
-                <input 
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                   type="text"
                   className={`px-3 py-1 ${ts.inputBadge} font-semibold text-[10px] uppercase tracking-widest rounded-full focus:outline-none focus:ring-1 max-w-[140px]`}
                   value={activeChangelogData.badgeText}
@@ -705,7 +705,7 @@ export default function UpdateChangelogModal() {
 
             {/* Title & subtitle */}
             {isEditMode ? (
-              <input 
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                 type="text"
                 className={`w-full text-2xl font-black ${ts.inputTitle} tracking-tight leading-none mb-1 bg-transparent border-b border-dashed hover:border-slate-400 dark:hover:border-slate-600 focus:outline-none py-1`}
                 value={activeChangelogData.title}
@@ -720,7 +720,7 @@ export default function UpdateChangelogModal() {
 
             <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 mt-2">
               {isEditMode ? (
-                <input 
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                   type="text"
                   className={`text-xs font-semibold ${ts.inputDate} bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-400 focus:outline-none py-0.5 max-w-[100px]`}
                   value={activeChangelogData.releaseDate}
@@ -732,7 +732,7 @@ export default function UpdateChangelogModal() {
               )}
               <span>•</span>
               {isEditMode ? (
-                <input 
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                   type="text"
                   className={`px-2 py-0.5 ${ts.inputVer} font-mono text-[10px] rounded focus:outline-none focus:ring-1 max-w-[60px]`}
                   value={activeChangelogData.version}
@@ -767,7 +767,7 @@ export default function UpdateChangelogModal() {
                   <div>
                     <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-900 pb-1.5">
                     {isEditMode ? (
-                      <input 
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                         type="text"
                         className="w-full text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-indigo-500 focus:outline-none py-0.5"
                         value={activeChangelogData.featuresGroupA.sectionTitle}
@@ -809,14 +809,14 @@ export default function UpdateChangelogModal() {
                         
                         {isEditMode ? (
                           <div className="flex-1 space-y-1.5">
-                            <input 
+                            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                               type="text"
                               className="w-full text-sm font-semibold border-b border-dashed border-slate-300 dark:border-slate-750 hover:border-slate-400 dark:hover:border-slate-600 bg-transparent py-0.5 focus:border-indigo-500 focus:outline-none text-slate-800 dark:text-slate-100"
                               value={item.title}
                               onChange={(e) => updateCardField('A', id, 'title', e.target.value)}
                               placeholder="New Feature / Update Card"
                             />
-                            <textarea 
+                            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                               className="w-full text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-transparent rounded p-1.5 focus:border-indigo-500 focus:outline-none resize-none leading-relaxed"
                               rows={2}
                               value={item.desc}
@@ -859,7 +859,7 @@ export default function UpdateChangelogModal() {
                   <div>
                     <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-900 pb-1.5">
                     {isEditMode ? (
-                      <input 
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                         type="text"
                         className="w-full text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-indigo-500 focus:outline-none py-0.5"
                         value={activeChangelogData.featuresGroupB.sectionTitle}
@@ -901,14 +901,14 @@ export default function UpdateChangelogModal() {
                         
                         {isEditMode ? (
                           <div className="flex-1 space-y-1.5">
-                            <input 
+                            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                               type="text"
                               className="w-full text-sm font-semibold border-b border-dashed border-slate-300 dark:border-slate-750 hover:border-slate-400 dark:hover:border-slate-600 bg-transparent py-0.5 focus:border-indigo-500 focus:outline-none text-slate-800 dark:text-slate-100"
                               value={item.title}
                               onChange={(e) => updateCardField('B', id, 'title', e.target.value)}
                               placeholder="New Feature / Update Card"
                             />
-                            <textarea 
+                            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                               className="w-full text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-transparent rounded p-1.5 focus:border-indigo-500 focus:outline-none resize-none leading-relaxed"
                               rows={2}
                               value={item.desc}

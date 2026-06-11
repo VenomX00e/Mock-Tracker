@@ -64,6 +64,7 @@ export const ViewManager = () => {
                  adminPermissions.canManageNotices ? 'notice' :
                  adminPermissions.canManageCountdowns ? 'countdown' :
                  adminPermissions.canManageChallenges ? 'challenge' :
+                 adminPermissions.canManageFeatures ? 'features' :
                  adminPermissions.canManageSettings ? 'settings' : 
                  adminPermissions.canManageQuotes ? 'quotes' : 'users'
             ) : 'users') as any}

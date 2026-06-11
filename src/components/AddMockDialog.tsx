@@ -28,7 +28,7 @@ const SubjectRow = memo(({ sub, data, onChange }: { sub: any, data: any, onChang
       </div>
       <div className="flex-1 grid grid-cols-3 gap-3">
         <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-          <input autoComplete="off"
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             type="search" inputMode="decimal" step="0.01"
             placeholder="Score"
             value={data?.score ?? ''}
@@ -37,7 +37,7 @@ const SubjectRow = memo(({ sub, data, onChange }: { sub: any, data: any, onChang
           />
         </div>
         <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-          <input autoComplete="off"
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             type="search" inputMode="decimal" step="0.01"
             placeholder="Percentile"
             value={data?.percentile ?? ''}
@@ -46,7 +46,7 @@ const SubjectRow = memo(({ sub, data, onChange }: { sub: any, data: any, onChang
           />
         </div>
         <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-          <input autoComplete="off"
+          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
             type="search" inputMode="decimal" step="0.01"
             placeholder="Accuracy %"
             value={data?.accuracy ?? ''}
@@ -435,7 +435,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                   </>
                 )}
               </div>
-              <input autoComplete="off"    
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"    
                 ref={fileInputRef}
                 type="file" 
                 multiple
@@ -443,7 +443,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                 accept="image/*" 
                 onChange={handleFileChange}
                 disabled={isProcessing}
-              />
+                autoCorrect="off" spellCheck={false}     />
             </label>
             {error && <p className="mt-2.5 text-sm text-red-500 font-medium px-2 flex items-center gap-1.5"><X className="w-4 h-4"/> {error}</p>}
           </section>
@@ -516,7 +516,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                         />
                       ) : (
                         <div className="relative">
-                          <input autoComplete="off" type="text"
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text"
                             value={formData.examType ?? ''}
                             onChange={e => setFormData({ ...formData, examType: e.target.value })}
                             placeholder="Custom Exam..."
@@ -548,7 +548,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                         />
                       ) : (
                         <div className="relative">
-                          <input autoComplete="off" type="text"
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text"
                             value={formData.examRole ?? ''}
                             onChange={e => setFormData({ ...formData, examRole: e.target.value })}
                             placeholder="Custom Role..."
@@ -562,14 +562,15 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                   </div>
                   
                   <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                    <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Mock Name</label>
-                    <input autoComplete="off" type="text"
-                      name="mockName"
+                    <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Mock Title</label>
+                    <textarea
                       value={formData.mockName ?? ''}
-                      onChange={handleChange}
+                      onChange={(e) => setFormData({...formData, mockName: e.target.value})}
                       placeholder="e.g. Mock Test 1"
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 resize-none overflow-hidden"
+                      rows={1}
                       required
+                      autoCorrect="off" spellCheck={false}
                     />
                   </div>
                 </div>
@@ -595,7 +596,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                         />
                       ) : (
                         <div className="relative">
-                          <input autoComplete="off" type="text"
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text"
                             value={formData.examPhase ?? ''}
                             onChange={e => setFormData({ ...formData, examPhase: e.target.value })}
                             placeholder="Custom Phase..."
@@ -643,7 +644,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                         />
                       ) : (
                         <div className="relative">
-                          <input autoComplete="off" type="text"
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text"
                             value={formData.platform ?? ''}
                             onChange={e => setFormData({ ...formData, platform: e.target.value })}
                             placeholder="Custom Platform..."
@@ -657,13 +658,13 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                     
                     <div className="space-y-1.5">
                       <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Date</label>
-                      <input autoComplete="off"   
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                         type="datetime-local"
                         name="date"
                         value={formData.date ?? ''}
                         onChange={handleChange}
                         className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm text-slate-800 dark:text-slate-200"
-                      />
+                        autoCorrect="off" spellCheck={false}     />
                     </div>
                   </div>
                 </div>
@@ -705,7 +706,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                       <div className="space-y-1.5 focus-within:relative focus-within:z-10">
                         <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Score</label>
-                        <input autoComplete="off"   
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                           type="search" inputMode="decimal" step="0.01"
                           value={formData[selectedSection]?.score ?? ''}
                           onChange={e => handleSectionChange(selectedSection, 'score', e.target.value)}
@@ -714,7 +715,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                       </div>
                       <div className="space-y-1.5 focus-within:relative focus-within:z-10">
                         <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Percentile</label>
-                        <input autoComplete="off"   
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                           type="search" inputMode="decimal" step="0.01"
                           value={formData[selectedSection]?.percentile ?? ''}
                           onChange={e => handleSectionChange(selectedSection, 'percentile', e.target.value)}
@@ -723,7 +724,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                       </div>
                       <div className="space-y-1.5 focus-within:relative focus-within:z-10">
                         <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Accuracy %</label>
-                        <input autoComplete="off"   
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                           type="search" inputMode="decimal" step="0.01"
                           value={(formData as any)[selectedSection]?.accuracy ?? ''}
                           onChange={e => handleSectionChange(selectedSection, 'accuracy', e.target.value)}
@@ -746,34 +747,34 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-5 relative z-10">
                     <div className="space-y-1.5 focus-within:relative focus-within:z-10">
                       <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Score</label>
-                      <input autoComplete="off"   
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                         type="search" inputMode="decimal" step="0.01"
                         name="score"
                         value={formData.score ?? ''}
                         onChange={handleChange}
                         className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
                         required
-                      />
+                        autoCorrect="off" spellCheck={false}     />
                     </div>
                     <div className="space-y-1.5 focus-within:relative focus-within:z-10">
                       <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Percentile</label>
-                      <input autoComplete="off"   
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                         type="search" inputMode="decimal" step="0.01"
                         name="percentile"
                         value={formData.percentile ?? ''}
                         onChange={handleChange}
                         className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
-                      />
+                        autoCorrect="off" spellCheck={false}     />
                     </div>
                     <div className="space-y-1.5 focus-within:relative focus-within:z-10">
                       <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Accuracy %</label>
-                      <input autoComplete="off"   
+                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
                         type="search" inputMode="decimal" step="0.01"
                         name="accuracy"
                         value={formData.accuracy ?? ''}
                         onChange={handleChange}
                         className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
-                      />
+                        autoCorrect="off" spellCheck={false}     />
                     </div>
                   </div>
                 </div>

@@ -58,7 +58,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
         
         <div className="space-y-4">
           <div className="flex gap-2">
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="password"
               value={newKeyInput}
               onChange={(e) => setNewKeyInput(e.target.value)}
@@ -82,7 +82,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
               keys.map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <input
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                       type="checkbox"
                       checked={entry.isActive}
                       onChange={() => handleToggleKey(entry.id)}

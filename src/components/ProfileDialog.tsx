@@ -358,7 +358,7 @@ export default function ProfileDialog({
                         </label>
                         <div className="relative">
                           <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-                          <input
+                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             type="text"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
@@ -379,7 +379,7 @@ export default function ProfileDialog({
                             {bio.length}/70
                           </span>
                         </div>
-                        <input
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="text"
                           value={bio}
                           onChange={(e) => {
@@ -446,7 +446,7 @@ export default function ProfileDialog({
                             />
                           ) : (
                             <div className="relative">
-                              <input
+                              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                                 type="text"
                                 value={targetedExam}
                                 onChange={(e) =>

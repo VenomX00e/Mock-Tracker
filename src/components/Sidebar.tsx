@@ -66,6 +66,7 @@ export function Sidebar() {
       else if (adminPermissions?.canManageNotices) firstTab = "notice";
       else if (adminPermissions?.canManageCountdowns) firstTab = "countdown";
       else if (adminPermissions?.canManageChallenges) firstTab = "challenge";
+      else if (adminPermissions?.canManageFeatures) firstTab = "features";
       else if (adminPermissions?.canManageSettings) firstTab = "settings";
       else firstTab = "";
 
@@ -251,7 +252,7 @@ export function Sidebar() {
         >
           <div className="w-8 h-8 flex shrink-0 items-center justify-center -ml-1">
             {profile?.photoURL || user.photoURL ? (
-              <img src={profile?.photoURL || user.photoURL || ''} alt={profile?.displayName || user.displayName || 'Profile'} className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 dark:border-slate-700" />
+              <img src={profile?.photoURL || user.photoURL || undefined} alt={profile?.displayName || user.displayName || 'Profile'} className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 dark:border-slate-700" />
             ) : (
               <UserCircle className={`w-7 h-7 shrink-0 ${localActiveTab === "profile" ? 'neon-active-icon' : ''}`} strokeWidth={localActiveTab === "profile" ? 3 : 2} />
             )}

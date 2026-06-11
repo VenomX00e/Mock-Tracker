@@ -100,6 +100,7 @@ export default function Navigation() {
                       else if (adminPermissions?.canManageNotices) firstTab = "notice";
                       else if (adminPermissions?.canManageCountdowns) firstTab = "countdown";
                       else if (adminPermissions?.canManageChallenges) firstTab = "challenge";
+                      else if (adminPermissions?.canManageFeatures) firstTab = "features";
                       else if (adminPermissions?.canManageSettings) firstTab = "settings";
                       else firstTab = "";
 
@@ -125,7 +126,7 @@ export default function Navigation() {
                     src={
                       profile?.photoURL ||
                       user.photoURL ||
-                      `https://ui-avatars.com/api/?name=${user.displayName}`
+                      `https://ui-avatars.com/api/?name=${user.displayName || 'u'}`
                     }
                     alt="Profile"
                     className="w-8 h-8 sm:w-10 sm:h-10 object-cover"

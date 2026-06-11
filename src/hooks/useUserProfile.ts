@@ -79,5 +79,19 @@ export function useUserProfile() {
     }
   }, [user]);
 
-  return useMemo(() => ({ profile, loading, updateProfile }), [profile, loading, updateProfile]);
+  const togglePracticeFileCompletion = useCallback(async (fileId: string) => {
+    if (!user || !profile) return;
+    const currentCompleted = profile.completedPracticeFiles || [];
+    const isCompleted = currentCompleted.includes(fileId);
+    const newCompleted = isCompleted 
+      ? currentCompleted.filter(id => id !== fileId)
+      : [...currentCompleted, fileId];
+    try {
+      await updateProfile({ completedPracticeFiles: newCompleted });
+    } catch (e) {
+      console.error("Failed to toggle completion", e);
+    }
+  }, [user, profile, updateProfile]);
+
+  return useMemo(() => ({ profile, loading, updateProfile, togglePracticeFileCompletion }), [profile, loading, updateProfile, togglePracticeFileCompletion]);
 }

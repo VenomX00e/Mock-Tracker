@@ -60,7 +60,7 @@ function SortableOptionItem({
         </div>
         {editingIndex === i ? (
           <div className="flex flex-1 gap-1">
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               autoFocus
               value={editVal}
@@ -209,7 +209,7 @@ export function OptionManagerDropdown({
             )}
           </Reorder.Group>
           <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex gap-2">
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               placeholder="Add new option..."
               value={newOpt}

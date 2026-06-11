@@ -79,14 +79,14 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
   const { user } = authVal;
   const { profile, updateProfile } = userProfileVal;
 
-  const isOwner = user?.email === 'mrityunjoyk29@gmail.com';
+  const isOwner = profile?.role === 'owner' || user?.email === 'mrityunjoyk29@gmail.com';
   const [localCategory, setLocalCategory] = useState<string>('banking');
 
   useEffect(() => {
     if (profile?.categoryId) setLocalCategory(profile.categoryId);
   }, [profile?.categoryId]);
 
-  const isAdminUser = profile?.role === 'admin' && profile?.adminCategories?.includes(localCategory);
+  const isAdminUser = (profile?.role === 'admin' || profile?.role === 'owner') && profile?.adminCategories?.includes(localCategory);
   const isAdmin = isOwner || isAdminUser;
 
   const adminPermissions = useMemo(() => ({
@@ -96,6 +96,7 @@ const DependentProviders = ({ children }: { children: ReactNode }) => {
     canManageLiveMocks: isOwner || (isAdminUser && profile?.permissions?.canManageLiveMocks),
     canManageCountdowns: isOwner || (isAdminUser && profile?.permissions?.canManageCountdowns),
     canManageSettings: isOwner || (isAdminUser && profile?.permissions?.canManageSettings),
+    canManageFeatures: isOwner || (isAdminUser && profile?.permissions?.canManageFeatures),
     canManageQuotes: isOwner || (isAdminUser && profile?.permissions?.canManageQuotes),
     canManageLearning: isOwner || (isAdminUser && profile?.permissions?.canManageLearning),
   }), [isOwner, isAdminUser, profile?.permissions]);

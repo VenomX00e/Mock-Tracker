@@ -91,7 +91,7 @@ export function ReflectionEditor({ mock, onSave, onCancel }) {
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Tags (comma separated)</label>
-        <input 
+        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
           type="text" 
           value={localTags} 
           onChange={e => setLocalTags(e.target.value)} 
@@ -101,7 +101,7 @@ export function ReflectionEditor({ mock, onSave, onCancel }) {
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Reflection / Notes</label>
-        <textarea 
+        <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
           value={localNote} 
           onChange={e => setLocalNote(e.target.value)} 
           placeholder="What went well? What went wrong?"
@@ -134,7 +134,7 @@ export function ReflectionEditor({ mock, onSave, onCancel }) {
               >
                 {task.completed && <Check className="w-3.5 h-3.5 text-white" />}
               </button>
-              <input 
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" 
                 type="text" 
                 value={task.text}
                 onChange={(e) => {

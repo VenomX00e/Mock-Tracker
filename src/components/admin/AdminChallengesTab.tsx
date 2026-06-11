@@ -67,7 +67,7 @@ export function AdminChallengesTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Challenge Title
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="search"
               value={challengeTitle}
               onChange={(e) => setChallengeTitle(e.target.value)}
@@ -79,7 +79,7 @@ export function AdminChallengesTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Description
             </label>
-            <textarea
+            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               rows={3}
               value={challengeDescription}
               onChange={(e) => setChallengeDescription(e.target.value)}
@@ -117,7 +117,7 @@ export function AdminChallengesTab({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Start Date
               </label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="date"
                 value={challengeStartDate}
                 onChange={(e) => {
@@ -146,7 +146,7 @@ export function AdminChallengesTab({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Duration (Days)
               </label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="number"
                 placeholder="Days"
                 value={challengeDuration}
@@ -166,7 +166,7 @@ export function AdminChallengesTab({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 End Date
               </label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="date"
                 value={challengeEndDate}
                 onChange={(e) => {
@@ -222,7 +222,7 @@ export function AdminChallengesTab({
               <div className="space-y-2">
                 {challengeTasks.map((t, idx) => (
                   <div key={t.id} className="flex gap-2">
-                    <input
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                       type="text"
                       value={t.text}
                       onChange={(e) => {

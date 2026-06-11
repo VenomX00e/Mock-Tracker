@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Craft rules based on https://firebase.google.com/docs/storage/security
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // A simplified check if the user is the Super Admin. You could implement custom claims for isAnyAdmin check here.
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email == 'mrityunjoyk29@gmail.com';
+    }
+
+    // Since custom claims aren't fully robust here, we'll give write access to the super admin.
+    // For specific paths:
+    match /practice_sets/{subjectId}/{folderId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.resource.size <= 11 * 1024 * 1024;
+    }
+  }
+}

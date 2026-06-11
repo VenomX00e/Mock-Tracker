@@ -290,12 +290,12 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
                <div className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Badge Name</label>
-                    <input type="text" value={awardName} onChange={e => setAwardName(e.target.value)} placeholder="e.g. 50 Days Survivor" className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900" />
+                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text" value={awardName} onChange={e => setAwardName(e.target.value)} placeholder="e.g. 50 Days Survivor" className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                      <div>
                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Emoji</label>
-                       <input type="text" value={awardEmoji} onChange={e => setAwardEmoji(e.target.value)} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900" />
+                       <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="text" value={awardEmoji} onChange={e => setAwardEmoji(e.target.value)} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-slate-50 dark:bg-slate-900" />
                      </div>
                      <div>
                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Color Theme</label>
@@ -331,11 +331,11 @@ export const ChallengeParticipantsDialog: React.FC<ChallengeParticipantsDialogPr
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Award To</label>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                        <input type="radio" checked={awardTarget === 'completed'} onChange={() => setAwardTarget('completed')} className="text-indigo-600 focus:ring-indigo-500" />
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="radio" checked={awardTarget === 'completed'} onChange={() => setAwardTarget('completed')} className="text-indigo-600 focus:ring-indigo-500" />
                         Completed Perfectly
                       </label>
                       <label className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                        <input type="radio" checked={awardTarget === 'all'} onChange={() => setAwardTarget('all')} className="text-indigo-600 focus:ring-indigo-500" />
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other" type="radio" checked={awardTarget === 'all'} onChange={() => setAwardTarget('all')} className="text-indigo-600 focus:ring-indigo-500" />
                         All Participants
                       </label>
                     </div>

@@ -55,7 +55,7 @@ export function AdminNoticesTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Title
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="search"
               value={noticeTitle}
               onChange={(e) => setNoticeTitle(e.target.value)}
@@ -67,7 +67,7 @@ export function AdminNoticesTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Description (Markdown supported)
             </label>
-            <textarea
+            <textarea  data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               rows={4}
               value={noticeDescription}
               onChange={(e) => setNoticeDescription(e.target.value)}
@@ -110,7 +110,7 @@ export function AdminNoticesTab({
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Global Tags (comma separated)
               </label>
-              <input
+              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                 type="text"
                 value={noticeTags}
                 onChange={(e) => setNoticeTags(e.target.value)}
@@ -123,7 +123,7 @@ export function AdminNoticesTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Action Link (Optional)
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="url"
               value={noticeLink}
               onChange={(e) => setNoticeLink(e.target.value)}
@@ -135,7 +135,7 @@ export function AdminNoticesTab({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Live Until (Optional)
             </label>
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="datetime-local"
               value={noticeDate}
               onChange={(e) => setNoticeDate(e.target.value)}

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2 } from 'lucide-react';
+import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2, EyeOff } from 'lucide-react';
+import { useAppStateCtx, usePublicSettingsCtx } from '../../context/AppContext';
 import { LearningAIAssistant } from './LearningAIAssistant';
 import { VocabularyFeed } from './VocabularyFeed';
 import { SpeedMathHub } from './SpeedMathHub';
+import { PracticeLibrary } from './PracticeLibrary';
 import { useVocabularyStore } from '../../store/vocabularyStore';
 import { subscribeToCanvases } from '../../services/vocabularyFirebaseService';
 import { ApiKeyEntry, getApiKeys, saveApiKeys } from '../../utils/apiKeyManager';
@@ -16,7 +18,9 @@ const MODELS = [
 ];
 
 export function LearningView() {
-  const [activeTab, setActiveTab] = useState<'ai' | 'vocab' | 'math'>('ai');
+  const { isOwner, isAdmin } = useAppStateCtx();
+  const { enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary } = usePublicSettingsCtx();
+  const [activeTab, setActiveTab] = useState<'ai' | 'vocab' | 'math' | 'practice'>('ai');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
@@ -26,6 +30,26 @@ export function LearningView() {
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const setCanvases = useVocabularyStore(state => state.setCanvases);
+
+  useEffect(() => {
+    // Determine the next available tab if the current one is disabled
+    const availableTabs = [];
+    if (enableAiTutor || isAdmin || isOwner) availableTabs.push('ai');
+    if (enableVocabulary || isAdmin || isOwner) availableTabs.push('vocab');
+    if (enableSpeedMath || isAdmin || isOwner) availableTabs.push('math');
+    if (enablePracticeLibrary || isAdmin || isOwner) availableTabs.push('practice');
+    
+    // If current tab isn't available, jump to the first one available
+    if (activeTab === 'ai' && !enableAiTutor && !isAdmin && !isOwner) {
+      setActiveTab((availableTabs[0] as any) || 'ai');
+    } else if (activeTab === 'vocab' && !enableVocabulary && !isAdmin && !isOwner) {
+      setActiveTab((availableTabs[0] as any) || 'ai');
+    } else if (activeTab === 'math' && !enableSpeedMath && !isAdmin && !isOwner) {
+      setActiveTab((availableTabs[0] as any) || 'ai');
+    } else if (activeTab === 'practice' && !enablePracticeLibrary && !isAdmin && !isOwner) {
+      setActiveTab((availableTabs[0] as any) || 'ai');
+    }
+  }, [enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, activeTab, isAdmin, isOwner]);
 
   useEffect(() => {
     setKeys(getApiKeys());
@@ -163,7 +187,7 @@ export function LearningView() {
                         API Keys Manager
                       </label>
                       <div className="flex gap-2 mb-2">
-                        <input
+                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="password"
                           value={newKeyInput}
                           onChange={(e) => setNewKeyInput(e.target.value)}
@@ -187,7 +211,7 @@ export function LearningView() {
                           keys.map(entry => (
                             <div key={entry.id} className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-2">
                               <div className="flex items-center gap-2 overflow-hidden">
-                                <input
+                                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                                   type="checkbox"
                                   checked={entry.isActive}
                                   onChange={() => handleToggleKey(entry.id)}
@@ -240,36 +264,62 @@ export function LearningView() {
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 w-full">
-            <button
-              onClick={() => setActiveTab('ai')}
-              className={`px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
-                activeTab === 'ai' 
-                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              AI Tutor
-            </button>
-            <button
-              onClick={() => setActiveTab('vocab')}
-              className={`px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
-                activeTab === 'vocab' 
-                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              Vocabulary
-            </button>
-            <button
-              onClick={() => setActiveTab('math')}
-              className={`px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
-                activeTab === 'math' 
-                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              Speed Math
-            </button>
+            {(enableAiTutor || isOwner || isAdmin) && (
+              <button
+                onClick={() => setActiveTab('ai')}
+                className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
+                  activeTab === 'ai' 
+                    ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                } ${!enableAiTutor ? 'opacity-70 border-dashed' : ''}`}
+                title={!enableAiTutor ? "Hidden from regular users" : undefined}
+              >
+                {!enableAiTutor && <EyeOff className="w-3 h-3" />}
+                AI Tutor
+              </button>
+            )}
+            {(enableVocabulary || isOwner || isAdmin) && (
+              <button
+                onClick={() => setActiveTab('vocab')}
+                className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
+                  activeTab === 'vocab' 
+                    ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                } ${!enableVocabulary ? 'opacity-70 border-dashed' : ''}`}
+                title={!enableVocabulary ? "Hidden from regular users" : undefined}
+              >
+                {!enableVocabulary && <EyeOff className="w-3 h-3" />}
+                Vocabulary
+              </button>
+            )}
+            {(enableSpeedMath || isOwner || isAdmin) && (
+              <button
+                onClick={() => setActiveTab('math')}
+                className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
+                  activeTab === 'math' 
+                    ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                } ${!enableSpeedMath ? 'opacity-70 border-dashed' : ''}`}
+                title={!enableSpeedMath ? "Hidden from regular users" : undefined}
+              >
+                {!enableSpeedMath && <EyeOff className="w-3 h-3" />}
+                Speed Math
+              </button>
+            )}
+            {(enablePracticeLibrary || isOwner || isAdmin) && (
+              <button
+                onClick={() => setActiveTab('practice')}
+                className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
+                  activeTab === 'practice' 
+                    ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-sm border border-slate-800 dark:border-slate-200' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                } ${!enablePracticeLibrary ? 'opacity-70 border-dashed' : ''}`}
+                title={!enablePracticeLibrary ? "Hidden from regular users" : undefined}
+              >
+                {!enablePracticeLibrary && <EyeOff className="w-3 h-3" />}
+                Practice Library
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -278,6 +328,7 @@ export function LearningView() {
         {activeTab === 'ai' && <LearningAIAssistant isEnlarged={isEnlarged} onToggleEnlarge={() => setIsEnlarged(!isEnlarged)} />}
         {activeTab === 'vocab' && <VocabularyFeed />}
         {activeTab === 'math' && <SpeedMathHub />}
+        {activeTab === 'practice' && <PracticeLibrary />}
       </div>
     </div>
   );

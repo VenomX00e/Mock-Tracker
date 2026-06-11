@@ -64,21 +64,21 @@ function SortableSubjectItem({
       {editingIndex === i ? (
         <div className="flex-1 space-y-2 min-w-0">
           <div className="flex flex-col sm:flex-row gap-2">
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               className="flex-1 min-w-0 text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
               placeholder="Name"
             />
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={editShort}
               onChange={(e) => setEditShort(e.target.value)}
               className="flex-[0.5] min-w-0 w-24 sm:w-auto text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
               placeholder="Short (e.g. Q)"
             />
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={editId}
               onChange={(e) => setEditId(e.target.value)}
@@ -91,7 +91,7 @@ function SortableSubjectItem({
               <span className="text-xs text-slate-500 flex items-center">Phases:</span>
               {availablePhases.map((phase: string) => (
                 <label key={phase} className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
-                  <input
+                  <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                     type="checkbox"
                     checked={editPhases.includes(phase)}
                     onChange={e => {
@@ -310,21 +310,21 @@ export function SubjectManager({
       <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-slate-50/50 dark:bg-slate-800/30 p-3 rounded-xl border border-slate-200 border-dashed dark:border-slate-700/50">
         <div className="flex-1 w-full space-y-2">
           <div className="flex flex-col sm:flex-row gap-2">
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={newSubName}
               onChange={(e) => setNewSubName(e.target.value)}
               placeholder="Full Name (e.g. Quantitative Aptitude)"
               className="flex-1 min-w-0 text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
             />
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={newSubShort}
               onChange={(e) => setNewSubShort(e.target.value)}
               placeholder="Short Name (e.g. Q)"
               className="flex-[0.5] min-w-0 w-24 sm:w-auto text-sm border border-slate-200 dark:border-slate-700 dark:bg-slate-900 rounded px-2 py-1.5"
             />
-            <input
+            <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
               type="text"
               value={newSubId}
               onChange={(e) => setNewSubId(e.target.value)}
@@ -337,7 +337,7 @@ export function SubjectManager({
               <span className="text-xs text-slate-500 flex items-center">Phases:</span>
               {availablePhases.map(phase => (
                 <label key={phase} className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
-                  <input
+                  <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                     type="checkbox"
                     checked={newSubPhases.includes(phase)}
                     onChange={e => {
