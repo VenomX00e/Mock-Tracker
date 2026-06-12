@@ -15,7 +15,20 @@ try {
 }
 
 if (!admin.apps.length && firebaseConfig.projectId) {
-  admin.initializeApp({ projectId: firebaseConfig.projectId });
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: firebaseConfig.projectId
+      });
+    } catch (e: any) {
+      console.error("Error parsing FIREBASE_SERVICE_ACCOUNT_KEY:", e.message);
+      admin.initializeApp({ projectId: firebaseConfig.projectId });
+    }
+  } else {
+    admin.initializeApp({ projectId: firebaseConfig.projectId });
+  }
 }
 
 const getAdminDb = () => {
