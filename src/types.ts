@@ -277,7 +277,6 @@ export interface LearningUserProgress {
 
 export interface CloudinaryWebhookLog {
   id: string;
-  isDeleted?: boolean;
   notificationType: string;
   publicId?: string;
   timestamp: any;

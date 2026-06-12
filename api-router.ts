@@ -1317,13 +1317,7 @@ app.post("/api/webhooks/clear", async (req, res) => {
     for (const chunk of chunks) {
       const batch = adminDb.batch();
       chunk.forEach((id: string) => {
-        batch.set(
-          adminDb.collection("cloudinary_webhook_logs").doc(id),
-          {
-            isDeleted: true,
-          },
-          { merge: true },
-        );
+        batch.delete(adminDb.collection("cloudinary_webhook_logs").doc(id));
       });
       await batch.commit();
     }
@@ -1333,11 +1327,9 @@ app.post("/api/webhooks/clear", async (req, res) => {
     if (error.message && error.message.includes("PERMISSION_DENIED")) {
       // In preview environments without an explicit service account key, ADC might lack permissions.
       // We gracefully instruct the client to use the client-side fallback.
-      return res
-        .status(403)
-        .json({
-          error: "ADC restrictions in preview environment, use client fallback",
-        });
+      return res.status(403).json({
+        error: "ADC restrictions in preview environment, use client fallback",
+      });
     }
     console.error("Failed to clear webhook logs:", error);
     res

@@ -51,15 +51,12 @@ export function useWebhookLogs() {
     return () => unsubscribe();
   }, []);
 
-  const filteredLogs = logs
-    .filter((log) => !log.isDeleted)
-    .filter((log) => {
-      if (filter === "all") return true;
-      if (filter === "upload") return log.notificationType === "upload";
-      if (filter === "delete")
-        return log.notificationType?.startsWith("delete");
-      return true;
-    });
+  const filteredLogs = logs.filter((log) => {
+    if (filter === "all") return true;
+    if (filter === "upload") return log.notificationType === "upload";
+    if (filter === "delete") return log.notificationType?.startsWith("delete");
+    return true;
+  });
 
   const totalLogs = filteredLogs.length;
   // Compute exactly how many were successful (Cloudinary delete/folder webhooks usually have missing status so we defaulted to "success")
@@ -95,13 +92,7 @@ export function useWebhookLogs() {
         const snapshot = await getDocs(q);
         const batch = writeBatch(db);
         snapshot.docs.forEach((doc) => {
-          batch.set(
-            doc.ref,
-            {
-              isDeleted: true,
-            },
-            { merge: true },
-          );
+          batch.delete(doc.ref);
         });
         await batch.commit();
       } catch (fallbackErr) {
