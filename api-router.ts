@@ -17,10 +17,12 @@ try {
 if (!admin.apps.length && firebaseConfig.projectId) {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      const serviceAccount = JSON.parse(
+        process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+      );
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        projectId: firebaseConfig.projectId
+        projectId: firebaseConfig.projectId,
       });
     } catch (e: any) {
       console.error("Error parsing FIREBASE_SERVICE_ACCOUNT_KEY:", e.message);
@@ -32,19 +34,21 @@ if (!admin.apps.length && firebaseConfig.projectId) {
 }
 
 const getAdminDb = () => {
-  return firebaseConfig.firestoreDatabaseId 
-    ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId) 
+  return firebaseConfig.firestoreDatabaseId
+    ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId)
     : admin.firestore();
 };
 
 const writeWebhookLog = async (data: any) => {
   try {
-    const timestamp = new Date().toISOString(); 
-    await getAdminDb().collection("cloudinary_webhook_logs").add({
-      ...data,
-      timestamp: timestamp,
-      createdAt: admin.firestore.FieldValue.serverTimestamp() // Keep accurate db time
-    });
+    const timestamp = new Date().toISOString();
+    await getAdminDb()
+      .collection("cloudinary_webhook_logs")
+      .add({
+        ...data,
+        timestamp: timestamp,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(), // Keep accurate db time
+      });
   } catch (error) {
     console.error("Failed to write webhook log to Firestore:", error);
   }
@@ -59,12 +63,14 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json({ 
-  limit: "50mb",
-  verify: (req, res, buf) => {
-    (req as any).rawBody = buf.toString();
-  }
-}));
+app.use(
+  express.json({
+    limit: "50mb",
+    verify: (req, res, buf) => {
+      (req as any).rawBody = buf.toString();
+    },
+  }),
+);
 
 // Initialize Cloudinary (Lazy / Environment Based)
 if (process.env.CLOUDINARY_CLOUD_NAME) {
@@ -147,11 +153,9 @@ app.post("/api/extract-mock", async (req, res) => {
       await admin.auth().verifyIdToken(token);
     } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden: Invalid token. " + (authErr?.message || ""),
-        });
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
     }
 
     const { images, customApiKey } = req.body;
@@ -223,11 +227,9 @@ app.post("/api/extract-scorecard", async (req, res) => {
       await admin.auth().verifyIdToken(token);
     } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden: Invalid token. " + (authErr?.message || ""),
-        });
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
     }
 
     const { images, customApiKey, subjects } = req.body;
@@ -383,11 +385,9 @@ app.post("/api/generate-badge", async (req, res) => {
       await admin.auth().verifyIdToken(token);
     } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden: Invalid token. " + (authErr?.message || ""),
-        });
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
     }
 
     const { promptText, customApiKey } = req.body;
@@ -483,36 +483,32 @@ app.post("/api/learning-chat", async (req, res) => {
       await admin.auth().verifyIdToken(token);
     } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden: Invalid token. " + (authErr?.message || ""),
-        });
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
     }
 
     const { messages, customApiKey, model, useWebSearch, chatMode } = req.body;
 
     if (!customApiKey) {
-      return res
-        .status(403)
-        .json({
-          error:
-            "A personal Gemini API key is required to use this feature. Please add your key in the AI Tutor Settings.",
-        });
+      return res.status(403).json({
+        error:
+          "A personal Gemini API key is required to use this feature. Please add your key in the AI Tutor Settings.",
+      });
     }
 
     const aiClient = new GoogleGenAI({ apiKey: customApiKey });
 
     let modeInstruction = "";
-    if (chatMode === 'math') {
+    if (chatMode === "math") {
       modeInstruction = `
 You are an expert Math tutor for competitive exams. Do not give conversational wrappers. Provide a rapid, step-by-step, exam-focused approach to solve the problem. Keep your explanations exceptionally concise and structured. Only provide a deep theoretical explanation if the user explicitly asks for 'full explanation'.
 `;
-    } else if (chatMode === 'english') {
+    } else if (chatMode === "english") {
       modeInstruction = `
 You are an expert English tutor for competitive exams. Provide brief, rule-based explanations for grammar, vocabulary, or comprehension. Keep explanations concise, structured, and exam-focused.
 `;
-    } else if (chatMode === 'reasoning') {
+    } else if (chatMode === "reasoning") {
       modeInstruction = `
 You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do NOT immediately declare the final answer to puzzles. Instead, outline a detailed step-by-step approach to solve it. 2. For seating arrangements (circular, linear), always suggest applying the 'Thread Method' to unfold the problem. Include the traditional approach only if requested. 3. If the user provides an attempted answer, you must cross-check their answer against EVERY given condition in the problem. If their answer violates a condition, explicitly state which condition fails. If their answer satisfies ALL conditions, state 'Your arrangement satisfies all conditions and is correct'.
 `;
@@ -611,36 +607,32 @@ app.post("/api/tutor-chat-stream", async (req, res) => {
       await admin.auth().verifyIdToken(token);
     } catch (authErr: any) {
       console.error("Token verification failed:", authErr);
-      return res
-        .status(403)
-        .json({
-          error: "Forbidden: Invalid token. " + (authErr?.message || ""),
-        });
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
     }
 
     const { messages, customApiKey, model, useWebSearch, chatMode } = req.body;
 
     if (!customApiKey) {
-      return res
-        .status(403)
-        .json({
-          error:
-            "A personal Gemini API key is required to use this feature. Please add your key in the AI Tutor Settings.",
-        });
+      return res.status(403).json({
+        error:
+          "A personal Gemini API key is required to use this feature. Please add your key in the AI Tutor Settings.",
+      });
     }
 
     const aiClient = new GoogleGenAI({ apiKey: customApiKey });
 
     let modeInstruction = "";
-    if (chatMode === 'math') {
+    if (chatMode === "math") {
       modeInstruction = `
 You are an expert Math tutor for competitive exams. Do not give conversational wrappers. Provide a rapid, step-by-step, exam-focused approach to solve the problem. Keep your explanations exceptionally concise and structured. Only provide a deep theoretical explanation if the user explicitly asks for 'full explanation'.
 `;
-    } else if (chatMode === 'english') {
+    } else if (chatMode === "english") {
       modeInstruction = `
 You are an expert English tutor for competitive exams. Provide brief, rule-based explanations for grammar, vocabulary, or comprehension. Keep explanations concise, structured, and exam-focused.
 `;
-    } else if (chatMode === 'reasoning') {
+    } else if (chatMode === "reasoning") {
       modeInstruction = `
 You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do NOT immediately declare the final answer to puzzles. Instead, outline a detailed step-by-step approach to solve it. 2. For seating arrangements (circular, linear), always suggest applying the 'Thread Method' to unfold the problem. Include the traditional approach only if requested. 3. If the user provides an attempted answer, you must cross-check their answer against EVERY given condition in the problem. If their answer violates a condition, explicitly state which condition fails. If their answer satisfies ALL conditions, state 'Your arrangement satisfies all conditions and is correct'.
 `;
@@ -697,7 +689,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
     });
 
     try {
@@ -715,7 +707,8 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
           res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
         }
         if (chunk.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-          const metadataChunks = chunk.candidates[0].groundingMetadata.groundingChunks;
+          const metadataChunks =
+            chunk.candidates[0].groundingMetadata.groundingChunks;
           metadataChunks.forEach((metaChunk: any) => {
             if (metaChunk.web?.uri && metaChunk.web?.title) {
               const key = metaChunk.web.uri;
@@ -736,7 +729,9 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
       }
       res.end();
     } catch (genError: any) {
-      res.write(`data: ${JSON.stringify({ error: formatGeminiError(genError) })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ error: formatGeminiError(genError) })}\n\n`,
+      );
       res.end();
     }
   } catch (error: any) {
@@ -801,7 +796,8 @@ app.post("/api/extract-document", async (req, res) => {
     const token = authHeader.split("Bearer ")[1];
     await admin.auth().verifyIdToken(token);
 
-    const { documents, base64Data, mimeType, customApiKey, model, textData } = req.body;
+    const { documents, base64Data, mimeType, customApiKey, model, textData } =
+      req.body;
     if (!customApiKey)
       return res.status(403).json({ error: "API key required" });
 
@@ -828,9 +824,14 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
     const parts: any[] = [{ text: prompt }];
 
     if (textData) {
-      parts[0].text = prompt + "\n\n--- SOURCE TEXT TO EXTRACT FROM ---\n" + textData;
+      parts[0].text =
+        prompt + "\n\n--- SOURCE TEXT TO EXTRACT FROM ---\n" + textData;
     } else if (documents && Array.isArray(documents)) {
-      parts.push(...documents.map((doc: any) => ({ inlineData: { data: doc.base64Data, mimeType: doc.mimeType } })));
+      parts.push(
+        ...documents.map((doc: any) => ({
+          inlineData: { data: doc.base64Data, mimeType: doc.mimeType },
+        })),
+      );
     } else if (base64Data && mimeType) {
       parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
     }
@@ -876,9 +877,20 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    text: { type: Type.STRING, description: "ONLY the idiom phrase itself. Do NOT include the meaning or hyphen/colon." },
-                    meaning: { type: Type.STRING, description: "The explanation or definition of the phrase." },
-                    example: { type: Type.STRING, description: "An example sentence if available." },
+                    text: {
+                      type: Type.STRING,
+                      description:
+                        "ONLY the idiom phrase itself. Do NOT include the meaning or hyphen/colon.",
+                    },
+                    meaning: {
+                      type: Type.STRING,
+                      description:
+                        "The explanation or definition of the phrase.",
+                    },
+                    example: {
+                      type: Type.STRING,
+                      description: "An example sentence if available.",
+                    },
                   },
                 },
               },
@@ -887,9 +899,20 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    text: { type: Type.STRING, description: "ONLY the phrasal verb itself. Do NOT include the meaning." },
-                    meaning: { type: Type.STRING, description: "The explanation or definition of the phrasal verb." },
-                    example: { type: Type.STRING, description: "An example sentence if available." },
+                    text: {
+                      type: Type.STRING,
+                      description:
+                        "ONLY the phrasal verb itself. Do NOT include the meaning.",
+                    },
+                    meaning: {
+                      type: Type.STRING,
+                      description:
+                        "The explanation or definition of the phrasal verb.",
+                    },
+                    example: {
+                      type: Type.STRING,
+                      description: "An example sentence if available.",
+                    },
                   },
                 },
               },
@@ -898,9 +921,19 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    text: { type: Type.STRING, description: "ONLY the one word substitution term. Do NOT include its meaning." },
-                    meaning: { type: Type.STRING, description: "The explanation or definition." },
-                    example: { type: Type.STRING, description: "An example sentence if available." },
+                    text: {
+                      type: Type.STRING,
+                      description:
+                        "ONLY the one word substitution term. Do NOT include its meaning.",
+                    },
+                    meaning: {
+                      type: Type.STRING,
+                      description: "The explanation or definition.",
+                    },
+                    example: {
+                      type: Type.STRING,
+                      description: "An example sentence if available.",
+                    },
                   },
                 },
               },
@@ -930,7 +963,11 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
 
 import { Request, Response, NextFunction } from "express";
 
-const requireAdminStorageAuth = async (req: Request, res: Response, next: NextFunction) => {
+const requireAdminStorageAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -940,8 +977,13 @@ const requireAdminStorageAuth = async (req: Request, res: Response, next: NextFu
     const decodedToken = await admin.auth().verifyIdToken(token);
 
     // Validate if Cloudinary is configured
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_SECRET) {
-      return res.status(500).json({ error: "Cloudinary configuration is missing on server" });
+    if (
+      !process.env.CLOUDINARY_CLOUD_NAME ||
+      !process.env.CLOUDINARY_API_SECRET
+    ) {
+      return res
+        .status(500)
+        .json({ error: "Cloudinary configuration is missing on server" });
     }
 
     // We require email match for admin
@@ -957,97 +999,158 @@ const requireAdminStorageAuth = async (req: Request, res: Response, next: NextFu
   }
 };
 
-app.post("/api/cloudinary/createFolder", requireAdminStorageAuth, async (req, res) => {
-  try {
-    const { folderPath } = req.body;
-    if (!folderPath) return res.status(400).json({ error: "Missing folderPath" });
+app.post(
+  "/api/cloudinary/createFolder",
+  requireAdminStorageAuth,
+  async (req, res) => {
+    try {
+      const { folderPath } = req.body;
+      if (!folderPath)
+        return res.status(400).json({ error: "Missing folderPath" });
 
-    const result = await cloudinary.api.create_folder(folderPath);
-    res.json({ success: true, result });
-  } catch (error: any) {
-    console.error("Cloudinary create folder error:", error);
-    res.status(500).json({ error: error.message || "Failed to create folder" });
-  }
-});
-
-app.post("/api/cloudinary/generateSignature", requireAdminStorageAuth, async (req, res) => {
-  try {
-    const { paramsToSign } = req.body; 
-    const timestamp = Math.round(new Date().getTime() / 1000);
-    
-    // Mix in timestamp
-    const signature = cloudinary.utils.api_sign_request({ ...paramsToSign, timestamp }, process.env.CLOUDINARY_API_SECRET!);
-
-    res.json({ signature, timestamp, cloudName: process.env.CLOUDINARY_CLOUD_NAME, apiKey: process.env.CLOUDINARY_API_KEY });
-  } catch (error: any) {
-    console.error("Cloudinary generate signature error:", error);
-    res.status(500).json({ error: error.message || "Failed to generate signature" });
-  }
-});
-
-app.post("/api/cloudinary/deleteResource", requireAdminStorageAuth, async (req, res) => {
-  try {
-    const decodedToken = (req as any).user;
-
-    const { public_id, folderPath, resourceType, cloudResourceType = 'image' } = req.body; // resourceType: 'file' or 'folder'
-
-    // Security verify: strict owner check
-    if (decodedToken.email !== "mrityunjoyk29@gmail.com") {
-      return res.status(403).json({ error: "Forbidden: Only owners can delete resources via API" });
+      const result = await cloudinary.api.create_folder(folderPath);
+      res.json({ success: true, result });
+    } catch (error: any) {
+      console.error("Cloudinary create folder error:", error);
+      res
+        .status(500)
+        .json({ error: error.message || "Failed to create folder" });
     }
+  },
+);
 
-    let result;
-    if (resourceType === 'folder' && folderPath) {
-      // First wipe all files inside the folder across all resource types
-      try {
-        await Promise.all([
-          cloudinary.api.delete_resources_by_prefix(folderPath, { resource_type: 'image' }),
-          cloudinary.api.delete_resources_by_prefix(folderPath, { resource_type: 'video' }),
-          cloudinary.api.delete_resources_by_prefix(folderPath, { resource_type: 'raw' })
-        ]);
-      } catch (err) {
-        console.warn("Failed to delete some resources by prefix, folder might not be completely empty:", err);
-      }
-      
-      result = await cloudinary.api.delete_folder(folderPath);
-      
-      // Simulate webhook locally if Cloudinary fails to trigger it for folder deletes, 
-      // ensuring our Step 1 cascade still runs.
-      try {
-        const webhookUrl = `http://127.0.0.1:3000/api/cloudinary/webhook`;
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            notification_type: 'delete_folder',
-            folder: folderPath
-          })
-        }).catch(() => {});
-      } catch (e) {}
-    } else if (resourceType === 'file' && public_id) {
-      const webhookUrl = `https://${req.get('host')}/api/cloudinary/webhook`;
-      result = await cloudinary.uploader.destroy(public_id, { resource_type: cloudResourceType, notification_url: webhookUrl } as any);
-      if (result.result !== 'ok' && cloudResourceType !== 'raw') {
-        console.warn(`Destroy returned ${result.result} with ${cloudResourceType}, retrying with 'raw'`);
-        result = await cloudinary.uploader.destroy(public_id, { resource_type: 'raw', notification_url: webhookUrl } as any);
-      }
-      if (result.result !== 'ok' && cloudResourceType !== 'video') {
-         console.warn(`Destroy returned ${result.result} with 'raw', retrying with 'video'`);
-         result = await cloudinary.uploader.destroy(public_id, { resource_type: 'video', notification_url: webhookUrl } as any);
-      }
-      if (result.result !== 'ok' && cloudResourceType !== 'image') {
-         result = await cloudinary.uploader.destroy(public_id, { resource_type: 'image', notification_url: webhookUrl } as any);
-      }
-    } else {
-      return res.status(400).json({ error: "Invalid parameters for deletion" });
+app.post(
+  "/api/cloudinary/generateSignature",
+  requireAdminStorageAuth,
+  async (req, res) => {
+    try {
+      const { paramsToSign } = req.body;
+      const timestamp = Math.round(new Date().getTime() / 1000);
+
+      // Mix in timestamp
+      const signature = cloudinary.utils.api_sign_request(
+        { ...paramsToSign, timestamp },
+        process.env.CLOUDINARY_API_SECRET!,
+      );
+
+      res.json({
+        signature,
+        timestamp,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+      });
+    } catch (error: any) {
+      console.error("Cloudinary generate signature error:", error);
+      res
+        .status(500)
+        .json({ error: error.message || "Failed to generate signature" });
     }
+  },
+);
 
-    res.json({ success: true, result });
-  } catch (error: any) {
-    console.error("Cloudinary delete resource error:", error);
-    res.status(500).json({ error: error.message || "Failed to delete resource" });
-  }
-});
+app.post(
+  "/api/cloudinary/deleteResource",
+  requireAdminStorageAuth,
+  async (req, res) => {
+    try {
+      const decodedToken = (req as any).user;
+
+      const {
+        public_id,
+        folderPath,
+        resourceType,
+        cloudResourceType = "image",
+      } = req.body; // resourceType: 'file' or 'folder'
+
+      // Security verify: strict owner check
+      if (decodedToken.email !== "mrityunjoyk29@gmail.com") {
+        return res.status(403).json({
+          error: "Forbidden: Only owners can delete resources via API",
+        });
+      }
+
+      let result;
+      if (resourceType === "folder" && folderPath) {
+        // First wipe all files inside the folder across all resource types
+        try {
+          await Promise.all([
+            cloudinary.api.delete_resources_by_prefix(folderPath, {
+              resource_type: "image",
+            }),
+            cloudinary.api.delete_resources_by_prefix(folderPath, {
+              resource_type: "video",
+            }),
+            cloudinary.api.delete_resources_by_prefix(folderPath, {
+              resource_type: "raw",
+            }),
+          ]);
+        } catch (err) {
+          console.warn(
+            "Failed to delete some resources by prefix, folder might not be completely empty:",
+            err,
+          );
+        }
+
+        result = await cloudinary.api.delete_folder(folderPath);
+
+        // Simulate webhook locally if Cloudinary fails to trigger it for folder deletes,
+        // ensuring our Step 1 cascade still runs.
+        try {
+          const webhookUrl = `http://127.0.0.1:3000/api/cloudinary/webhook`;
+          await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              notification_type: "delete_folder",
+              folder: folderPath,
+            }),
+          }).catch(() => {});
+        } catch (e) {}
+      } else if (resourceType === "file" && public_id) {
+        const webhookUrl = `https://${req.get("host")}/api/cloudinary/webhook`;
+        result = await cloudinary.uploader.destroy(public_id, {
+          resource_type: cloudResourceType,
+          notification_url: webhookUrl,
+        } as any);
+        if (result.result !== "ok" && cloudResourceType !== "raw") {
+          console.warn(
+            `Destroy returned ${result.result} with ${cloudResourceType}, retrying with 'raw'`,
+          );
+          result = await cloudinary.uploader.destroy(public_id, {
+            resource_type: "raw",
+            notification_url: webhookUrl,
+          } as any);
+        }
+        if (result.result !== "ok" && cloudResourceType !== "video") {
+          console.warn(
+            `Destroy returned ${result.result} with 'raw', retrying with 'video'`,
+          );
+          result = await cloudinary.uploader.destroy(public_id, {
+            resource_type: "video",
+            notification_url: webhookUrl,
+          } as any);
+        }
+        if (result.result !== "ok" && cloudResourceType !== "image") {
+          result = await cloudinary.uploader.destroy(public_id, {
+            resource_type: "image",
+            notification_url: webhookUrl,
+          } as any);
+        }
+      } else {
+        return res
+          .status(400)
+          .json({ error: "Invalid parameters for deletion" });
+      }
+
+      res.json({ success: true, result });
+    } catch (error: any) {
+      console.error("Cloudinary delete resource error:", error);
+      res
+        .status(500)
+        .json({ error: error.message || "Failed to delete resource" });
+    }
+  },
+);
 
 app.post("/api/cloudinary/webhook", async (req, res) => {
   try {
@@ -1055,21 +1158,25 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
     const signature = req.headers["x-cld-signature"] as string;
 
     if (!timestamp || !signature) {
-      return res.status(401).json({ error: "Missing Cloudinary signature headers" });
+      return res
+        .status(401)
+        .json({ error: "Missing Cloudinary signature headers" });
     }
 
     if (!process.env.CLOUDINARY_API_SECRET) {
-      return res.status(500).json({ error: "Cloudinary configuration is missing on server" });
+      return res
+        .status(500)
+        .json({ error: "Cloudinary configuration is missing on server" });
     }
 
     // Verify Signature
     const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-    
+
     // Cloudinary SDK method for webhook signature validation
     const isValid = cloudinary.utils.verifyNotificationSignature(
       rawBody,
       Number(timestamp),
-      signature
+      signature,
     );
 
     if (!isValid) {
@@ -1079,9 +1186,9 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
           publicId: "failed validation",
           timestamp: null,
           status: "Failed Signature",
-          rawPayload: "Signature validation failed"
+          rawPayload: "Signature validation failed",
         });
-      } catch(e) {}
+      } catch (e) {}
       return res.status(401).json({ error: "Invalid signature" });
     }
 
@@ -1091,18 +1198,39 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
     let folderPaths: string[] = [];
 
     if (resources && Array.isArray(resources) && resources.length > 0) {
-       publicIds = resources.map((r: any) => r.public_id).filter(Boolean);
+      publicIds = resources.map((r: any) => r.public_id).filter(Boolean);
     } else if (req.body.public_ids && Array.isArray(req.body.public_ids)) {
-       publicIds = [...req.body.public_ids];
+      publicIds = [...req.body.public_ids];
     } else if (req.body.folder) {
-       folderPaths = [req.body.folder];
+      folderPaths = [req.body.folder];
     } else if (req.body.public_id) {
-       publicIds = [req.body.public_id];
+      publicIds = [req.body.public_id];
     }
 
     const mergedIds = [...publicIds, ...folderPaths];
 
-    if ((notification_type === "delete" || notification_type === "delete_folder") && mergedIds.length > 0) {
+    // STEP 1: Write to log first. This ensures we have a permanent record even if the sweep below times out or crashes.
+    try {
+      const statusStr = req.body.status || "success";
+
+      await writeWebhookLog({
+        notificationType: notification_type || "unknown",
+        publicId: mergedIds.length > 0 ? mergedIds.join(", ") : "",
+        publicIds: mergedIds,
+        timestamp: null,
+        status: statusStr,
+        rawPayload: JSON.stringify(req.body),
+      });
+    } catch (dbError) {
+      console.error("Failed to write to cloudinary_webhook_logs", dbError);
+    }
+
+    // STEP 2: Execute the heavy Firestore practice_files sweeps
+    if (
+      (notification_type === "delete" ||
+        notification_type === "delete_folder") &&
+      mergedIds.length > 0
+    ) {
       console.log("Cloudinary webhook received for deletes:", mergedIds);
       try {
         if (publicIds.length > 0) {
@@ -1113,13 +1241,16 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
 
           const chunkPromises = chunks.map(async (chunk) => {
             if (chunk.length === 0) return;
-            const snapshot = await getAdminDb().collection("practice_files")
+            const snapshot = await getAdminDb()
+              .collection("practice_files")
               .where("fileMeta.cloudPublicId", "in", chunk)
               .get();
-            
+
             if (!snapshot.empty) {
-              console.log(`Found ${snapshot.docs.length} practice_files matching chunk. Deleting...`);
-              const deletePromises = snapshot.docs.map(docSnap => {
+              console.log(
+                `Found ${snapshot.docs.length} practice_files matching chunk. Deleting...`,
+              );
+              const deletePromises = snapshot.docs.map((docSnap) => {
                 console.log(`Deleted Firestore doc ${docSnap.id}`);
                 return docSnap.ref.delete();
               });
@@ -1133,14 +1264,17 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
         if (folderPaths.length > 0) {
           const folderPromises = folderPaths.map(async (folderPath) => {
             if (!folderPath) return;
-            const snapshot = await getAdminDb().collection("practice_files")
+            const snapshot = await getAdminDb()
+              .collection("practice_files")
               .where("fileMeta.cloudPublicId", ">=", folderPath + "/")
               .where("fileMeta.cloudPublicId", "<=", folderPath + "/\uf8ff")
               .get();
-            
+
             if (!snapshot.empty) {
-              console.log(`Found ${snapshot.docs.length} practice_files in folder ${folderPath}. Deleting...`);
-              const deletePromises = snapshot.docs.map(docSnap => {
+              console.log(
+                `Found ${snapshot.docs.length} practice_files in folder ${folderPath}. Deleting...`,
+              );
+              const deletePromises = snapshot.docs.map((docSnap) => {
                 console.log(`Deleted Firestore doc cascade ${docSnap.id}`);
                 return docSnap.ref.delete();
               });
@@ -1154,26 +1288,61 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
         console.error("Error sweeping practice_files in webhook:", err);
       }
     }
-    
-    try {
-      const statusStr = req.body.status || "success";
 
-      await writeWebhookLog({
-        notificationType: notification_type || "unknown",
-        publicId: mergedIds.length > 0 ? mergedIds.join(", ") : "",
-        publicIds: mergedIds,
-        timestamp: null,
-        status: statusStr,
-        rawPayload: JSON.stringify(req.body)
-      });
-    } catch (dbError) {
-      console.error("Failed to write to cloudinary_webhook_logs", dbError);
-    }
+    // We already logged the event before.
 
     res.json({ success: true });
   } catch (error: any) {
     console.error("Cloudinary webhook error:", error);
-    res.status(500).json({ error: error.message || "Failed to process webhook" });
+  }
+});
+
+app.post("/api/webhooks/clear", async (req, res) => {
+  try {
+    const { logIds } = req.body;
+    if (!logIds || !Array.isArray(logIds) || logIds.length === 0) {
+      return res.json({ success: true, message: "No logs to clear" });
+    }
+
+    const adminDb = getAdminDb();
+
+    // Chunk array into max 500 for batch commits
+    const chunkArray = (arr: any[], size: number) =>
+      Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+        arr.slice(i * size, i * size + size),
+      );
+
+    const chunks = chunkArray(logIds, 500);
+
+    for (const chunk of chunks) {
+      const batch = adminDb.batch();
+      chunk.forEach((id: string) => {
+        batch.set(
+          adminDb.collection("cloudinary_webhook_logs").doc(id),
+          {
+            isDeleted: true,
+          },
+          { merge: true },
+        );
+      });
+      await batch.commit();
+    }
+
+    res.json({ success: true, count: logIds.length });
+  } catch (error: any) {
+    if (error.message && error.message.includes("PERMISSION_DENIED")) {
+      // In preview environments without an explicit service account key, ADC might lack permissions.
+      // We gracefully instruct the client to use the client-side fallback.
+      return res
+        .status(403)
+        .json({
+          error: "ADC restrictions in preview environment, use client fallback",
+        });
+    }
+    console.error("Failed to clear webhook logs:", error);
+    res
+      .status(500)
+      .json({ error: error.message || "Failed to clear webhook logs" });
   }
 });
 

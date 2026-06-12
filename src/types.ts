@@ -111,9 +111,8 @@ export interface ExamCategory {
   phases?: string[];
   scopes?: string[];
   platforms?: string[];
-  subjects?: { id: string; name: string; short?: string, phases?: string[] }[];
+  subjects?: { id: string; name: string; short?: string; phases?: string[] }[];
 }
-
 
 export interface CommunityLeaderboardProps {
   Trophy: any;
@@ -132,7 +131,7 @@ export interface CommunityLeaderboardProps {
   db: any /* Firebase */;
   loadingTop: boolean;
   handleSort: (key: string) => void;
-  subjects: { id: string; name: string; short?: string, phases?: string[] }[];
+  subjects: { id: string; name: string; short?: string; phases?: string[] }[];
   sortedLeaderboard: UserProfile[];
   parseLocalDate: (dateString: string) => Date;
   onUserClick: (user: UserProfile) => void;
@@ -149,7 +148,7 @@ export interface CommunityFeedProps {
   feedSort: { key: string | null; direction: "asc" | "desc" | null };
   handleFeedSort: (key: string) => void;
   getFeedSortConfig: (key: string) => "⬇" | "⬆" | null;
-  subjects: { id: string; name: string; short?: string, phases?: string[] }[];
+  subjects: { id: string; name: string; short?: string; phases?: string[] }[];
   sortedLeaderboard: UserProfile[];
   onUserClick: (user: UserProfile) => void;
   Flame: any;
@@ -193,7 +192,9 @@ export interface CommunityChatProps {
   setShowPollMaker: (val: boolean) => void;
   setPollQuestion: (val: string) => void;
   setPollIsMulti: (val: boolean) => void;
-  setPollOptions: (options: { id: string; text: string; isCorrect: boolean }[]) => void;
+  setPollOptions: (
+    options: { id: string; text: string; isCorrect: boolean }[],
+  ) => void;
   Pencil: any;
   isAdmin: boolean;
   handleDeleteMessage: (msgId: string, authorId: string) => Promise<void>;
@@ -231,7 +232,7 @@ export interface PracticeFile {
   folderId: string;
   subjectId?: string; // Added for recycle bin querying
   name: string;
-  type: 'firebase_file' | 'external_link';
+  type: "firebase_file" | "external_link";
   fileMeta: {
     url: string;
     sizeBytes?: number;
@@ -242,7 +243,7 @@ export interface PracticeFile {
     channelName: string;
     channelLink: string;
   };
-  difficulty?: 'Easy' | 'Moderate' | 'Hard';
+  difficulty?: "Easy" | "Moderate" | "Hard";
   isHidden?: boolean;
   createdAt: any;
   isDeleted?: boolean;
@@ -276,9 +277,10 @@ export interface LearningUserProgress {
 
 export interface CloudinaryWebhookLog {
   id: string;
+  isDeleted?: boolean;
   notificationType: string;
   publicId?: string;
   timestamp: any;
-  status: 'success' | 'failure';
+  status: "success" | "failure";
   rawPayload: string;
 }
