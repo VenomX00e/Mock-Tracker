@@ -281,6 +281,7 @@ export interface CloudinaryWebhookLog {
   notificationType: string;
   publicId?: string;
   timestamp: any;
-  status: "success" | "failure";
+  createdAt?: any;
+  status: string;
   rawPayload: string;
 }

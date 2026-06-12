@@ -169,7 +169,13 @@ export function AdminWebhooksTab() {
                             ? new Date(
                                 log.timestamp.seconds * 1000,
                               ).toLocaleString()
-                            : "Just now"}
+                            : typeof log.timestamp === "string"
+                              ? new Date(log.timestamp).toLocaleString()
+                              : log.createdAt?.seconds
+                                ? new Date(
+                                    log.createdAt.seconds * 1000,
+                                  ).toLocaleString()
+                                : "Just now"}
                         </td>
                         <td className="p-4 text-sm font-mono text-slate-800 dark:text-slate-300 break-all max-w-[200px]">
                           {log.publicId || "N/A"}
