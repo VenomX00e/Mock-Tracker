@@ -131,6 +131,33 @@
         "latestVersion": { "type": "string" }
       },
       "required": ["latestVersion"]
+    },
+    "SearchApiLog": {
+      "title": "SearchApiLog",
+      "description": "Logs of external search API calls",
+      "type": "object",
+      "properties": {
+        "apiName": { "type": "string" },
+        "query": { "type": "string" },
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "errorMessage": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["apiName", "query", "status", "createdAt"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Global settings document",
+      "type": "object",
+      "properties": {
+        "searchLogAutoDeleteDays": { "type": "number" },
+        "telegramLink": { "type": "string" },
+        "telegramText": { "type": "string" },
+        "enableAiTutor": { "type": "boolean" },
+        "enableVocabulary": { "type": "boolean" },
+        "enableSpeedMath": { "type": "boolean" },
+        "enablePracticeLibrary": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
@@ -153,6 +180,14 @@
     "metadata/release": {
       "schema": { "$ref": "#/entities/ReleaseMetadata" },
       "description": "Pointer to the latest app release version"
+    },
+    "search_api_logs/{logId}": {
+      "schema": { "$ref": "#/entities/SearchApiLog" },
+      "description": "Logs for search API usage"
+    },
+    "system/settings": {
+      "schema": { "$ref": "#/entities/SystemSettings" },
+      "description": "Global settings for the application"
     }
   }
 }

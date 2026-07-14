@@ -167,6 +167,16 @@ service cloud.firestore {
         && (!data.keys().hasAny(['awardedBadge']) || data.awardedBadge is bool);
     }
 
+    function isValidSearchApiLog(data) {
+      return data.keys().hasAll(['apiName', 'query', 'status', 'createdAt'])
+        && data.keys().size() >= 4 && data.keys().size() <= 5
+        && data.apiName is string && data.apiName.size() <= 100
+        && data.query is string && data.query.size() <= 1000
+        && data.status is string && data.status in ['success', 'error']
+        && data.createdAt is timestamp
+        && (!data.keys().hasAny(['errorMessage']) || (data.errorMessage is string && data.errorMessage.size() <= 2000));
+    }
+
     match /categories/{categoryId} {
       allow read: if true;
       allow write: if isAnyAdmin();
@@ -326,6 +336,13 @@ service cloud.firestore {
     match /cloudinary_webhook_logs/{logId} {
       allow read: if request.auth != null && request.auth.token.email == "mrityunjoyk29@gmail.com";
       allow write: if request.auth != null && request.auth.token.email == "mrityunjoyk29@gmail.com";
+    }
+
+    match /search_api_logs/{logId} {
+      allow read: if isAnyAdmin();
+      allow create: if isAnyAdmin() && isValidSearchApiLog(incoming()) && incoming().createdAt == request.time;
+      allow update: if isAnyAdmin() && isValidSearchApiLog(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'errorMessage', 'apiName', 'query']) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt);
+      allow delete: if isAnyAdmin();
     }
 
     match /metadata/release {

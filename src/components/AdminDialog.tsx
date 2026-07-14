@@ -39,6 +39,7 @@ import { AdminSettingsTab } from "./admin/AdminSettingsTab";
 import { AdminFeaturesTab } from "./admin/AdminFeaturesTab";
 import { AdminApiKeysTab } from "./admin/AdminApiKeysTab";
 import { AdminWebhooksTab } from "./admin/AdminWebhooksTab";
+import { AdminSearchLogsTab } from "./admin/AdminSearchLogsTab";
 import { AdminAdminsTab } from "./admin/AdminAdminsTab";
 import { AdminLearningTab } from "./admin/AdminLearningTab";
 import { AdminSidebarNav } from "./admin/AdminSidebarNav";
@@ -69,7 +70,8 @@ interface AdminDialogProps {
     | "learning"
     | "keys"
     | "admins"
-    | "webhooks";
+    | "webhooks"
+    | "search-logs";
   editNoticeData?: any;
   editCountdownData?: any;
   asPage?: boolean;
@@ -106,6 +108,7 @@ export default function AdminDialog({
     | "quotes"
     | "keys"
     | "webhooks"
+    | "search-logs"
   >(initialTab as any);
   const [adminCategoryScope, setAdminCategoryScope] = useState<string | null>(
     !isOwner && currentCategory ? currentCategory : null,
@@ -570,6 +573,10 @@ export default function AdminDialog({
 
           {activeTab === "webhooks" && isOwner && (
             <AdminWebhooksTab />
+          )}
+          
+          {activeTab === "search-logs" && isOwner && (
+            <AdminSearchLogsTab />
           )}
         </div>
       </div>

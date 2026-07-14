@@ -39,6 +39,27 @@ const getAdminDb = () => {
     : admin.firestore();
 };
 
+const customWebSearchDeclaration = {
+  name: "custom_web_search",
+  description: "Search the web for information using a custom web search tool.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      query: {
+        type: Type.STRING,
+        description: "The optimized search query.",
+      },
+      search_type: {
+        type: Type.STRING,
+        description: "The type of search.",
+        enum: ["news_and_facts", "semantic_concept", "general"],
+      },
+    },
+    required: ["query", "search_type"],
+  },
+};
+
+const inMemorySearchLogs: any[] = [];
 const writeWebhookLog = async (data: any) => {
   try {
     const timestamp = new Date().toISOString();
@@ -49,8 +70,13 @@ const writeWebhookLog = async (data: any) => {
         timestamp: timestamp,
         createdAt: admin.firestore.FieldValue.serverTimestamp(), // Keep accurate db time
       });
-  } catch (error) {
-    console.error("Failed to write webhook log to Firestore:", error);
+  } catch (error: any) {
+    const errStr = error ? String(error) + (error.message || "") + (error.details || "") : "";
+    if (error.code === 7 || error.code === 5 || errStr.includes("PERMISSION_DENIED") || errStr.includes("NOT_FOUND") || errStr.includes("ADC restrictions")) {
+      // Ignore
+    } else {
+      console.error("Failed to write webhook log to Firestore:", error);
+    }
   }
 };
 
@@ -117,6 +143,42 @@ const fetchWithRetry = async (
 };
 
 // Helper to format Gemini err
+import { Request, Response, NextFunction } from "express";
+
+const requireAdminAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+    const decodedToken = await admin.auth().verifyIdToken(token);
+
+    if (decodedToken.email === "mrityunjoyk29@gmail.com") {
+      (req as any).user = decodedToken;
+      return next();
+    }
+
+    const userDoc = await getAdminDb().collection("users").doc(decodedToken.uid).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      if (userData?.role === "admin" || userData?.role === "owner") {
+        (req as any).user = decodedToken;
+        return next();
+      }
+    }
+
+    return res.status(403).json({ error: "Forbidden: Requires admin privileges" });
+  } catch (error: any) {
+    console.error("Admin Auth Middleware Error:", error);
+    res.status(401).json({ error: "Unauthorized" });
+  }
+};
+
 const formatGeminiError = (error: any) => {
   try {
     const errStr = error.message || String(error);
@@ -177,7 +239,8 @@ app.post("/api/extract-mock", async (req, res) => {
 
     const contents: any[] = [{ text: prompt }];
     for (const img of images) {
-      contents.push({
+      
+          contents.push({
         inlineData: { data: img.base64, mimeType: img.mimeType },
       });
     }
@@ -270,7 +333,8 @@ app.post("/api/extract-scorecard", async (req, res) => {
 
     const contents: any[] = [{ text: prompt }];
     for (const img of images) {
-      contents.push({
+      
+          contents.push({
         inlineData: { data: img.base64, mimeType: img.mimeType },
       });
     }
@@ -488,7 +552,7 @@ app.post("/api/learning-chat", async (req, res) => {
       });
     }
 
-    const { messages, customApiKey, model, useWebSearch, chatMode } = req.body;
+    const { messages, customApiKey, model, useWebSearch, chatMode, useCustomWebSearch } = req.body;
 
     if (!customApiKey) {
       return res.status(403).json({
@@ -514,8 +578,9 @@ You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do N
 `;
     }
 
-    const systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
+    let systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
 Provide concise, clear, and educational responses. If explaining complex topics, use analogies. ${modeInstruction}
+You have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.
 
 CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
 - DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
@@ -554,12 +619,67 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
       };
     });
 
+    if (useCustomWebSearch) {
+      systemInstruction += "\n\nYou have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.";
+    }
+
+    const now = new Date();
+    const istDateTime = now.toLocaleString("en-IN", { 
+      timeZone: "Asia/Kolkata", 
+      dateStyle: "full", 
+      timeStyle: "long" 
+    });
+    systemInstruction += `\n\nImportant Context: The current date and time is ${istDateTime} (Indian Standard Time). Please use this as the absolute reference for words like "today", "tomorrow", or "recent".`;
+
+
+
+
+
     const config: any = {
       systemInstruction,
     };
+    
+    config.tools = [];
 
     if (useWebSearch) {
-      config.tools = [{ googleSearch: {} }];
+      config.tools.push({ googleSearch: {} });
+    }
+    
+    if (useCustomWebSearch) {
+      config.tools.push({
+        functionDeclarations: [
+
+          {
+            name: "custom_web_search",
+            description: "Search the web for information",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                query: {
+                  type: "STRING",
+                  description: "The optimized search query"
+                },
+                search_type: {
+                  type: "STRING",
+                  description: "Category of search",
+                  enum: ["news_and_facts", "semantic_concept", "general"]
+                }
+              },
+              required: ["query", "search_type"]
+            }
+          }
+        ]
+      });
+    }
+    
+    if (config.tools.length === 0) {
+      delete config.tools;
+    }
+
+    if (useCustomWebSearch) {
+      config.tools = config.tools || [];
+      config.tools.push({ functionDeclarations: [customWebSearchDeclaration] });
+
     }
 
     const response = await fetchWithRetry(() =>
@@ -593,6 +713,138 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
   }
 });
 
+
+// --- Custom Web Search Logic ---
+async function fetchTavily(query: string) {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) throw new Error("Tavily API Key missing");
+  const response = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey, query, search_depth: "basic" })
+  });
+  if (!response.ok) throw new Error(`Tavily error: ${response.status}`);
+  const data = await response.json();
+  return (data.results || []).map((r: any) => ({ title: r.title, content: r.content, url: r.url }));
+}
+
+async function fetchExa(query: string) {
+  const apiKey = process.env.EXA_API_KEY;
+  if (!apiKey) throw new Error("Exa API Key missing");
+  const response = await fetch("https://api.exa.ai/search", {
+    method: "POST",
+    headers: { 
+      "Content-Type": "application/json",
+      "x-api-key": apiKey
+    },
+    body: JSON.stringify({ query, numResults: 3, useAutoprompt: true, contents: { text: true } })
+  });
+  if (!response.ok) throw new Error(`Exa error: ${response.status}`);
+  const data = await response.json();
+  return (data.results || []).map((r: any) => ({ title: r.title, content: r.text, url: r.url }));
+}
+
+async function fetchTinyfish(query: string) {
+  const apiKey = process.env.TINYFISH_API_KEY;
+  if (!apiKey) throw new Error("Tinyfish API Key missing");
+  const response = await fetch("https://api.tinyfish.io/v1/search?q=" + encodeURIComponent(query), {
+    headers: { "Authorization": `Bearer ${apiKey}` }
+  });
+  if (!response.ok) throw new Error(`Tinyfish error: ${response.status}`);
+  const data = await response.json();
+  return (data.results || data.data || []).slice(0, 3).map((r: any) => ({
+    title: r.title || "Search Result",
+    content: r.content || r.snippet || r.text || "",
+    url: r.url || r.link || ""
+  }));
+}
+
+async function logSearchAttempt(apiName: string, query: string, status: 'success' | 'error', errorMessage?: string) {
+  try {
+    const db = getAdminDb();
+    await db.collection('search_api_logs').add({
+      apiName,
+      query,
+      status,
+      ...(errorMessage ? { errorMessage } : {}),
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err: any) {
+    const errStr = err ? String(err) + (err.message || "") + (err.details || "") : "";
+    if (err.code === 7 || err.code === 5 || errStr.includes("PERMISSION_DENIED") || errStr.includes("NOT_FOUND") || errStr.includes("ADC restrictions")) {
+      // Fallback to in-memory logs for preview environments
+      inMemorySearchLogs.unshift({
+        id: "mem-" + Date.now() + Math.random().toString(36).substring(7),
+        apiName,
+        query,
+        status,
+        ...(errorMessage ? { errorMessage } : {}),
+        createdAt: new Date().toISOString()
+      });
+      if (inMemorySearchLogs.length > 100) inMemorySearchLogs.pop();
+    } else {
+      console.error(`Failed to write search log to Firestore for ${apiName}:`, err);
+    }
+  }
+}
+
+async function performCustomSearch(query: string, searchType: string) {
+  let results = null;
+  
+  const tryTavily = async () => { 
+    console.log("Trying Tavily..."); 
+    try {
+      const res = await fetchTavily(query);
+      await logSearchAttempt("Tavily", query, "success");
+      return res;
+    } catch (e: any) {
+      await logSearchAttempt("Tavily", query, "error", e.message || String(e));
+      throw e;
+    }
+  };
+  const tryExa = async () => { 
+    console.log("Trying Exa..."); 
+    try {
+      const res = await fetchExa(query);
+      await logSearchAttempt("Exa", query, "success");
+      return res;
+    } catch (e: any) {
+      await logSearchAttempt("Exa", query, "error", e.message || String(e));
+      throw e;
+    }
+  };
+  const tryTinyfish = async () => { 
+    console.log("Trying Tinyfish..."); 
+    try {
+      const res = await fetchTinyfish(query);
+      await logSearchAttempt("Tinyfish", query, "success");
+      return res;
+    } catch (e: any) {
+      await logSearchAttempt("Tinyfish", query, "error", e.message || String(e));
+      throw e;
+    }
+  };
+
+  try {
+    if (searchType === "news_and_facts") {
+      try { results = await tryTavily(); } 
+      catch (e) { console.error("Tavily failed:", e); try { results = await tryTinyfish(); } catch(e2) { console.error("Tinyfish failed:", e2); results = await tryExa(); } }
+    } else if (searchType === "semantic_concept") {
+      try { results = await tryExa(); } 
+      catch (e) { console.error("Exa failed:", e); try { results = await tryTavily(); } catch(e2) { console.error("Tavily failed:", e2); results = await tryTinyfish(); } }
+    } else { // general
+      try { results = await tryTinyfish(); } 
+      catch (e) { console.error("Tinyfish failed:", e); try { results = await tryTavily(); } catch(e2) { console.error("Tavily failed:", e2); results = await tryExa(); } }
+    }
+  } catch (finalError) {
+    console.error("All search providers failed for query:", query, finalError);
+    return { error: "Failed to retrieve search results." };
+  }
+  
+  return { results };
+}
+// --- End Custom Web Search Logic ---
+
 app.post("/api/tutor-chat-stream", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -612,7 +864,7 @@ app.post("/api/tutor-chat-stream", async (req, res) => {
       });
     }
 
-    const { messages, customApiKey, model, useWebSearch, chatMode } = req.body;
+    const { messages, customApiKey, model, useWebSearch, useCustomWebSearch, chatMode } = req.body;
 
     if (!customApiKey) {
       return res.status(403).json({
@@ -638,7 +890,7 @@ You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do N
 `;
     }
 
-    const systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
+    let systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
 Provide concise, clear, and educational responses. If explaining complex topics, use analogies. ${modeInstruction}
 
 CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
@@ -678,12 +930,59 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
       };
     });
 
+    if (useCustomWebSearch) {
+      systemInstruction += "\n\nYou have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.";
+    }
+
+    const now = new Date();
+    const istDateTime = now.toLocaleString("en-IN", { 
+      timeZone: "Asia/Kolkata", 
+      dateStyle: "full", 
+      timeStyle: "long" 
+    });
+    systemInstruction += `\n\nImportant Context: The current date and time is ${istDateTime} (Indian Standard Time). Please use this as the absolute reference for words like "today", "tomorrow", or "recent".`;
+
+
+
     const config: any = {
       systemInstruction,
     };
+    
+    config.tools = [];
 
     if (useWebSearch) {
-      config.tools = [{ googleSearch: {} }];
+      config.tools.push({ googleSearch: {} });
+    }
+    
+    if (useCustomWebSearch) {
+      config.tools.push({
+        functionDeclarations: [
+
+          {
+            name: "custom_web_search",
+            description: "Search the web for information",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                query: {
+                  type: "STRING",
+                  description: "The optimized search query"
+                },
+                search_type: {
+                  type: "STRING",
+                  description: "Category of search",
+                  enum: ["news_and_facts", "semantic_concept", "general"]
+                }
+              },
+              required: ["query", "search_type"]
+            }
+          }
+        ]
+      });
+    }
+    
+    if (config.tools.length === 0) {
+      delete config.tools;
     }
 
     res.writeHead(200, {
@@ -701,8 +1000,23 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
 
       let groundingChunksSet = new Set<string>();
       let citations: { uri: string; title: string }[] = [];
+      let isFunctionCall = false;
+      let functionCallPart: any = null;
 
+      let fullModelParts: any[] = [];
       for await (const chunk of responseStream) {
+        if (chunk.candidates?.[0]?.content?.parts) {
+          for (const part of chunk.candidates[0].content.parts) {
+            if (part.functionCall) {
+              isFunctionCall = true;
+              functionCallPart = part.functionCall;
+              fullModelParts = chunk.candidates[0].content.parts;
+              break;
+            }
+          }
+        }
+        if (isFunctionCall) break;
+        
         if (chunk.text) {
           res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
         }
@@ -721,6 +1035,50 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
               }
             }
           });
+        }
+      }
+      
+      if (isFunctionCall && functionCallPart) {
+        if (functionCallPart.name === "custom_web_search") {
+          const { query, search_type } = functionCallPart.args as any;
+          
+          res.write(`data: ${JSON.stringify({ text: "\n*(Searching the web for: " + query + ")*\n" })}\n\n`);
+          
+          const searchResults = await performCustomSearch(query, search_type);
+          
+          if (searchResults.results) {
+             searchResults.results.forEach((r: any) => {
+               citations.push({ uri: r.url, title: r.title });
+             });
+          }
+          
+          contents.push({
+            role: "model",
+            parts: fullModelParts
+          });
+          
+          contents.push({
+            role: "user",
+            parts: [{
+              functionResponse: {
+                name: "custom_web_search",
+                response: searchResults,
+                id: functionCallPart.id
+              }
+            }]
+          });
+
+          const followUpStream = await aiClient.models.generateContentStream({
+            model: model || "gemini-3.1-flash-lite",
+            contents: contents,
+            config: config,
+          });
+
+          for await (const nextChunk of followUpStream) {
+             if (nextChunk.text) {
+               res.write(`data: ${JSON.stringify({ text: nextChunk.text })}\n\n`);
+             }
+          }
         }
       }
 
@@ -1221,8 +1579,13 @@ app.post("/api/cloudinary/webhook", async (req, res) => {
         status: statusStr,
         rawPayload: JSON.stringify(req.body),
       });
-    } catch (dbError) {
-      console.error("Failed to write to cloudinary_webhook_logs", dbError);
+    } catch (dbError: any) {
+      const errStr = dbError ? String(dbError) + (dbError.message || "") + (dbError.details || "") : "";
+      if (dbError.code === 7 || dbError.code === 5 || errStr.includes("PERMISSION_DENIED") || errStr.includes("NOT_FOUND") || errStr.includes("ADC restrictions")) {
+        // Ignore
+      } else {
+        console.error("Failed to write to cloudinary_webhook_logs", dbError);
+      }
     }
 
     // STEP 2: Execute the heavy Firestore practice_files sweeps
@@ -1335,6 +1698,96 @@ app.post("/api/webhooks/clear", async (req, res) => {
     res
       .status(500)
       .json({ error: error.message || "Failed to clear webhook logs" });
+  }
+});
+
+app.get("/api/admin/search-logs", requireAdminAuth, async (req, res) => {
+  try {
+    const adminDb = getAdminDb();
+    const snapshot = await adminDb
+      .collection("search_api_logs")
+      .orderBy("createdAt", "desc")
+      .limit(100)
+      .get();
+    
+    const logs = snapshot.docs.map(doc => {
+      const data = doc.data();
+      // Handle firestore timestamps
+      if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+        data.createdAt = data.createdAt.toDate().toISOString();
+      }
+      return { id: doc.id, ...data };
+    });
+    res.json({ logs });
+  } catch (error: any) {
+    const errStr = error ? String(error) + (error.message || "") + (error.details || "") : "";
+    if (errStr.includes("PERMISSION_DENIED") || errStr.includes("ADC restrictions") || errStr.includes("NOT_FOUND")) {
+      return res.status(403).json({
+        error: "ADC restrictions in preview environment, use client fallback",
+        inMemoryLogs: inMemorySearchLogs
+      });
+    }
+    console.error("Failed to fetch search logs:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch search logs" });
+  }
+});
+
+app.delete("/api/admin/search-logs", requireAdminAuth, async (req, res) => {
+  try {
+    const adminDb = getAdminDb();
+    const snapshot = await adminDb.collection("search_api_logs").get();
+    
+    const batchSize = 500;
+    const chunkArray = (arr: any[], size: number) =>
+      Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+        arr.slice(i * size, i * size + size),
+      );
+      
+    const chunks = chunkArray(snapshot.docs, batchSize);
+    for (const chunk of chunks) {
+      const batch = adminDb.batch();
+      chunk.forEach((doc: any) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+    }
+
+    res.json({ success: true, count: snapshot.docs.length });
+  } catch (error: any) {
+    const errStr = error ? String(error) + (error.message || "") + (error.details || "") : "";
+    if (errStr.includes("PERMISSION_DENIED") || errStr.includes("ADC restrictions") || errStr.includes("NOT_FOUND")) {
+      inMemorySearchLogs.length = 0; // Clear in-memory logs
+      return res.status(403).json({
+        error: "ADC restrictions in preview environment, use client fallback",
+      });
+    }
+    console.error("Failed to delete search logs:", error);
+    res.status(500).json({ error: error.message || "Failed to delete search logs" });
+  }
+});
+
+app.post("/api/admin/settings/search-logs", requireAdminAuth, async (req, res) => {
+  try {
+    const { searchLogAutoDeleteDays } = req.body;
+    if (typeof searchLogAutoDeleteDays !== "number") {
+      return res.status(400).json({ error: "searchLogAutoDeleteDays must be a number" });
+    }
+    
+    const adminDb = getAdminDb();
+    await adminDb.collection("system").doc("settings").set({
+      searchLogAutoDeleteDays
+    }, { merge: true });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    const errStr = error ? String(error) + (error.message || "") + (error.details || "") : "";
+    if (errStr.includes("PERMISSION_DENIED") || errStr.includes("ADC restrictions") || errStr.includes("NOT_FOUND")) {
+      return res.status(403).json({
+        error: "ADC restrictions in preview environment, use client fallback",
+      });
+    }
+    console.error("Failed to update search logs settings:", error);
+    res.status(500).json({ error: error.message || "Failed to update search logs settings" });
   }
 });
 

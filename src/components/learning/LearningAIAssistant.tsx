@@ -22,7 +22,7 @@ import { getActiveApiKey } from '../../utils/apiKeyManager';
 
 export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIAssistantProps) {
   const { setActiveTab } = useUIStore();
-  const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton } = useChatStore();
+  const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton, useCustomWebSearch, toggleCustomWebSearch } = useChatStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('default');
@@ -111,7 +111,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     try {
       const model = localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
       
-      const reply = await askLearningTutor(chatHistory, useWebSearch, model, chatMode, (text, citations) => {
+      const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, model, chatMode, (text, citations) => {
         setIsLoading(false);
         setMessages(chatMode, [...chatHistory, { role: 'model', text: text, citations }]);
       });
@@ -217,7 +217,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
                 </div>
                 <div className="p-4 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-slate-900 dark:text-white pb-1">Web Search</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-white pb-1">Gemini Native Search</span>
                     <button 
                       onClick={toggleWebSearchButton}
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showWebSearchButton ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}
@@ -226,6 +226,18 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
                     </button>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 placeholder-opacity-50">Show search button. Requires paid Gemini API tier.</p>
+                </div>
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-slate-900 dark:text-white pb-1">Custom Web Search (Free Tier)</span>
+                    <button 
+                      onClick={toggleCustomWebSearch}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${useCustomWebSearch ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${useCustomWebSearch ? 'translate-x-[18px]' : 'translate-x-[2px]'}`} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 placeholder-opacity-50">Use our backend search APIs. Recommended for free tier.</p>
                 </div>
                 <button
                   onClick={() => {
@@ -286,7 +298,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
       <ChatInputForm 
         onSend={handleSend}
         isLoading={isLoading}
-        showWebSearchButton={showWebSearchButton}
+        showWebSearchButton={showWebSearchButton || useCustomWebSearch}
         showPrompts={chatMode === 'default' && currentModeMessages.length <= 1}
       />
     </div>

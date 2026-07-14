@@ -134,4 +134,66 @@ export function startCron() {
       }
     }
   });
+
+  console.log("Registered nightly search API log auto-delete cron job.");
+  // Runs every day at midnight (00:00)
+  cron.schedule("0 0 * * *", async () => {
+    console.log("Running nightly search API log auto-delete task...");
+    try {
+      // 1. Fetch system settings
+      const settingsDoc = await db.collection("system").doc("settings").get();
+      const settings = settingsDoc.data();
+      
+      const searchLogAutoDeleteDays = settings?.searchLogAutoDeleteDays;
+      
+      if (typeof searchLogAutoDeleteDays === "number" && searchLogAutoDeleteDays > 0) {
+        // Calculate cutoff date
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - searchLogAutoDeleteDays);
+        
+        // Query old logs
+        const oldLogsSnap = await db
+          .collection("search_api_logs")
+          .where("createdAt", "<", admin.firestore.Timestamp.fromDate(cutoffDate))
+          .get();
+          
+        if (!oldLogsSnap.empty) {
+          console.log(`Found ${oldLogsSnap.size} search API logs to delete.`);
+          
+          // Delete in batches
+          let batch = db.batch();
+          let deletesCount = 0;
+          let totalDeleted = 0;
+          
+          for (const doc of oldLogsSnap.docs) {
+            batch.delete(doc.ref);
+            deletesCount++;
+            totalDeleted++;
+            
+            if (deletesCount >= 400) {
+              await batch.commit();
+              batch = db.batch();
+              deletesCount = 0;
+            }
+          }
+          
+          if (deletesCount > 0) {
+            await batch.commit();
+          }
+          
+          console.log(`Successfully deleted ${totalDeleted} search API logs.`);
+        } else {
+          console.log("No search API logs found for deletion.");
+        }
+      } else {
+        console.log("searchLogAutoDeleteDays is not set or invalid. Skipping auto-delete.");
+      }
+    } catch (error: any) {
+      if (error && error.code === 7) {
+        console.warn("\n[WARNING] Auto-Delete Cron skipped due to PERMISSION_DENIED in sandbox environment.\n");
+      } else {
+        console.error("Search API Log Auto-Delete Cron failed:", error);
+      }
+    }
+  });
 }

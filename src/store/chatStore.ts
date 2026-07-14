@@ -8,10 +8,12 @@ interface ChatState {
   messagesByMode: Record<ChatMode, ChatMessage[]>;
   persistLocally: boolean;
   showWebSearchButton: boolean;
+  useCustomWebSearch: boolean;
   addMessage: (mode: ChatMode, message: ChatMessage) => void;
   setMessages: (mode: ChatMode, messages: ChatMessage[]) => void;
   toggleLocalPersistence: () => void;
   toggleWebSearchButton: () => void;
+  toggleCustomWebSearch: () => void;
   clearHistory: (mode?: ChatMode) => void;
 }
 
@@ -36,6 +38,7 @@ export const useChatStore = create<ChatState>()(
       messagesByMode: defaultWelcomeMessages,
       persistLocally: false,
       showWebSearchButton: false,
+      useCustomWebSearch: false,
       
       addMessage: (mode, message) => set((state) => ({
         messagesByMode: {
@@ -52,8 +55,20 @@ export const useChatStore = create<ChatState>()(
       })),
       
       toggleLocalPersistence: () => set((state) => ({ persistLocally: !state.persistLocally })),
-
-      toggleWebSearchButton: () => set((state) => ({ showWebSearchButton: !state.showWebSearchButton })),
+      toggleWebSearchButton: () => set((state) => {
+        const newShow = !state.showWebSearchButton;
+        return { 
+          showWebSearchButton: newShow,
+          useCustomWebSearch: newShow ? false : state.useCustomWebSearch
+        };
+      }),
+      toggleCustomWebSearch: () => set((state) => {
+        const newUse = !state.useCustomWebSearch;
+        return {
+          useCustomWebSearch: newUse,
+          showWebSearchButton: newUse ? false : state.showWebSearchButton
+        };
+      }),
       
       clearHistory: (mode) => set((state) => {
         if (mode) {
@@ -76,6 +91,7 @@ export const useChatStore = create<ChatState>()(
         // Always persist the user's preference
         persistLocally: state.persistLocally,
         showWebSearchButton: state.showWebSearchButton,
+        useCustomWebSearch: state.useCustomWebSearch,
         // Only persist the chat history if they have opted in, 
         // otherwise overwrite the stored data with the default welcome messages
         messagesByMode: state.persistLocally ? state.messagesByMode : defaultWelcomeMessages,
