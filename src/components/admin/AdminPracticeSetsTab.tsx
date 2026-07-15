@@ -7,6 +7,7 @@ import { useCloudinary } from "../../hooks/useCloudinary";
 import { AdminUploadWizardModal } from "./AdminUploadWizardModal";
 import { AdminRecycleBinModal } from "./AdminRecycleBinModal";
 import { PracticeBreadcrumbs } from "../learning/PracticeBreadcrumbs";
+import { CustomDropdown } from "../CustomDropdown";
 
 export function AdminPracticeSetsTab({
   adminCategoryScope,
@@ -487,12 +488,12 @@ export function AdminPracticeSetsTab({
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest pl-1 mb-2 block">Difficulty (Optional)</label>
-                <select value={editDifficulty} onChange={e=>setEditDifficulty(e.target.value as any)} className="w-full px-3 py-2 text-sm border rounded-lg bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">None</option>
-                  <option value="Easy">Easy</option>
-                  <option value="Moderate">Moderate</option>
-                  <option value="Hard">Hard</option>
-                </select>
+                <CustomDropdown
+                  value={editDifficulty || "None"}
+                  options={["None", "Easy", "Moderate", "Hard"]}
+                  onChange={(val) => setEditDifficulty(val === "None" ? "" : val as any)}
+                  placeholder="Select difficulty"
+                />
               </div>
             </div>
             

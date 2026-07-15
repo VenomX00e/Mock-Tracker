@@ -2,7 +2,7 @@ import { MockScore } from "../types";
 import { auth } from "./firebase";
 import { getActiveApiKey } from "../utils/apiKeyManager";
 
-export async function parseMockAnnouncementImage(images: { base64: string, mimeType: string }[]): Promise<any> {
+export async function parseMockAnnouncementImage(images: { base64: string, mimeType: string }[], model: string = "gemini-3.1-flash-lite"): Promise<any> {
   const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -12,7 +12,7 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
   const response = await fetch('/api/extract-mock', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ images, customApiKey: customKey || null })
+    body: JSON.stringify({ images, customApiKey: customKey || null, model })
   });
   
   if (!response.ok) {
@@ -70,7 +70,7 @@ function extractNum(val: any): number | null {
   return null;
 }
 
-export async function parseScorecardImage(images: { base64: string, mimeType: string }[], subjects?: { id: string, name: string }[]): Promise<Partial<MockScore>> {
+export async function parseScorecardImage(images: { base64: string, mimeType: string }[], subjects?: { id: string, name: string }[], model: string = "gemini-3.1-flash-lite"): Promise<Partial<MockScore>> {
   const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -80,7 +80,7 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
   const response = await fetch('/api/extract-scorecard', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ images, customApiKey: customKey || null, subjects })
+    body: JSON.stringify({ images, customApiKey: customKey || null, subjects, model })
   });
   
   if (!response.ok) {

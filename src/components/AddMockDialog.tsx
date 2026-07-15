@@ -5,6 +5,7 @@ import { parseScorecardImage } from '../services/geminiService';
 import { X, Upload, Loader2, ArrowLeft, Image as ImageIcon, BarChart3, Settings, Calculator, Activity, Trophy } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
+import { usePublicSettingsCtx } from '../context/AppContext';
 
 import { EXAMS as fallback_EXAMS, ROLES as fallback_ROLES, PHASES as fallback_PHASES, SCOPES as fallback_SCOPES, PLATFORMS as fallback_PLATFORMS } from '../lib/constants';
 import { getErrorMessage } from '../lib/errorUtils';
@@ -68,6 +69,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { mockExtractionModel } = usePublicSettingsCtx();
 
   const [selectedCategory, setSelectedCategory] = useState<string>(categoryId || (categories && categories.length > 0 ? categories[0].id : ''));
 
@@ -239,7 +241,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
       }
 
       if (imagesPayload.length > 0) {
-        const extractedData = await parseScorecardImage(imagesPayload, allSubjects);
+        const extractedData = await parseScorecardImage(imagesPayload, allSubjects, mockExtractionModel);
         
         if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
         if (extractedData.examRole && !ROLES.includes(extractedData.examRole)) setIsCustomRole(true);

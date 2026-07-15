@@ -45,6 +45,12 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
     if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
        throw new Error("Your personal Gemini API key is missing or invalid. Please configure it in the AI Tutor Settings.");
     }
+    if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) {
+      throw new Error("Quota exceeded for this model. Please check your Gemini API plan limits.");
+    }
+    if (msg.includes('NOT_FOUND') || msg.includes('404')) {
+      throw new Error(`Model not found or not supported. Please select a different model. Details: ${msg}`);
+    }
     throw new Error(msg);
   }
 
@@ -56,6 +62,7 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
   const decoder = new TextDecoder('utf-8');
   let fullText = '';
   let finalCitations: Citation[] = [];
+  let buffer = '';
 
   let isDone = false;
   while (!isDone) {
@@ -65,8 +72,9 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
       break;
     }
 
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split('\n\n');
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop() || '';
 
     for (const line of lines) {
       if (line.startsWith('data: ')) {

@@ -220,7 +220,7 @@ app.post("/api/extract-mock", async (req, res) => {
       });
     }
 
-    const { images, customApiKey } = req.body;
+    const { images, customApiKey, model = "gemini-3.1-flash-lite" } = req.body;
     const aiClient = getAiClient(customApiKey);
 
     const prompt = `
@@ -247,7 +247,7 @@ app.post("/api/extract-mock", async (req, res) => {
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: model,
         contents: contents,
         config: {
           responseMimeType: "application/json",
@@ -295,7 +295,7 @@ app.post("/api/extract-scorecard", async (req, res) => {
       });
     }
 
-    const { images, customApiKey, subjects } = req.body;
+    const { images, customApiKey, subjects, model = "gemini-3.1-flash-lite" } = req.body;
     const aiClient = getAiClient(customApiKey);
 
     const isDynamic =
@@ -341,7 +341,7 @@ app.post("/api/extract-scorecard", async (req, res) => {
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: model,
         contents: contents,
         config: {
           responseMimeType: "application/json",
@@ -582,11 +582,10 @@ You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do N
 Provide concise, clear, and educational responses. If explaining complex topics, use analogies. ${modeInstruction}
 You have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.
 
-CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
+CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
+- NEVER append promotional messages, reminders, or recommendations about app features (e.g., "Speed Math", "Learning Hub") at the end of your educational answers.
 - DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
 - ONLY provide explanations of app features and markdown navigation buttons IF AND ONLY IF the user explicitly asks about the app's features, navigation, what the app can do, OR if they send a very generic greeting (like "hi", "hello" without asking a question).
-- When asked if there are math exercises or speed math, ALWAYS mention that there is a "Speed Math" practice feature in the Learning section.
-- You can inform the user that they can apply updates directly from the app via the "bell" status icon on the top navigation bar or sidebar.
 - Available pages and their relative URLs for markdown links:
   - Home: [Go to Home](/home)
   - Dashboard: [View Dashboard](/dashboard)
@@ -759,6 +758,73 @@ async function fetchTinyfish(query: string) {
   }));
 }
 
+async function fetchPageWithTinyfish(url: string, signal?: AbortSignal) {
+  try {
+    const apiKey = process.env.TINYFISH_API_KEY;
+    if (!apiKey) return null; // Suppress throw
+    const response = await fetch("https://api.tinyfish.io/v1/fetch?url=" + encodeURIComponent(url), {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+      signal
+    });
+    if (!response.ok) {
+      await logSearchAttempt("Tinyfish Fetch", url, "error", `Status: ${response.status}`);
+      return null;
+    }
+    const data = await response.json();
+    await logSearchAttempt("Tinyfish Fetch", url, "success");
+    return data.content || data.markdown || data.text || "";
+  } catch (e: any) {
+    await logSearchAttempt("Tinyfish Fetch", url, "error", e.message || String(e));
+    return null; // Suppress throw
+  }
+}
+
+async function fetchPageWithJina(url: string, signal?: AbortSignal) {
+  try {
+    const response = await fetch("https://r.jina.ai/" + url, { 
+      signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (!response.ok) {
+      await logSearchAttempt("Jina Fetch", url, "error", `Status: ${response.status}`);
+      return null; // Suppress the throw
+    }
+    const text = await response.text();
+    await logSearchAttempt("Jina Fetch", url, "success");
+    return text;
+  } catch(e: any) {
+    await logSearchAttempt("Jina Fetch", url, "error", e.message || String(e));
+    return null; // Suppress the throw
+  }
+}
+
+async function getFullPageContent(url: string): Promise<string | null> {
+  const globalController = new AbortController();
+  const globalTimeoutId = setTimeout(() => globalController.abort(), 15000); // 15 seconds total
+  
+  try {
+    // Give Tinyfish 7 seconds before falling back
+    const tfController = new AbortController();
+    const tfTimeoutId = setTimeout(() => tfController.abort(), 7000);
+    
+    let content = await fetchPageWithTinyfish(url, tfController.signal);
+    clearTimeout(tfTimeoutId);
+    
+    if (!content) {
+      // Fallback to Jina if Tinyfish fails or returns null
+      content = await fetchPageWithJina(url, globalController.signal);
+    }
+    
+    clearTimeout(globalTimeoutId);
+    return content;
+  } catch (err: any) {
+    clearTimeout(globalTimeoutId);
+    return null;
+  }
+}
+
 async function logSearchAttempt(apiName: string, query: string, status: 'success' | 'error', errorMessage?: string) {
   try {
     const db = getAdminDb();
@@ -841,6 +907,27 @@ async function performCustomSearch(query: string, searchType: string) {
     return { error: "Failed to retrieve search results." };
   }
   
+  if (results && results.length > 0) {
+    // Fetch full page content for the top 2 sites simultaneously to enrich context
+    const topResults = results.slice(0, 2);
+    const fullContents = await Promise.all(
+      topResults.map(async (r: any) => {
+        if (!r.url) return null;
+        console.log(`Fetching full content for: ${r.url}`);
+        return await getFullPageContent(r.url);
+      })
+    );
+
+    // Merge the full content back into the results
+    topResults.forEach((r: any, idx: number) => {
+      const fullText = fullContents[idx];
+      if (fullText) {
+        // Limit context size to ~15,000 chars per page to avoid hitting LLM token limits quickly
+        r.content = `[FULL PAGE EXTRACTED CONTENT]:\n${fullText.slice(0, 15000)}`;
+      }
+    });
+  }
+
   return { results };
 }
 // --- End Custom Web Search Logic ---
@@ -893,11 +980,10 @@ You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do N
     let systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
 Provide concise, clear, and educational responses. If explaining complex topics, use analogies. ${modeInstruction}
 
-CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
+CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
+- NEVER append promotional messages, reminders, or recommendations about app features (e.g., "Speed Math", "Learning Hub") at the end of your educational answers.
 - DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
 - ONLY provide explanations of app features and markdown navigation buttons IF AND ONLY IF the user explicitly asks about the app's features, navigation, what the app can do, OR if they send a very generic greeting (like "hi", "hello" without asking a question).
-- When asked if there are math exercises or speed math, ALWAYS mention that there is a "Speed Math" practice feature in the Learning section.
-- You can inform the user that they can apply updates directly from the app via the "bell" status icon on the top navigation bar or sidebar.
 - Available pages and their relative URLs for markdown links:
   - Home: [Go to Home](/home)
   - Dashboard: [View Dashboard](/dashboard)
@@ -985,17 +1071,17 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
       delete config.tools;
     }
 
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-
     try {
       const responseStream = await aiClient.models.generateContentStream({
         model: model || "gemini-3.1-flash-lite",
         contents: contents,
         config: config,
+      });
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
       });
 
       let groundingChunksSet = new Set<string>();
@@ -1087,14 +1173,33 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS:
       }
       res.end();
     } catch (genError: any) {
-      res.write(
-        `data: ${JSON.stringify({ error: formatGeminiError(genError) })}\n\n`,
-      );
-      res.end();
+      console.error("Gemini API Error in Tutor:", genError);
+      const errMsg = genError.message || String(genError);
+      if (!res.headersSent) {
+        if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+          return res.status(429).json({ error: errMsg });
+        }
+        if (errMsg.includes("404") || errMsg.includes("NOT_FOUND")) {
+          return res.status(404).json({ error: errMsg });
+        }
+        return res.status(500).json({ error: formatGeminiError(genError) });
+      } else {
+        res.write(
+          `data: ${JSON.stringify({ error: errMsg })}\n\n`,
+        );
+        res.end();
+      }
     }
   } catch (error: any) {
     console.error("Gemini Chat Stream Error:", error);
     if (!res.headersSent) {
+      const errMsg = error.message || String(error);
+      if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+        return res.status(429).json({ error: errMsg });
+      }
+      if (errMsg.includes("404") || errMsg.includes("NOT_FOUND")) {
+        return res.status(404).json({ error: errMsg });
+      }
       res.status(500).json({ error: formatGeminiError(error) });
     }
   }
@@ -1175,8 +1280,15 @@ CRITICAL INSTRUCTIONS FOR VOCABULARY:
   * 'mnemonic': A trick to remember the word, if any is provided.
   * 'additional': When an 'Additional' section is present under a vocabulary word, capture all text (including parenthetical categories, phrases, and idioms) into the word's additional field exactly as formatted. Do NOT extract idioms, one-word substitutions, or phrasal verbs found inside a word's 'Additional' block into the standalone idioms or phrasalVerbs arrays. They belong exclusively to that specific word.
 
-For idioms, phrasal verbs, and one-word substitutions, strictly separate 'text' (only the phrase itself without the meaning), 'meaning' (the explanation or definition of the phrase), and 'example' (if an example sentence is provided).
-If the document lists definitions separated by colons or hyphens (e.g. "Phrase: Meaning" or "Phrase - Meaning"), YOU MUST split them appropriately. The 'text' MUST ONLY contain "Phrase" and the 'meaning' MUST ONLY contain "Meaning". Do NOT include the meaning inside the 'text' field.
+CRITICAL INSTRUCTIONS FOR ONE WORD SUBSTITUTIONS, IDIOMS & PHRASAL VERBS:
+- If a section in the document is explicitly titled "One-word substitutes", "One Word Substitutions", "OWS", or similar (even if the title also contains the word "VOCABULARY", like "One-word substitutes: VOCABULARY"), YOU MUST extract ALL items within that section into the 'oneWordSubstitutions' array.
+- DO NOT place them in the 'vocabulary' array, even if they are single words!
+- For idioms, phrasal verbs, and one-word substitutions, strictly separate 'text' (only the phrase or word itself without the meaning), 'meaning' (the explanation or definition), and 'example' (if an example sentence is provided).
+- Format handling: Items often look like "1. Phrase (5) – Meaning spanning multiple lines. Example: Sentence."
+- The 'text' MUST ONLY contain the actual phrase/word (e.g. "Knell"). Remove leading numbers (e.g. "1.") and parenthetical numbers (e.g. "(5)").
+- The 'meaning' MUST contain the full definition (e.g. "The sound of a bell announcing death or a funeral."). Combine any multi-line text into a single string. Never leave it empty if a definition exists! Do NOT put the definition into the 'text' field of a new object.
+- The 'example' MUST contain the example sentence.
+
 Return ONLY structured JSON adhering to this schema. If a field or category is not present, return an empty array or empty string.`;
 
     const parts: any[] = [{ text: prompt }];

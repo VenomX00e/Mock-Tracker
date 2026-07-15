@@ -116,7 +116,7 @@ export default function AdminDialog({
   const isForcedCategory = !isOwner && currentCategory !== null;
 
   const { bannedUsers, mutedUsers, allAppUsers, allFirebaseUsers, loading, fetchUsers, recalculatingUserIds, handleUpdateUserRole, handleTogglePermission, handleUpdateUserStatus, handleRecalculateStats } = useAdminUsers(currentUser);
-  const { liveMocks, notices, countdowns, challenges, telegramLink, setTelegramLink, telegramText, setTelegramText, enableAiTutor, setEnableAiTutor, enableVocabulary, setEnableVocabulary, enableSpeedMath, setEnableSpeedMath, enablePracticeLibrary, setEnablePracticeLibrary, apdfKeys, setApdfKeys, ilovePdfKeys, setIlovePdfKeys, cloudinaryCloudName, setCloudinaryCloudName, cloudinaryUploadPreset, setCloudinaryUploadPreset, muteDurationDays, setMuteDurationDays, fetchAnnouncement, savingSettings: savingAnnouncement, saveSettings } = useAdminSystem();
+  const { liveMocks, notices, countdowns, challenges, telegramLink, setTelegramLink, telegramText, setTelegramText, enableAiTutor, setEnableAiTutor, enableVocabulary, setEnableVocabulary, enableSpeedMath, setEnableSpeedMath, enablePracticeLibrary, setEnablePracticeLibrary, apdfKeys, setApdfKeys, ilovePdfKeys, setIlovePdfKeys, cloudinaryCloudName, setCloudinaryCloudName, cloudinaryUploadPreset, setCloudinaryUploadPreset, muteDurationDays, setMuteDurationDays, mockExtractionModel, setMockExtractionModel, fetchAnnouncement, savingSettings: savingAnnouncement, saveSettings } = useAdminSystem();
   
   const [adminManagementCategoryFilter, setAdminManagementCategoryFilter] = useState<string | "all">("all");
   const [adminSearch, setAdminSearch] = useState("");
@@ -550,6 +550,8 @@ export default function AdminDialog({
                 setTelegramLink={setTelegramLink}
                 telegramText={telegramText}
                 setTelegramText={setTelegramText}
+                mockExtractionModel={mockExtractionModel}
+                setMockExtractionModel={setMockExtractionModel}
                 savingSettings={savingAnnouncement}
                 saveSettings={saveSettings}
                 isOwner={!!isOwner}

@@ -61,7 +61,7 @@ export function ChatMessage({ msg, idx, setActiveTab }: ChatMessageProps) {
             <Bot className="w-3.5 h-3.5 md:w-4 md:h-4 text-indigo-600 dark:text-indigo-400" />
           </div>
         )}
-        <div className={`markdown-body w-full overflow-hidden text-xs md:text-sm whitespace-pre-wrap leading-relaxed ${msg.role === 'user' ? 'text-inherit [&_*]:text-inherit w-full' : 'text-slate-800 dark:text-slate-200'}`}>
+        <div className={`markdown-body w-full overflow-hidden text-xs md:text-sm leading-relaxed ${msg.role === 'user' ? 'text-inherit [&_*]:text-inherit w-full' : 'text-slate-800 dark:text-slate-200'}`}>
           {msg.role === 'user' && msg.attachments && msg.attachments.length > 0 && (
             <div className="flex flex-col gap-0.5 mb-2 bg-slate-900/40 dark:bg-slate-900/60 p-2 rounded-lg w-fit">
               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-200">

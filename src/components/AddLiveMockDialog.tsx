@@ -6,6 +6,7 @@ import { EXAMS, ROLES, PHASES, SCOPES, PLATFORMS } from '../lib/constants';
 import { parseMockAnnouncementImage } from '../services/geminiService';
 import { X, Save, FileText, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../services/AuthContext';
+import { usePublicSettingsCtx } from '../context/AppContext';
 import { getErrorMessage } from '../lib/errorUtils';
 
 interface AddLiveMockDialogProps {
@@ -18,6 +19,7 @@ interface AddLiveMockDialogProps {
 
 export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, categoryId, categories }: AddLiveMockDialogProps) {
   const { user } = useAuth();
+  const { mockExtractionModel } = usePublicSettingsCtx();
   const getInitialLiveMockData = () => {
     const nextDay = new Date();
     nextDay.setDate(nextDay.getDate() + 1);
@@ -78,7 +80,7 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
       }
 
       if (imagesPayload.length > 0) {
-        const extractedData = await parseMockAnnouncementImage(imagesPayload);
+        const extractedData = await parseMockAnnouncementImage(imagesPayload, mockExtractionModel);
         
         if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
         if (extractedData.examRole && !ROLES.includes(extractedData.examRole)) setIsCustomRole(true);

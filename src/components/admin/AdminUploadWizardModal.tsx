@@ -6,6 +6,7 @@ import { Loader2, X, Upload } from "lucide-react";
 import { truncatePdf } from "../../utils/pdfTruncation";
 import { compressPdfWithFallback } from "../../utils/pdfCompression";
 import { useCloudinary } from "../../hooks/useCloudinary";
+import { CustomDropdown } from "../CustomDropdown";
 
 export interface AdminUploadWizardModalProps {
   isOpen: boolean;
@@ -357,12 +358,12 @@ export function AdminUploadWizardModal({
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest pl-1 mb-1 block">Difficulty</label>
-                <select value={difficulty} onChange={e=>setDifficulty(e.target.value as any)} className="w-full px-4 py-2 text-sm border rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">None</option>
-                  <option value="Easy">Easy</option>
-                  <option value="Moderate">Moderate</option>
-                  <option value="Hard">Hard</option>
-                </select>
+                <CustomDropdown
+                  value={difficulty || "None"}
+                  options={["None", "Easy", "Moderate", "Hard"]}
+                  onChange={(val) => setDifficulty(val === "None" ? "" : val as any)}
+                  placeholder="Select difficulty"
+                />
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">

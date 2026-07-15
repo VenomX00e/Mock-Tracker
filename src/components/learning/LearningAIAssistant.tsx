@@ -44,14 +44,24 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
 
+  const prevMessagesLengthRef = useRef(currentModeMessages.length);
+  const prevIsEnlargedRef = useRef(isEnlarged);
+
   useEffect(() => {
     if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTo({
-        top: messagesContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+      const isNewMessage = currentModeMessages.length > prevMessagesLengthRef.current;
+      const isToggledEnlarged = isEnlarged !== prevIsEnlargedRef.current;
+
+      if (isNewMessage || isToggledEnlarged) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+      prevMessagesLengthRef.current = currentModeMessages.length;
+      prevIsEnlargedRef.current = isEnlarged;
     }
-  }, [currentModeMessages, isEnlarged]);
+  }, [currentModeMessages.length, isEnlarged]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

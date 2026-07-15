@@ -18,6 +18,7 @@ export function useAdminSystem() {
   const [enableVocabulary, setEnableVocabulary] = useState(true);
   const [enableSpeedMath, setEnableSpeedMath] = useState(true);
   const [enablePracticeLibrary, setEnablePracticeLibrary] = useState(true);
+  const [mockExtractionModel, setMockExtractionModel] = useState('gemini-3.1-flash-lite');
   const [savingSettings, setSavingSettings] = useState(false);
 
   const fetchAnnouncement = useCallback(async () => {
@@ -43,6 +44,7 @@ export function useAdminSystem() {
           setEnableVocabulary(data.enableVocabulary ?? true);
           setEnableSpeedMath(data.enableSpeedMath ?? true);
           setEnablePracticeLibrary(data.enablePracticeLibrary ?? true);
+          setMockExtractionModel(data.mockExtractionModel || 'gemini-3.1-flash-lite');
         } else if (data.type === "notice") {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === "liveMock") {
@@ -86,6 +88,7 @@ export function useAdminSystem() {
           enableVocabulary,
           enableSpeedMath,
           enablePracticeLibrary,
+          mockExtractionModel,
         },
         { merge: true },
       );
@@ -124,6 +127,8 @@ export function useAdminSystem() {
     setEnableSpeedMath,
     enablePracticeLibrary,
     setEnablePracticeLibrary,
+    mockExtractionModel,
+    setMockExtractionModel,
     fetchAnnouncement,
     savingSettings,
     saveSettings

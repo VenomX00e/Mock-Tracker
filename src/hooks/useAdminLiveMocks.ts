@@ -4,12 +4,14 @@ import { db } from "../services/firebase";
 import { getErrorMessage } from "../lib/errorUtils";
 import { parseMockAnnouncementImage } from "../services/geminiService";
 import { EXAMS, ROLES, PHASES, PLATFORMS } from "../lib/constants";
+import { usePublicSettingsCtx } from "../context/AppContext";
 
 export function useAdminLiveMocks(
   adminCategoryScope: string | null,
   getPrefix: (categoryId: string | null) => string,
   fetchAnnouncement: () => Promise<void>
 ) {
+  const { mockExtractionModel } = usePublicSettingsCtx();
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isCustomRole, setIsCustomRole] = useState(false);
   const [isCustomPhase, setIsCustomPhase] = useState(false);
@@ -132,7 +134,7 @@ export function useAdminLiveMocks(
       }
 
       if (imagesPayload.length > 0) {
-        const extractedData = await parseMockAnnouncementImage(imagesPayload);
+        const extractedData = await parseMockAnnouncementImage(imagesPayload, mockExtractionModel);
 
         if (extractedData.examType && !EXAMS.includes(extractedData.examType))
           setIsCustomExam(true);

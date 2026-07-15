@@ -8,6 +8,7 @@ export function usePublicSettings() {
   const [enableVocabulary, setEnableVocabulary] = useState<boolean>(true);
   const [enableSpeedMath, setEnableSpeedMath] = useState<boolean>(true);
   const [enablePracticeLibrary, setEnablePracticeLibrary] = useState<boolean>(true);
+  const [mockExtractionModel, setMockExtractionModel] = useState<string>('gemini-3.1-flash-lite');
 
   useEffect(() => {
     let unsubscribe: any;
@@ -23,6 +24,7 @@ export function usePublicSettings() {
             setEnableVocabulary(data.enableVocabulary ?? true);
             setEnableSpeedMath(data.enableSpeedMath ?? true);
             setEnablePracticeLibrary(data.enablePracticeLibrary ?? true);
+            setMockExtractionModel(data.mockExtractionModel || 'gemini-3.1-flash-lite');
           }
         }, (error: any) => {
           if (error.code !== 'permission-denied') {
@@ -39,5 +41,5 @@ export function usePublicSettings() {
     };
   }, []);
 
-  return useMemo(() => ({ telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary }), [telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary]);
+  return useMemo(() => ({ telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, mockExtractionModel }), [telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, mockExtractionModel]);
 }
