@@ -19,7 +19,7 @@ export interface ChatMessage {
   attachments?: Attachment[];
 }
 
-export async function askLearningTutor(messages: ChatMessage[], useWebSearch: boolean = false, useCustomWebSearch: boolean = false, modelKey: string = 'gemini-3.1-flash-lite', chatMode: string = 'default', onMessageUpdate?: (text: string, citations?: Citation[]) => void): Promise<{ text: string, citations?: Citation[] }> {
+export async function askLearningTutor(messages: ChatMessage[], useWebSearch: boolean = false, useCustomWebSearch: boolean = false, modelKey: string = 'gemini-3.1-flash-lite', chatMode: string = 'default', customSearchApi: string = 'auto', onMessageUpdate?: (text: string, citations?: Citation[]) => void): Promise<{ text: string, citations?: Citation[] }> {
   const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -31,7 +31,7 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
   const response = await fetch('/api/tutor-chat-stream', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ messages, customApiKey: customKey || null, model: modelKey, useWebSearch, useCustomWebSearch, chatMode })
+    body: JSON.stringify({ messages, customApiKey: customKey || null, model: modelKey, useWebSearch, useCustomWebSearch, chatMode, customSearchApi })
   });
   
   if (!response.ok) {

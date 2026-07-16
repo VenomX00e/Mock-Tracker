@@ -8,10 +8,12 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { askLearningTutor, ChatMessage } from '../../services/learningGeminiService';
 import { useUIStore } from '../../store/uiStore';
-import { useChatStore, ChatMode } from '../../store/chatStore';
+import { useChatStore, ChatMode, CustomSearchApi } from '../../store/chatStore';
 import { extractPdfPages } from '../../utils/pdfUtils';
 import { ChatMessage as ChatMessageBubble } from './ai/ChatMessage';
 import { ChatInputForm } from './ai/ChatInputForm';
+import { AppStateCtx } from '../../context/AppContext';
+import { useContext } from 'react';
 
 interface LearningAIAssistantProps {
   isEnlarged?: boolean;
@@ -22,11 +24,13 @@ import { getActiveApiKey } from '../../utils/apiKeyManager';
 
 export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIAssistantProps) {
   const { setActiveTab } = useUIStore();
-  const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton, useCustomWebSearch, toggleCustomWebSearch } = useChatStore();
+  const { isOwner } = useContext(AppStateCtx) || { isOwner: false };
+  const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton, useCustomWebSearch, toggleCustomWebSearch, customSearchApi, setCustomSearchApi } = useChatStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('default');
   const [showModeMenu, setShowModeMenu] = useState(false);
+  const [showSearchApiMenu, setShowSearchApiMenu] = useState(false);
   const currentModeMessages = messagesByMode[chatMode] || [];
   
   useEffect(() => {
@@ -43,6 +47,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
+  const searchApiMenuRef = useRef<HTMLDivElement>(null);
 
   const prevMessagesLengthRef = useRef(currentModeMessages.length);
   const prevIsEnlargedRef = useRef(isEnlarged);
@@ -70,6 +75,9 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
       }
       if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
         setShowModeMenu(false);
+      }
+      if (searchApiMenuRef.current && !searchApiMenuRef.current.contains(event.target as Node)) {
+        setShowSearchApiMenu(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -121,7 +129,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     try {
       const model = localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
       
-      const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, model, chatMode, (text, citations) => {
+      const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, model, chatMode, customSearchApi, (text, citations) => {
         setIsLoading(false);
         setMessages(chatMode, [...chatHistory, { role: 'model', text: text, citations }]);
       });
@@ -154,6 +162,51 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
         </div>
 
         <div className="flex items-center gap-1">
+          {isOwner && (
+            <div className="relative mr-2" ref={searchApiMenuRef}>
+              <button
+                onClick={() => setShowSearchApiMenu(!showSearchApiMenu)}
+                className="px-2 py-1 md:px-3 md:py-1.5 text-[10px] md:text-xs font-medium text-slate-700 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-slate-200 rounded-full transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap"
+              >
+                {customSearchApi === 'auto' && '🔍 Auto'}
+                {customSearchApi === 'tavily' && '🔍 Tavily'}
+                {customSearchApi === 'exa' && '🔍 Exa'}
+                {customSearchApi === 'tinyfish' && '🔍 Tinyfish'}
+              </button>
+              
+              {showSearchApiMenu && (
+                <div className="absolute right-0 top-full mt-2 w-40 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-xl z-50 overflow-hidden py-1">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 tracking-wider">
+                    Search Provider (Owner)
+                  </div>
+                  <button
+                    onClick={() => { setCustomSearchApi('auto'); setShowSearchApiMenu(false); }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${customSearchApi === 'auto' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                  >
+                    🔍 Auto
+                  </button>
+                  <button
+                    onClick={() => { setCustomSearchApi('tavily'); setShowSearchApiMenu(false); }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${customSearchApi === 'tavily' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                  >
+                    🔍 Tavily
+                  </button>
+                  <button
+                    onClick={() => { setCustomSearchApi('exa'); setShowSearchApiMenu(false); }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${customSearchApi === 'exa' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                  >
+                    🔍 Exa
+                  </button>
+                  <button
+                    onClick={() => { setCustomSearchApi('tinyfish'); setShowSearchApiMenu(false); }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${customSearchApi === 'tinyfish' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                  >
+                    🔍 Tinyfish
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="relative mr-2" ref={modeMenuRef}>
             <button
               onClick={() => setShowModeMenu(!showModeMenu)}

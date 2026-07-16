@@ -3,17 +3,20 @@ import { persist } from 'zustand/middleware';
 import { ChatMessage } from '../services/learningGeminiService';
 
 export type ChatMode = 'default' | 'math' | 'english' | 'reasoning';
+export type CustomSearchApi = 'auto' | 'tavily' | 'exa' | 'tinyfish';
 
 interface ChatState {
   messagesByMode: Record<ChatMode, ChatMessage[]>;
   persistLocally: boolean;
   showWebSearchButton: boolean;
   useCustomWebSearch: boolean;
+  customSearchApi: CustomSearchApi;
   addMessage: (mode: ChatMode, message: ChatMessage) => void;
   setMessages: (mode: ChatMode, messages: ChatMessage[]) => void;
   toggleLocalPersistence: () => void;
   toggleWebSearchButton: () => void;
   toggleCustomWebSearch: () => void;
+  setCustomSearchApi: (api: CustomSearchApi) => void;
   clearHistory: (mode?: ChatMode) => void;
 }
 
@@ -39,6 +42,7 @@ export const useChatStore = create<ChatState>()(
       persistLocally: false,
       showWebSearchButton: false,
       useCustomWebSearch: false,
+      customSearchApi: 'auto',
       
       addMessage: (mode, message) => set((state) => ({
         messagesByMode: {
@@ -69,6 +73,7 @@ export const useChatStore = create<ChatState>()(
           showWebSearchButton: newUse ? false : state.showWebSearchButton
         };
       }),
+      setCustomSearchApi: (api) => set({ customSearchApi: api }),
       
       clearHistory: (mode) => set((state) => {
         if (mode) {
@@ -92,6 +97,7 @@ export const useChatStore = create<ChatState>()(
         persistLocally: state.persistLocally,
         showWebSearchButton: state.showWebSearchButton,
         useCustomWebSearch: state.useCustomWebSearch,
+        customSearchApi: state.customSearchApi,
         // Only persist the chat history if they have opted in, 
         // otherwise overwrite the stored data with the default welcome messages
         messagesByMode: state.persistLocally ? state.messagesByMode : defaultWelcomeMessages,

@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { createRequire } from "module";
 import { v2 as cloudinary } from "cloudinary";
+import { TinyFish, FetchFormat } from '@tiny-fish/sdk';
 
 const require = createRequire(import.meta.url);
 
@@ -143,12 +144,11 @@ const fetchWithRetry = async (
 };
 
 // Helper to format Gemini err
-import { Request, Response, NextFunction } from "express";
 
 const requireAdminAuth = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
 ) => {
   try {
     const authHeader = req.headers.authorization;
@@ -746,46 +746,51 @@ async function fetchExa(query: string) {
 async function fetchTinyfish(query: string) {
   const apiKey = process.env.TINYFISH_API_KEY;
   if (!apiKey) throw new Error("Tinyfish API Key missing");
-  const response = await fetch("https://api.tinyfish.io/v1/search?q=" + encodeURIComponent(query), {
-    headers: { "Authorization": `Bearer ${apiKey}` }
-  });
-  if (!response.ok) throw new Error(`Tinyfish error: ${response.status}`);
-  const data = await response.json();
-  return (data.results || data.data || []).slice(0, 3).map((r: any) => ({
+  const client = new TinyFish({ apiKey });
+  const response = await client.search.query({ query });
+  return (response.results || []).slice(0, 3).map((r: any) => ({
     title: r.title || "Search Result",
-    content: r.content || r.snippet || r.text || "",
-    url: r.url || r.link || ""
+    content: r.snippet || "",
+    url: r.url || ""
   }));
 }
 
 async function fetchPageWithTinyfish(url: string, signal?: AbortSignal) {
   try {
     const apiKey = process.env.TINYFISH_API_KEY;
-    if (!apiKey) return null; // Suppress throw
-    const response = await fetch("https://api.tinyfish.io/v1/fetch?url=" + encodeURIComponent(url), {
-      headers: { "Authorization": `Bearer ${apiKey}` },
-      signal
+    if (!apiKey) return null;
+    
+    const client = new TinyFish({ apiKey }); 
+    const response = await client.fetch.getContents({
+      urls: [url],
+      format: FetchFormat.Markdown,
     });
-    if (!response.ok) {
-      await logSearchAttempt("Tinyfish Fetch", url, "error", `Status: ${response.status}`);
-      return null;
+
+    if (response && response.results && response.results.length > 0) {
+      await logSearchAttempt("Tinyfish Fetch", url, "success");
+      return (response.results[0].text as string) || "";
     }
-    const data = await response.json();
-    await logSearchAttempt("Tinyfish Fetch", url, "success");
-    return data.content || data.markdown || data.text || "";
+    
+    await logSearchAttempt("Tinyfish Fetch", url, "error", "No results returned");
+    return null;
   } catch (e: any) {
     await logSearchAttempt("Tinyfish Fetch", url, "error", e.message || String(e));
-    return null; // Suppress throw
+    return null;
   }
 }
 
 async function fetchPageWithJina(url: string, signal?: AbortSignal) {
   try {
+    const apiKey = process.env.JINA_API_KEY;
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
     const response = await fetch("https://r.jina.ai/" + url, { 
       signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
+      headers
     });
     if (!response.ok) {
       await logSearchAttempt("Jina Fetch", url, "error", `Status: ${response.status}`);
@@ -854,7 +859,7 @@ async function logSearchAttempt(apiName: string, query: string, status: 'success
   }
 }
 
-async function performCustomSearch(query: string, searchType: string) {
+async function performCustomSearch(query: string, searchType: string, customSearchApi: string = 'auto') {
   let results = null;
   
   const tryTavily = async () => { 
@@ -892,15 +897,23 @@ async function performCustomSearch(query: string, searchType: string) {
   };
 
   try {
-    if (searchType === "news_and_facts") {
-      try { results = await tryTavily(); } 
-      catch (e) { console.error("Tavily failed:", e); try { results = await tryTinyfish(); } catch(e2) { console.error("Tinyfish failed:", e2); results = await tryExa(); } }
-    } else if (searchType === "semantic_concept") {
-      try { results = await tryExa(); } 
-      catch (e) { console.error("Exa failed:", e); try { results = await tryTavily(); } catch(e2) { console.error("Tavily failed:", e2); results = await tryTinyfish(); } }
-    } else { // general
-      try { results = await tryTinyfish(); } 
-      catch (e) { console.error("Tinyfish failed:", e); try { results = await tryTavily(); } catch(e2) { console.error("Tavily failed:", e2); results = await tryExa(); } }
+    if (customSearchApi === 'tavily') {
+      try { results = await tryTavily(); } catch(e) { console.error("Tavily failed (forced):", e); }
+    } else if (customSearchApi === 'exa') {
+      try { results = await tryExa(); } catch(e) { console.error("Exa failed (forced):", e); }
+    } else if (customSearchApi === 'tinyfish') {
+      try { results = await tryTinyfish(); } catch(e) { console.error("Tinyfish failed (forced):", e); }
+    } else {
+      if (searchType === "news_and_facts") {
+        try { results = await tryTavily(); } 
+        catch (e) { console.error("Tavily failed:", e); try { results = await tryTinyfish(); } catch(e2) { console.error("Tinyfish failed:", e2); results = await tryExa(); } }
+      } else if (searchType === "semantic_concept") {
+        try { results = await tryExa(); } 
+        catch (e) { console.error("Exa failed:", e); try { results = await tryTavily(); } catch(e2) { console.error("Tavily failed:", e2); results = await tryTinyfish(); } }
+      } else { // general
+        try { results = await tryTinyfish(); } 
+        catch (e) { console.error("Tinyfish failed:", e); try { results = await tryTavily(); } catch(e2) { console.error("Tavily failed:", e2); results = await tryExa(); } }
+      }
     }
   } catch (finalError) {
     console.error("All search providers failed for query:", query, finalError);
@@ -951,7 +964,7 @@ app.post("/api/tutor-chat-stream", async (req, res) => {
       });
     }
 
-    const { messages, customApiKey, model, useWebSearch, useCustomWebSearch, chatMode } = req.body;
+    const { messages, customApiKey, model, useWebSearch, useCustomWebSearch, chatMode, customSearchApi } = req.body;
 
     if (!customApiKey) {
       return res.status(403).json({
@@ -1130,7 +1143,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
           
           res.write(`data: ${JSON.stringify({ text: "\n*(Searching the web for: " + query + ")*\n" })}\n\n`);
           
-          const searchResults = await performCustomSearch(query, search_type);
+          const searchResults = await performCustomSearch(query, search_type, customSearchApi);
           
           if (searchResults.results) {
              searchResults.results.forEach((r: any) => {
@@ -1431,12 +1444,10 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
 
 // Cloudinary API Routes
 
-import { Request, Response, NextFunction } from "express";
-
 const requireAdminStorageAuth = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
 ) => {
   try {
     const authHeader = req.headers.authorization;

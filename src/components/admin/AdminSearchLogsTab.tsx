@@ -236,7 +236,7 @@ export function AdminSearchLogsTab() {
             <input
               type="number"
               value={autoDeleteDays}
-              onChange={(e) => setAutoDeleteDays(e.target.value)}
+              onChange={(e) => setAutoDeleteDays(e.target.value ? Number(e.target.value) : "")}
               className="w-20 px-2 py-1 text-sm border border-slate-200 dark:border-slate-700/50 rounded-lg bg-slate-50 dark:bg-slate-800/50 dark:text-slate-200"
             />
             <button
