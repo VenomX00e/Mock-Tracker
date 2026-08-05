@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { CommunityHubTrashModal } from './community/CommunityHubTrashModal';
-import { useCommunityUI } from './community/useCommunityPosts';
+import { useCommunityUI, createCommunityPoll } from './community/useCommunityPosts';
+import { jarvisEventBus } from '../features/jarvis/utils/eventBus';
 import { collection, query, orderBy, limit, getDocs, collectionGroup, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, addDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../services/AuthContext';
@@ -63,6 +64,204 @@ export default function CommunityHub() {
     handleAdminPermanentDelete, handleAdminChangeGlobalSort, handleReact
   } = uiState;
 
+  useEffect(() => {
+    const unsubscribe = jarvisEventBus.subscribe(async (action) => {
+      if (action.type === 'SUB_NAVIGATE') {
+        const { subTab, section } = action.payload || {};
+        const target = subTab || section;
+        if (target === 'leaderboard' || target === 'OPEN_LEADERBOARD') {
+          const el = document.getElementById('community-leaderboard');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        } else if (target === 'log' || target === 'OPEN_COMMUNITY_LOG') {
+          const el = document.getElementById('community-log');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        } else if (target === 'chat' || target === 'OPEN_COMMUNITY_CHAT') {
+          const el = document.getElementById('community-chat') || document.getElementById('community-chat-scroll');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+
+      if (action.type === 'EXECUTE_INTENT') {
+        const intent = action.intent;
+        const payload = action.payload;
+
+        if (intent === 'OPEN_COMMUNITY_HUB') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (intent === 'OPEN_LEADERBOARD') {
+          const el = document.getElementById('community-leaderboard');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        } else if (intent === 'OPEN_COMMUNITY_LOG') {
+          const el = document.getElementById('community-log');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        } else if (intent === 'OPEN_COMMUNITY_CHAT') {
+          const el = document.getElementById('community-chat') || document.getElementById('community-chat-scroll');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        } else if (intent === 'SEND_COMMUNITY_CHAT') {
+          const text = payload?.text || payload?.message;
+          if (text) {
+            try {
+              await handleSendMessage(undefined, text);
+            } catch (err) {
+              console.error('Error sending chat via JARVIS:', err);
+            }
+          }
+        } else if (intent === 'CREATE_COMMUNITY_POLL') {
+          const { question, options, isMulti } = payload || {};
+          let parsedOptions: any[] = [];
+
+          if (Array.isArray(options)) {
+            parsedOptions = options;
+          } else if (typeof options === 'string') {
+            const rawStr = options.trim();
+            if (rawStr.startsWith('[') && rawStr.endsWith(']')) {
+              try {
+                parsedOptions = JSON.parse(rawStr);
+              } catch {
+                parsedOptions = rawStr.split(/[,;\n]/);
+              }
+            } else {
+              parsedOptions = rawStr.split(/[,;\n]/);
+            }
+          }
+
+          let targetAnswer = (
+            payload?.correctOption ??
+            payload?.correct_option ??
+            payload?.answer ??
+            payload?.correctAnswer ??
+            payload?.correct_answer ??
+            payload?.correctIndex ??
+            payload?.correctOptionIndex ??
+            payload?.solution ??
+            payload?.correct ??
+            ''
+          ).toString().trim();
+
+          if (!targetAnswer) {
+            const payloadStr = JSON.stringify(payload || {});
+            const fullTextToSearch = `${question || ''} ${payloadStr}`;
+
+            const matchSetAsAnswer = fullTextToSearch.match(/(?:set|mark|choose|select)\s+(.+?)\s+as\s+(?:the\s+)?(?:correct\s+)?answer/i);
+            const matchAnswerIs = fullTextToSearch.match(/(?:correct\s+answer|answer)\s*(?:is|=|:)\s*(.+?)(?:$|\s+with|\s+and|\.|\,)/i);
+            const matchCorrect = fullTextToSearch.match(/correct\s*[:=]\s*(.+?)(?:$|\s+with|\s+and|\.|\,)/i);
+
+            if (matchSetAsAnswer && matchSetAsAnswer[1]) {
+              targetAnswer = matchSetAsAnswer[1].trim();
+            } else if (matchAnswerIs && matchAnswerIs[1]) {
+              targetAnswer = matchAnswerIs[1].trim();
+            } else if (matchCorrect && matchCorrect[1]) {
+              targetAnswer = matchCorrect[1].trim();
+            }
+          }
+
+          const formattedOptionsForPoll = parsedOptions
+            .map((opt, idx) => {
+              let text = typeof opt === 'string' ? opt.trim() : (opt?.text || '').trim();
+              if (!text) return null;
+
+              let isCorrect = false;
+
+              // 1. Check object property
+              if (typeof opt === 'object' && opt !== null) {
+                if (opt.isCorrect || opt.correct || opt.isAnswer || opt.answer) {
+                  isCorrect = true;
+                }
+              }
+
+              // 2. Check inline markers like "(correct)", "(answer)", "*", etc.
+              if (/[\(\[](?:correct|answer)[\)\]]|\*/i.test(text)) {
+                isCorrect = true;
+                text = text.replace(/[\(\[](?:correct|answer)[\)\]]|\*/gi, '').trim();
+              }
+
+              // 3. Match against targetAnswer
+              if (!isCorrect && targetAnswer) {
+                const textLower = text.toLowerCase();
+                const answerLower = targetAnswer.toLowerCase();
+
+                if (
+                  textLower === answerLower ||
+                  textLower.includes(answerLower) ||
+                  answerLower.includes(textLower)
+                ) {
+                  isCorrect = true;
+                } else if (
+                  answerLower === idx.toString() ||
+                  answerLower === (idx + 1).toString() ||
+                  answerLower === `option ${idx + 1}` ||
+                  answerLower === `option${idx + 1}` ||
+                  (answerLower === 'a' && idx === 0) ||
+                  (answerLower === 'b' && idx === 1) ||
+                  (answerLower === 'c' && idx === 2) ||
+                  (answerLower === 'd' && idx === 3)
+                ) {
+                  isCorrect = true;
+                }
+              }
+
+              return {
+                id: (idx + 1).toString(),
+                text,
+                isCorrect,
+              };
+            })
+            .filter((o): o is { id: string; text: string; isCorrect: boolean } => o !== null);
+
+          if (question && formattedOptionsForPoll.length >= 2) {
+            try {
+              if (user) {
+                await createCommunityPoll(user, question, formattedOptionsForPoll, !!isMulti);
+                setShowPollMaker(false);
+                setPollQuestion('');
+                setPollOptions([
+                  { id: '1', text: '', isCorrect: false },
+                  { id: '2', text: '', isCorrect: false }
+                ]);
+              } else {
+                setPollQuestion(question);
+                setPollOptions(formattedOptionsForPoll);
+                setShowPollMaker(true);
+              }
+            } catch (err) {
+              console.error('Error creating poll via JARVIS:', err);
+              setPollQuestion(question);
+              setPollOptions(formattedOptionsForPoll);
+              setShowPollMaker(true);
+            }
+          } else {
+            if (question) setPollQuestion(question);
+            if (formattedOptionsForPoll.length > 0) {
+              setPollOptions(formattedOptionsForPoll);
+            }
+            setShowPollMaker(true);
+          }
+        } else if (intent === 'VOTE_COMMUNITY_POLL') {
+          const { messageId, optionIndex, optionId } = payload || {};
+          if (messageId) {
+            let targetOptId = optionId;
+            if (targetOptId == null && optionIndex != null && chatMessages) {
+              const targetMsg = chatMessages.find((m: any) => m.id === messageId);
+              if (targetMsg?.poll?.options?.[optionIndex]) {
+                targetOptId = targetMsg.poll.options[optionIndex].id;
+              }
+            }
+            if (targetOptId) {
+              try {
+                await handlePollVote(messageId, targetOptId);
+              } catch (err) {
+                console.error('Error voting poll via JARVIS:', err);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, handleSendMessage, handlePollVote, setPollQuestion, setPollOptions, setShowPollMaker, chatMessages]);
+
   const contextValue: CommunityViewContextType = {
       Trophy, CustomDropdown, selectedPeriod, setSelectedPeriod, isAdmin, isOwner, sortConfig, handleAdminChangeGlobalSort, selectedPhase, availablePhases, setSelectedPhase, setDoc, doc, db, loadingTop, handleSort, subjects, sortedLeaderboard, parseLocalDate, onUserClick, getHeatmapColor, Flame,
       user, Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, getPlatformShort, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight,
@@ -106,7 +305,7 @@ function CommunityLeaderboard() {
     }
   };
 
-  return <Card noPadding className="border border-slate-100 dark:border-slate-700">
+  return <Card id="community-leaderboard" noPadding className="border border-slate-100 dark:border-slate-700" data-jarvis-section="Community Leaderboard">
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-3 sm:flex-row sm:items-center justify-between rounded-t-2xl">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
              <div className="flex items-center justify-between w-full sm:w-auto">
@@ -245,8 +444,11 @@ function CommunityLeaderboard() {
                      displayStreak = isZeroStreak ? 0 : (user.streak || 0);
                   }
                   
+                  const quantVal = user.avgQuantPercentile ?? user.dynamicAverages?.quant ?? 0;
+                  const itemText = `Leaderboard Rank #${idx + 1}: ${user.displayName || 'User'} - Full: ${user.avgPercentile || 0}%, Quant: ${quantVal}%`;
+                  
                   return (
-                  <tr key={user.userId} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                  <tr key={user.userId} data-jarvis-item={itemText} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="p-2 sm:p-4 font-bold text-slate-400 dark:text-slate-500 text-center hidden sm:table-cell">#{idx + 1}</td>
                     <td className="p-2 sm:p-4 pr-3 sm:pr-4">
                       <div 
@@ -318,7 +520,7 @@ function CommunityFeed() {
   const { user, Users, loadingFeed, filteredFeedLogs, daysVisible, feedSort, handleFeedSort, getFeedSortConfig, subjects, sortedLeaderboard, onUserClick, Flame, getPlatformShort, getHeatmapColor, getSub, handleReact, reactions, Calendar, setDaysVisible, ArrowRight } = useCommunityView();
   return <>
     {/* FEED */}
-      <Card noPadding className="border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <Card id="community-log" noPadding className="border border-slate-100 dark:border-slate-700 overflow-hidden" data-jarvis-section="Community Activity Log">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
           <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Users className="w-5 h-5 text-blue-500" /> Community Log
@@ -411,9 +613,12 @@ function CommunityFeed() {
                           </thead>
                 );
 
-                const renderFeedRow = (m: any) => (
+                const renderFeedRow = (m: any) => {
+                  const feedItemText = `Community Log Entry: ${m.userName || 'Aspirant'} scored ${m.score ?? '-'} on ${m.mockName || 'Mock Test'}`;
+                  return (
                               <tr 
                                 key={m.id} 
+                                data-jarvis-item={feedItemText}
                                 className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
                               >
                                 <td className="px-2 py-2 sm:px-4 sm:py-3 pr-3 sm:pr-4 font-medium text-slate-700 dark:text-slate-300">
@@ -498,6 +703,7 @@ function CommunityFeed() {
                                 </td>
                               </tr>
                 );
+              };
 
                 if (feedToDisplay) {
                   return (
@@ -609,7 +815,7 @@ function CommunityChat() {
 
   return <>
     {/* CHAT SECTION */}
-      <Card noPadding className="border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[550px]">
+      <Card id="community-chat" noPadding className="border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col h-[550px]">
         <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0">
             <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500" /> Community Chat

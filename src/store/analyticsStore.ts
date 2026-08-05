@@ -24,6 +24,7 @@ interface CacheStore {
   selectedTrendPeriod: string;
   activeTrendId: string;
   statsCountRange: number | 'all';
+  selectedHistoryDate: string | null;
   setStatsCountRange: (val: number | 'all') => void;
   dashboardHash: string | null;
   
@@ -73,6 +74,7 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
   selectedTrendPeriod: '15 Days',
   activeTrendId: 'overall',
   statsCountRange: 'all',
+  selectedHistoryDate: null,
   setStatsCountRange: (val) => set({ statsCountRange: val }),
   dashboardHash: null,
 

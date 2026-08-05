@@ -10,6 +10,9 @@ import {
   Moon,
   Calendar,
   Gamepad2,
+  Plus,
+  Star,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -18,6 +21,7 @@ import { CustomDropdown } from "./CustomDropdown";
 
 import { ExamCategory } from "../types";
 import { Card } from "./ui/Card";
+import { jarvisEventBus, JarvisActionEvent } from "../features/jarvis/utils/eventBus";
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -82,10 +86,126 @@ export default function ProfileDialog({
   const [targetedExam, setTargetedExam] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [bio, setBio] = useState("");
+  const [yptNames, setYptNames] = useState<string[]>([]);
+  const [defaultYptHandle, setDefaultYptHandle] = useState<string | undefined>(undefined);
+  const [editingYptIdx, setEditingYptIdx] = useState<number | null>(null);
+  const [editingYptText, setEditingYptText] = useState<string>("");
+  const [newYptInput, setNewYptInput] = useState("");
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingAvatar, setIsPickingAvatar] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<any>(null);
+
+  useEffect(() => {
+    const handleJarvisAction = async (action: JarvisActionEvent) => {
+      if (action.type !== 'EXECUTE_INTENT' || !action.payload) return;
+
+      if (action.intent === 'UPDATE_PROFILE_NAME') {
+        const newName = typeof action.payload === 'string'
+          ? action.payload
+          : action.payload.newName || action.payload.name;
+        if (newName) {
+          setDisplayName(newName);
+          try {
+            await updateProfile({ displayName: newName });
+          } catch (err) {
+            console.error("Jarvis update profile name failed:", err);
+          }
+        }
+      } else if (action.intent === 'UPDATE_EXAM_SECTION') {
+        const section = typeof action.payload === 'string'
+          ? action.payload
+          : action.payload.section || action.payload.category || action.payload.categoryId;
+        if (section && categories) {
+          const matchedCategory = categories.find((c) =>
+            c.name.toLowerCase() === section.toLowerCase() ||
+            c.id.toLowerCase() === section.toLowerCase()
+          );
+          const finalCatId = matchedCategory ? matchedCategory.id : section.toLowerCase();
+          setCategoryId(finalCatId);
+          // DO NOT change targetedExam!
+          try {
+            await updateProfile({ categoryId: finalCatId });
+          } catch (err) {
+            console.error("Jarvis update exam section failed:", err);
+          }
+        }
+      } else if (action.intent === 'UPDATE_TARGET_EXAM') {
+        const exam = typeof action.payload === 'string'
+          ? action.payload
+          : action.payload.exam || action.payload.targetExam;
+        let catId = typeof action.payload === 'object' ? action.payload.categoryId : undefined;
+
+        if (exam) {
+          // Check if 'exam' is actually the name/id of a category/sector (e.g. "SSC", "Banking")
+          const categoryMatch = categories?.find((c) =>
+            c.name.toLowerCase() === exam.toLowerCase() || c.id.toLowerCase() === exam.toLowerCase()
+          );
+          const isExplicitExam = categoryMatch?.exams?.some((e) => e.toLowerCase() === exam.toLowerCase());
+
+          if (categoryMatch && !isExplicitExam) {
+            // User requested to change sector/category, NOT target exam!
+            setCategoryId(categoryMatch.id);
+            try {
+              await updateProfile({ categoryId: categoryMatch.id });
+            } catch (err) {
+              console.error("Jarvis update category failed:", err);
+            }
+          } else {
+            // User requested a specific targeted exam update
+            if (!catId && categories) {
+              const matchedCategory = categories.find((c) =>
+                c.exams.some((e) => e.toLowerCase() === exam.toLowerCase())
+              );
+              if (matchedCategory) {
+                catId = matchedCategory.id;
+              }
+            }
+            const finalCatId = catId || categoryId || "banking";
+            setTargetedExam(exam);
+            setCategoryId(finalCatId);
+
+            const currentCat = categories?.find((c) => c.id === finalCatId);
+            const catExams = currentCat ? currentCat.exams : exams;
+            setIsCustomExam(!["", ...catExams].includes(exam));
+
+            try {
+              await updateProfile({ targetedExam: exam, categoryId: finalCatId });
+            } catch (err) {
+              console.error("Jarvis update target exam failed:", err);
+            }
+          }
+        }
+      } else if (action.intent === 'UPDATE_PROFILE_BIO') {
+        const newBio = typeof action.payload === 'string'
+          ? action.payload
+          : action.payload.bio || action.payload.studyGoal || action.payload.goal;
+        if (newBio !== undefined) {
+          setBio(newBio);
+          try {
+            await updateProfile({ bio: newBio });
+          } catch (err) {
+            console.error("Jarvis update profile bio failed:", err);
+          }
+        }
+      } else if (action.intent === 'UPDATE_PROFILE_AVATAR') {
+        const newAvatar = typeof action.payload === 'string'
+          ? action.payload
+          : action.payload.avatarUrl || action.payload.avatar || action.payload.avatarId;
+        if (newAvatar) {
+          setPhotoURL(newAvatar);
+          try {
+            await updateProfile({ photoURL: newAvatar });
+          } catch (err) {
+            console.error("Jarvis update profile avatar failed:", err);
+          }
+        }
+      }
+    };
+    
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisAction);
+    return () => unsubscribe();
+  }, [updateProfile, categories, categoryId]);
 
   useEffect(() => {
     if (profile) {
@@ -94,6 +214,9 @@ export default function ProfileDialog({
       setTargetedExam(profile.targetedExam || "SBI PO");
       setCategoryId(profile.categoryId || "banking");
       setBio(profile.bio || "");
+      const loadedNames = Array.isArray(profile.yptNames) ? profile.yptNames : [];
+      setYptNames(loadedNames);
+      setDefaultYptHandle(profile.defaultYptHandle || (loadedNames.length > 0 ? loadedNames[0] : undefined));
 
       const currentCat = categories.find(
         (c) => c.id === (profile.categoryId || "banking"),
@@ -106,6 +229,72 @@ export default function ProfileDialog({
       );
     }
   }, [profile, categories]);
+
+  const handleAddYptName = () => {
+    const trimmed = newYptInput.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 50) {
+      alert("YPT Username must be 50 characters or less.");
+      return;
+    }
+    if (!yptNames.includes(trimmed)) {
+      setYptNames((prev) => [...prev, trimmed]);
+      if (!defaultYptHandle) {
+        setDefaultYptHandle(trimmed);
+      }
+    }
+    setNewYptInput("");
+  };
+
+  const handleToggleDefaultYpt = (handle: string) => {
+    if (defaultYptHandle === handle) {
+      setDefaultYptHandle(undefined);
+    } else {
+      setDefaultYptHandle(handle);
+    }
+  };
+
+  const handleStartEditYpt = (idx: number, handle: string) => {
+    setEditingYptIdx(idx);
+    setEditingYptText(handle);
+  };
+
+  const handleSaveEditYpt = (idx: number, oldHandle: string) => {
+    const trimmed = editingYptText.trim();
+    if (!trimmed) {
+      setEditingYptIdx(null);
+      return;
+    }
+    if (trimmed.length > 50) {
+      alert("YPT Username must be 50 characters or less.");
+      return;
+    }
+    setYptNames((prev) => {
+      const updated = [...prev];
+      updated[idx] = trimmed;
+      return updated;
+    });
+    if (defaultYptHandle === oldHandle) {
+      setDefaultYptHandle(trimmed);
+    }
+    setEditingYptIdx(null);
+    setEditingYptText("");
+  };
+
+  const handleCancelEditYpt = () => {
+    setEditingYptIdx(null);
+    setEditingYptText("");
+  };
+
+  const handleRemoveYptName = (nameToRemove: string) => {
+    setYptNames((prev) => {
+      const updated = prev.filter((name) => name !== nameToRemove);
+      if (defaultYptHandle === nameToRemove) {
+        setDefaultYptHandle(updated.length > 0 ? updated[0] : undefined);
+      }
+      return updated;
+    });
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -124,6 +313,8 @@ export default function ProfileDialog({
         targetedExam,
         categoryId,
         bio,
+        yptNames,
+        defaultYptHandle: defaultYptHandle || (yptNames.length > 0 ? yptNames[0] : undefined),
       });
       onClose();
     } catch (e: any) {
@@ -141,6 +332,7 @@ export default function ProfileDialog({
   const content = (
     <>
       <div
+        data-jarvis-section="User Profile Settings"
         className={`bg-white dark:bg-slate-900 ${asPage ? "w-full rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden flex-1 min-h-0" : "rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh] flex flex-col"} relative z-10`}
       >
         {!asPage && (
@@ -340,7 +532,7 @@ export default function ProfileDialog({
                         </button>
                       )}
                       <button
-                        onClick={handleSave}
+                        data-jarvis-target="save-profile-btn" onClick={handleSave}
                         disabled={isSaving || !displayName.trim()}
                         className="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed shadow transition-all"
                       >
@@ -352,13 +544,13 @@ export default function ProfileDialog({
                   <div className="space-y-6">
                     {/* Basic Info Card */}
                     <div className="p-5 sm:p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/50 space-y-5">
-                      <div>
+                      <div data-jarvis-item={`Display Name: ${displayName || 'Not set'}`}>
                         <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 block">
                           Display Name
                         </label>
                         <div className="relative">
                           <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-                          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                          <input data-jarvis-target="profile-name-input" autoComplete="new-password" list="autocompleteOff" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                             type="text"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
@@ -368,7 +560,7 @@ export default function ProfileDialog({
                         </div>
                       </div>
 
-                      <div>
+                      <div data-jarvis-item={`Bio: ${bio || 'Not set'}`}>
                         <div className="flex justify-between items-center mb-1.5 sm:mb-2">
                           <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                             Bio
@@ -379,7 +571,7 @@ export default function ProfileDialog({
                             {bio.length}/70
                           </span>
                         </div>
-                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                        <input data-jarvis-target="profile-bio-input" autoComplete="new-password" list="autocompleteOff" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                           type="text"
                           value={bio}
                           onChange={(e) => {
@@ -396,12 +588,148 @@ export default function ProfileDialog({
                           placeholder="Tell us a bit about yourself"
                         />
                       </div>
+
+                      {/* YPT Usernames Section */}
+                      <div data-jarvis-item={`YPT Usernames: ${yptNames.join(', ') || 'None'}`}>
+                        <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 sm:mb-2 block">
+                          YPT Usernames
+                        </label>
+                        <div className="flex gap-2 items-center">
+                          <input
+                            data-jarvis-target="profile-ypt-input"
+                            type="text"
+                            value={newYptInput}
+                            onChange={(e) => setNewYptInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleAddYptName();
+                              }
+                            }}
+                            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
+                            placeholder="Enter YPT handle (optional)"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddYptName}
+                            disabled={!newYptInput.trim()}
+                            className="p-2 sm:p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg sm:rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                            title="Add YPT username"
+                          >
+                            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                          </button>
+                        </div>
+
+                        {/* YPT Chip / Tag List */}
+                        {yptNames.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {yptNames.map((handle, idx) => {
+                              const hasDefault = Boolean(defaultYptHandle);
+                              const isDefault = defaultYptHandle === handle;
+                              const isEditing = editingYptIdx === idx;
+
+                              if (isEditing) {
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-indigo-500/60 px-2.5 py-1 rounded-full text-xs shadow-xs"
+                                  >
+                                    <input
+                                      type="text"
+                                      value={editingYptText}
+                                      onChange={(e) => setEditingYptText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          handleSaveEditYpt(idx, handle);
+                                        } else if (e.key === "Escape") {
+                                          handleCancelEditYpt();
+                                        }
+                                      }}
+                                      autoFocus
+                                      className="w-28 sm:w-36 px-1.5 py-0.5 text-xs bg-transparent border-b border-indigo-400 focus:outline-none font-mono text-slate-900 dark:text-white"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEditYpt(idx, handle)}
+                                      className="p-1 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full transition-colors"
+                                      title="Save handle"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditYpt}
+                                      className="p-1 hover:bg-rose-500/20 text-rose-500 rounded-full transition-colors"
+                                      title="Cancel edit"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                                    isDefault
+                                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-400/50 shadow-2xs ring-1 ring-amber-400/20"
+                                      : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
+                                  }`}
+                                >
+                                  {/* [ ⭐ Star Icon ] */}
+                                  {(!hasDefault || isDefault) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleDefaultYpt(handle)}
+                                      className="p-0.5 hover:scale-110 transition-transform focus:outline-none shrink-0"
+                                      title={
+                                        isDefault
+                                          ? "Default Handle (Click to un-select)"
+                                          : "Set as Default Handle"
+                                      }
+                                    >
+                                      <Star
+                                        className={`w-3.5 h-3.5 ${
+                                          isDefault
+                                            ? "text-amber-400 fill-amber-400"
+                                            : "text-slate-400 hover:text-amber-400 transition-colors"
+                                        }`}
+                                      />
+                                    </button>
+                                  )}
+
+                                  {/* [ @Handle Name (Tap to Edit) ] */}
+                                  <span
+                                    onClick={() => handleStartEditYpt(idx, handle)}
+                                    className="cursor-pointer hover:underline font-mono"
+                                    title="Tap to edit handle name"
+                                  >
+                                    {handle}
+                                  </span>
+
+                                  {/* [ ✖ Delete ] */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveYptName(handle)}
+                                    className="p-0.5 hover:bg-indigo-500/20 rounded-full transition-colors text-slate-400 hover:text-rose-500 ml-0.5 shrink-0"
+                                    title={`Remove ${handle}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Target & Exam Info Card */}
                     <div className="p-5 sm:p-6 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/50 space-y-5">
                       <div className="grid sm:grid-cols-2 gap-5">
-                        <div>
+                        <div data-jarvis-item={`Sector: ${categories.find((c) => c.id === categoryId)?.name || categoryId}`}>
                           <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <Target className="w-3.5 h-3.5" /> Sector
                           </label>
@@ -422,7 +750,7 @@ export default function ProfileDialog({
                           />
                         </div>
 
-                        <div>
+                        <div data-jarvis-target="profile-exam-select" data-jarvis-item={`Target Exam: ${targetedExam || 'Not set'}`}>
                           <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <Target className="w-3.5 h-3.5" /> Targeted Exam
                           </label>
@@ -446,7 +774,7 @@ export default function ProfileDialog({
                             />
                           ) : (
                             <div className="relative">
-                              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                              <input data-jarvis-target="profile-exam-input" autoComplete="new-password" list="autocompleteOff" data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                                 type="text"
                                 value={targetedExam}
                                 onChange={(e) =>
@@ -527,7 +855,7 @@ export default function ProfileDialog({
                           Cancel
                         </button>
                         <button
-                          onClick={handleSave}
+                          data-jarvis-target="save-profile-btn" onClick={handleSave}
                           disabled={isSaving || !displayName.trim()}
                           className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-xl disabled:opacity-50"
                         >

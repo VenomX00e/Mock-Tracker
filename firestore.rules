@@ -107,6 +107,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(['categoryStats']) || data.categoryStats is map || data.categoryStats == null)
         && (!data.keys().hasAny(['badges']) || data.badges is map || data.badges is list || data.badges == null)
         && (!data.keys().hasAny(['bio']) || data.bio is string || data.bio == null)
+        && (!data.keys().hasAny(['yptNames']) || data.yptNames is list || data.yptNames == null)
         && (!data.keys().hasAny(['permissions']) || data.permissions is map || data.permissions == null)
         && (!data.keys().hasAny(['tasks']) || data.tasks is list || data.tasks == null)
         && (!data.keys().hasAny(['lastActiveAt']) || data.lastActiveAt is number || data.lastActiveAt is timestamp || data.lastActiveAt == null);
@@ -114,7 +115,7 @@ service cloud.firestore {
 
     function isValidChatMessage(data) {
       return data.keys().hasAll(['userId', 'userName', 'userPhoto', 'text', 'createdAt'])
-        && data.keys().size() >= 5 && data.keys().size() <= 10
+        && data.keys().size() >= 5 && data.keys().size() <= 11
         && data.userId is string && data.userId == request.auth.uid
         && data.userName is string && data.userName.size() <= 100
         && data.userPhoto is string && data.userPhoto.size() <= 500
@@ -123,6 +124,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(['replyTo']) || (data.replyTo is map && data.replyTo.keys().hasAll(['id', 'text', 'userName'])))
         && (!data.keys().hasAny(['reactions']) || data.reactions is map)
         && (!data.keys().hasAny(['poll']) || data.poll is map)
+        && (!data.keys().hasAny(['isPoll']) || data.isPoll is bool)
         && (!data.keys().hasAny(['isPinned']) || data.isPinned is bool)
         && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is number);
     }
@@ -245,12 +247,12 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
           'userId', 'email', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
           'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 'totalTests', 'streak', 
-          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks', 'lastActiveAt'
+          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'tasks', 'lastActiveAt'
         ]) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
         || (isAnyAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
           'userId', 'email', 'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
           'avgAccuracy', 'avgQuantPercentile', 'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 
-          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'tasks', 'lastActiveAt'
+          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'tasks', 'lastActiveAt'
         ]));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
     }
@@ -350,6 +352,14 @@ service cloud.firestore {
       allow write: if request.auth != null && 
                    request.auth.token.email == 'mrityunjoyk29@gmail.com' &&
                    request.auth.token.email_verified == true;
+    }
+
+    match /yptChallenges/{challengeId} {
+      allow read, create, update, delete: if isSignedIn();
+
+      match /submissions/{submissionId} {
+        allow read, create, update, delete: if isSignedIn();
+      }
     }
   }
 }

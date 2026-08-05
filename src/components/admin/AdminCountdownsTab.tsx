@@ -138,8 +138,8 @@ export function AdminCountdownsTab({
         </div>
 
         {(adminCategoryScope
-          ? countdowns.filter((c) => c.categoryId === adminCategoryScope)
-          : countdowns.filter((c) => !c.categoryId)
+          ? countdowns.filter((c) => c.categoryId === adminCategoryScope || (!c.categoryId && adminCategoryScope === 'banking'))
+          : countdowns
         ).length > 0 && (
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
             <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">
@@ -149,8 +149,8 @@ export function AdminCountdownsTab({
             </h4>
             <ul className="space-y-3">
               {(adminCategoryScope
-                ? countdowns.filter((c) => c.categoryId === adminCategoryScope)
-                : countdowns.filter((c) => !c.categoryId)
+                ? countdowns.filter((c) => c.categoryId === adminCategoryScope || (!c.categoryId && adminCategoryScope === 'banking'))
+                : countdowns
               ).map((c) => (
                 <li
                   key={c.id}

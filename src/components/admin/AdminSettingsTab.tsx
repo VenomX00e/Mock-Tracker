@@ -18,11 +18,12 @@ interface AdminSettingsTabProps {
 const MODELS = [
   { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Default)' },
   { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
   { value: 'gemini-3-flash-preview', label: 'Gemini 3.0 Flash' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
   { value: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B IT' },
-  { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' },
+  { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' }
 ];
 
 export function AdminSettingsTab({

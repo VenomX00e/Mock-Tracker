@@ -532,6 +532,11 @@ export function MathArena({ config, onClose }: MathArenaProps) {
 
   return createPortal(
     <div
+      data-jarvis-section="speed-math"
+      data-jarvis-question-id={question?.id || 'math_active'}
+      data-jarvis-subject="Mathematics"
+      data-jarvis-topic={config.name || "Speed Math"}
+      data-jarvis-status={status}
       className={`fixed inset-0 z-[9999] bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-sm overflow-y-auto flex items-center p-4 md:p-8 ${numpadAlignment === "center" ? "justify-center" : numpadAlignment === "left" ? "justify-start" : "justify-end"}`}
     >
       <div

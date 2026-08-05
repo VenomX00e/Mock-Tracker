@@ -3,6 +3,7 @@ import { AppStateCtx } from '../../context/AppContext';
 import { useVocabularyStore } from '../../store/vocabularyStore';
 import { Plus, BookOpen, Calendar, Trash2 } from 'lucide-react';
 import { EditorialCanvasView } from './EditorialCanvasView';
+import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
 
 export function VocabularyFeed() {
   const { isOwner, adminPermissions } = useContext(AppStateCtx)!;
@@ -27,6 +28,77 @@ export function VocabularyFeed() {
       document.removeEventListener("mousedown", handleDocumentClick);
     };
   }, []);
+
+  const [filterQuery, setFilterQuery] = useState('');
+
+  const normalizeDateString = (str: string): string => {
+    if (!str) return '';
+    return str
+      .toLowerCase()
+      .replace(/(st|nd|rd|th)/gi, '')
+      .replace(/january/g, 'jan')
+      .replace(/february/g, 'feb')
+      .replace(/march/g, 'mar')
+      .replace(/april/g, 'apr')
+      .replace(/may/g, 'may')
+      .replace(/june/g, 'jun')
+      .replace(/july/g, 'jul')
+      .replace(/august/g, 'aug')
+      .replace(/september/g, 'sep')
+      .replace(/october/g, 'oct')
+      .replace(/november/g, 'nov')
+      .replace(/december/g, 'dec')
+      .replace(/[^a-z0-9]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  useEffect(() => {
+    const handleJarvisAction = (action: JarvisActionEvent) => {
+      if (action.type === 'EXECUTE_INTENT') {
+        if (
+          action.intent === 'OPEN_VOCAB_CANVAS' ||
+          action.intent === 'FILTER_VOCAB_DATE' ||
+          action.intent === 'OPEN_EDITORIAL_VOCAB' ||
+          action.intent === 'FILTER_VOCABULARY_BY_DATE'
+        ) {
+          const payload = action.payload || {};
+          const target = action.query || payload.date || payload.searchQuery || (action as any).target || '';
+          if (!target) return;
+
+          setFilterQuery(target);
+
+          const queryNorm = normalizeDateString(target);
+
+          const matchedCanvas = canvases.find(c => {
+            const titleNorm = normalizeDateString(c.title);
+            let formattedDate = '';
+            try {
+              formattedDate = new Date(c.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } catch {
+              formattedDate = c.date;
+            }
+            const dateNorm = normalizeDateString(formattedDate);
+            const rawDateNorm = normalizeDateString(c.date);
+
+            return (
+              (titleNorm && queryNorm.includes(titleNorm)) ||
+              (titleNorm && titleNorm.includes(queryNorm)) ||
+              (dateNorm && queryNorm.includes(dateNorm)) ||
+              (dateNorm && dateNorm.includes(queryNorm)) ||
+              (rawDateNorm && queryNorm.includes(rawDateNorm))
+            );
+          });
+
+          if (matchedCanvas) {
+            setActiveCanvasId(matchedCanvas.id);
+          }
+        }
+      }
+    };
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisAction);
+    return () => unsubscribe();
+  }, [canvases]);
 
   const handleCreateCanvas = (e: React.FormEvent) => {
     e.preventDefault();

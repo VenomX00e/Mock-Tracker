@@ -19,7 +19,11 @@
         "isBanned": { "type": "boolean" },
         "isMuted": { "type": "boolean" },
         "lastMockDate": { "type": "string" },
-        "role": { "type": "string" }
+        "role": { "type": "string" },
+        "yptNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       },
       "required": ["userId"]
     },
@@ -158,9 +162,51 @@
         "enableSpeedMath": { "type": "boolean" },
         "enablePracticeLibrary": { "type": "boolean" }
       }
+    },
+    "YptChallenge": {
+      "title": "YptChallenge",
+      "description": "YPT group challenge with study rules and team rosters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "leaderUid": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "draft"] },
+        "rules": { "type": "object" },
+        "teams": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "leaderUid", "startDate", "endDate", "status"]
+    },
+    "YptSubmissionLog": {
+      "title": "YptSubmissionLog",
+      "description": "Verified study logs and OCR screenshot extraction entries for YPT challenge",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "challengeId": { "type": "string" },
+        "uploaderUid": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "extractedMembers": { "type": "array" },
+        "totalPointsAwarded": { "type": "number" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected"] }
+      },
+      "required": ["id", "challengeId", "uploaderUid", "status"]
     }
   },
   "firestore": {
+    "yptChallenges/{challengeId}": {
+      "schema": { "$ref": "#/entities/YptChallenge" },
+      "description": "YPT study challenges and teams"
+    },
+    "yptChallenges/{challengeId}/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/YptSubmissionLog" },
+      "description": "OCR submission logs for a YPT challenge"
+    },
     "users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "User profile containing metadata and aggregates"

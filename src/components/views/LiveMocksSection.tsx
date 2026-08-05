@@ -95,7 +95,7 @@ export function LiveMocksSection() {
   }
 
   return (
-    <div className="relative mb-5 mt-0 pt-[12px] pb-[0px] pl-[0px] pr-[12px]" style={{ paddingBottom: '0px', paddingLeft: '0px' }}>
+    <div id="live-mocks" className="relative mb-5 mt-0 pt-[12px] pb-[0px] pl-[0px] pr-[12px] scroll-mt-24" style={{ paddingBottom: '0px', paddingLeft: '0px' }}>
       <div className="flex justify-between items-center mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Active Live Mocks</h3>

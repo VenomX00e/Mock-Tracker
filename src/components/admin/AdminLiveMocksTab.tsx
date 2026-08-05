@@ -312,8 +312,8 @@ export function AdminLiveMocksTab({
           </div>
 
           {(adminCategoryScope
-            ? liveMocks.filter((m) => m.categoryId === adminCategoryScope)
-            : liveMocks.filter((m) => !m.categoryId)
+            ? liveMocks.filter((m) => m.categoryId === adminCategoryScope || (!m.categoryId && adminCategoryScope === 'banking'))
+            : liveMocks
           ).length > 0 && (
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
               <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">
@@ -323,8 +323,8 @@ export function AdminLiveMocksTab({
               </h4>
               <ul className="space-y-3">
                 {(adminCategoryScope
-                  ? liveMocks.filter((m) => m.categoryId === adminCategoryScope)
-                  : liveMocks.filter((m) => !m.categoryId)
+                  ? liveMocks.filter((m) => m.categoryId === adminCategoryScope || (!m.categoryId && adminCategoryScope === 'banking'))
+                  : liveMocks
                 ).map((m) => (
                   <li
                     key={m.id}

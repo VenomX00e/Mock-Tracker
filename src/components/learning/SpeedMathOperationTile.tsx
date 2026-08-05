@@ -143,7 +143,7 @@ export function SpeedMathOperationTile({
       </div>
       <button
         onClick={() => handleStartBasic(item.op)}
-        className="mt-auto pt-4 flex items-center justify-between text-xs md:text-sm font-medium text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors"
+        data-jarvis-target={`start-math-${item.op}`} className="mt-auto pt-4 flex items-center justify-between text-xs md:text-sm font-medium text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors"
       >
         <span>Start Practice</span>
         <Play className="w-4 h-4" />

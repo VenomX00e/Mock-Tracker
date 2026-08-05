@@ -33,6 +33,8 @@ export interface UserProfile {
   leaderboardRank?: number;
   periodContext?: string;
   bio?: string;
+  yptNames?: string[];
+  defaultYptHandle?: string;
   badges?: any[];
   stats7D?: any;
   stats30D?: any;
@@ -47,6 +49,7 @@ export interface UserProfile {
     canManageFeatures?: boolean;
     canManageQuotes?: boolean;
     canManageLearning?: boolean;
+    canManageYpt?: boolean;
   };
   tasks?: ReflectionTask[];
 }
@@ -284,3 +287,6 @@ export interface CloudinaryWebhookLog {
   status: string;
   rawPayload: string;
 }
+
+export * from './types/yptTypes';
+

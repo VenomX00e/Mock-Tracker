@@ -48,9 +48,9 @@ export function AdminChallengesTab({
   const visibleChallenges = challenges.filter(c => {
     if (!isOwner && c.visibility === 'personal') return false;
     if (adminCategoryScope) {
-      return c.categoryId === adminCategoryScope;
+      return c.categoryId === adminCategoryScope || (!c.categoryId && adminCategoryScope === 'banking');
     }
-    return !c.categoryId;
+    return true;
   });
 
   return (

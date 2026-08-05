@@ -5,6 +5,7 @@ import { MockScore, UserProfile, ReflectionTask } from '../types';
 import { getPlatformShort, parseLocalDate } from '../lib/utils';
 import { InlineTaskEditor } from './dashboard/InlineTaskEditor';
 import { TaskProgressDisk } from './TasksTile';
+import { jarvisEventBus, JarvisActionEvent } from '../features/jarvis/utils/eventBus';
 
 import { useMocks } from '../hooks/useMocks';
 import { useUserProfileCtx, useSystemDataCtx, useAppStateCtx } from '../context/AppContext';
@@ -95,6 +96,50 @@ export function TasksPage() {
     hasAutoDeletedRef.current = true;
   }, [profile, rawMocks, onUpdateProfileTasks]);
 
+  useEffect(() => {
+    const handleJarvisEvent = (action: JarvisActionEvent) => {
+      if (action.type === 'EXECUTE_INTENT') {
+        const payload = action.payload || {};
+
+        if (action.intent === 'ADD_GENERAL_TASK' || action.intent === 'CREATE_TASK') {
+          const text = payload.text || payload.taskText || action.query || '';
+          if (text.trim() && onUpdateProfileTasks && profile) {
+            const newTask = {
+              id: Math.random().toString(36).substr(2, 9),
+              text: text.trim(),
+              completed: false,
+              createdAt: new Date().toISOString(),
+            };
+            onUpdateProfileTasks([...(profile.tasks || []), newTask]);
+          }
+        } else if (action.intent === 'VIEW_COMPLETED_TASKS') {
+          setShowCompletedTasks(true);
+        } else if (action.intent === 'VIEW_INCOMPLETE_TASKS' || action.intent === 'SHOW_ACTIVE_TASKS') {
+          setShowCompletedTasks(false);
+        } else if (action.intent === 'TOGGLE_TASK' || action.intent === 'COMPLETE_TASK') {
+          const targetText = (payload.taskText || payload.text || action.query || '').toLowerCase();
+          if (targetText && onUpdateProfileTasks && profile) {
+            const updated = (profile.tasks || []).map(t => {
+              if (t.text.toLowerCase().includes(targetText) || targetText.includes(t.text.toLowerCase())) {
+                const isComp = payload.completed !== undefined ? Boolean(payload.completed) : !t.completed;
+                return {
+                  ...t,
+                  completed: isComp,
+                  completedAt: isComp ? new Date().toISOString() : undefined,
+                };
+              }
+              return t;
+            });
+            onUpdateProfileTasks(updated);
+          }
+        }
+      }
+    };
+
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisEvent);
+    return () => unsubscribe();
+  }, [profile, onUpdateProfileTasks]);
+
   const mocksWithTasks = useMemo(() => mocks.filter(m => m.tasks && m.tasks.length > 0 && (showCompletedTasks || m.tasks.some(t => !t.completed))), [mocks, showCompletedTasks]);
   const globalTasks = useMemo(() => (profile?.tasks || []).filter(t => showCompletedTasks || !t.completed).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()), [profile?.tasks, showCompletedTasks]);
 
@@ -163,7 +208,7 @@ export function TasksPage() {
   }, [activeActionsTaskId]);
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-6" data-jarvis-section="Tasks Management">
       <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
                   <div className="flex items-center gap-3">
                     <button 
@@ -218,7 +263,7 @@ export function TasksPage() {
                            {globalTasks.length > 0 && (
                              <div className="space-y-2">
                                 {globalTasks.map(task => (
-                                   <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item group flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
+                                   <div key={task.id} data-jarvis-item={`Task: ${task.text} [Status: ${task.completed ? 'Completed' : 'Pending'}]`} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item group flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:shadow transition-shadow cursor-pointer">
                                       <button onClick={(e) => { e.stopPropagation(); handleToggleGlobalTask(task.id, !task.completed); }} className={`shrink-0 mt-0.5 rounded flex items-center justify-center w-4 h-4 md:w-5 md:h-5 transition-colors ${task.completed ? 'bg-emerald-500 hover:bg-emerald-600 border-none' : 'border-2 border-slate-300 dark:border-slate-600 hover:border-indigo-500'}`}>
                                         {task.completed && <Check className="w-3 h-3 md:w-3.5 md:h-3.5 text-white" />}
                                       </button>
@@ -365,7 +410,7 @@ export function TasksPage() {
                                 </div>
                                 <div className="px-4 sm:px-5 pr-[20px] pb-[10px] pt-[5px] transition-opacity duration-0 opacity-100 block">
                                   {tasksToShow.map((task) => (
-                                    <div key={task.id} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item flex items-start gap-3 group cursor-pointer p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                    <div key={task.id} data-jarvis-item={`Task: ${task.text} (Mock: ${mock.mockName}) [Status: ${task.completed ? 'Completed' : 'Pending'}]`} onClick={() => setActiveActionsTaskId(activeActionsTaskId === task.id ? null : task.id)} className="task-item flex items-start gap-3 group cursor-pointer p-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                       <button 
                                         onClick={async (e) => {
                                           e.stopPropagation();

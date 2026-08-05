@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useSpeedMathStore, MathPreset } from "../../store/speedMathStore";
 import { Operation } from "../../utils/mathEngine";
@@ -25,6 +25,7 @@ import { SpeedMathOperationTile } from "./SpeedMathOperationTile";
 import { useSystemDocsQuery } from "../../hooks/useSystemDocsQuery";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../services/firebase";
+import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
 
 export const basicOperations: {
   name: string;
@@ -186,6 +187,66 @@ export function SpeedMathHub() {
       name: basicOperations.find((b) => b.op === op)?.name || "Practice Mode",
     });
   };
+
+  useEffect(() => {
+    const handleJarvisAction = (action: JarvisActionEvent) => {
+      if (action.type === 'EXECUTE_INTENT') {
+        const payload = action.payload || {};
+
+        if (action.intent === 'START_SPEED_MATH_DRILL' || action.intent === 'START_MATH_DRILL') {
+          const opInput = (action.operation || payload.operation || '').toLowerCase();
+          const found = basicOperations.find(b => 
+            b.op.toLowerCase() === opInput ||
+            b.name.toLowerCase().includes(opInput) ||
+            opInput.includes(b.name.toLowerCase()) ||
+            (opInput === '+' && b.op === '+') ||
+            (opInput === '-' && b.op === '-') ||
+            (opInput === '*' && b.op === '*') ||
+            (opInput === '/' && b.op === '/')
+          ) || basicOperations[0];
+
+          if (found) {
+            const rawAction = action as any;
+            const tileSet = getTileSetting(found.op);
+            const duration = payload.duration ?? rawAction.settings?.duration ?? tileSet.duration;
+            const timeUnit = payload.timeUnit || rawAction.settings?.timeUnit || tileSet.timeUnit || 'SEC';
+            const difficulty = (payload.difficulty || rawAction.settings?.difficulty || tileSet.difficulty || 'MEDIUM').toUpperCase();
+            const mode = (payload.mode || rawAction.settings?.mode || tileSet.mode || 'TIME').toUpperCase();
+            const questionCount = payload.questionCount ?? rawAction.settings?.questionCount ?? tileSet.questionCount ?? 20;
+
+            setActiveConfig({
+              operations: [found.op],
+              baseSettings: {
+                mode: mode as any,
+                duration: Number(duration) || 60,
+                timeUnit: timeUnit as any,
+                questionCount: Number(questionCount) || 20,
+              },
+              overrides: {
+                [found.op]: {
+                  difficulty: difficulty as any,
+                  customRanges: tileSet.customRanges,
+                  isReverse: tileSet.isReverse,
+                },
+              },
+              name: found.name,
+            });
+          }
+        } else if (action.intent === 'START_SPEED_MATH_PRESET') {
+          const rawAction = action as any;
+          const presetName = (payload.presetName || rawAction.presetName || '').toLowerCase();
+          const matchedPreset = filteredPresets.find(p => 
+            p.name.toLowerCase().includes(presetName) || presetName.includes(p.name.toLowerCase())
+          );
+          if (matchedPreset) {
+            handleStartPreset(matchedPreset);
+          }
+        }
+      }
+    };
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisAction);
+    return () => unsubscribe();
+  }, [tileSettings, filteredPresets]);
 
   const handleStartPreset = (preset: MathPreset) => {
     setActiveConfig({

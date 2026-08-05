@@ -25,7 +25,10 @@ interface AdminUsersTabProps {
   adminListRef: React.RefObject<HTMLLIElement>;
   recalculatingUserIds: Set<string>;
   handleUpdateUserRole: (userId: string, role: string) => Promise<void>;
-  handleUpdateUserStatus: (userId: string, updates: Partial<UserProfile>) => Promise<void>;
+  handleUpdateUserStatus: (
+    userId: string,
+    updates: Partial<UserProfile>,
+  ) => Promise<void>;
   handleRecalculateStats: (userId: string) => Promise<void>;
   handleTogglePermission: (user: UserProfile, perm: string) => void;
 }
@@ -60,7 +63,12 @@ export function AdminUsersTab({
         </h3>
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+          <input
+            autoComplete="new-password"
+            list="autocompleteOff"
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-form-type="other"
             type="text"
             placeholder="Search users..."
             value={userSearch}
@@ -84,7 +92,8 @@ export function AdminUsersTab({
                     onClick={() => setUserFilter("active")}
                     className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${userFilter === "active" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
                   >
-                    <Users className="w-4 h-4" /> Active Users ({allAppUsers.length})
+                    <Users className="w-4 h-4" /> Active Users (
+                    {allAppUsers.length})
                   </button>
                   {isOwner && (
                     <>
@@ -92,36 +101,61 @@ export function AdminUsersTab({
                         onClick={() => setUserFilter("all")}
                         className={`text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${userFilter === "all" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
                       >
-                        <Users className="w-4 h-4" /> All Users ({allFirebaseUsers.length})
+                        <Users className="w-4 h-4" /> All Users (
+                        {allFirebaseUsers.length})
                       </button>
                     </>
                   )}
                 </div>
                 {(userFilter === "all" ? allFirebaseUsers : allAppUsers)
-                  .filter((u) => isOwner || u.email !== "mrityunjoyk29@gmail.com")
+                  .filter(
+                    (u) => isOwner || u.email !== "mrityunjoyk29@gmail.com",
+                  )
                   .filter(
                     (u) =>
                       userSearch.trim() === "" ||
-                      u.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
-                      (u as any).displayName?.toLowerCase().includes(userSearch.toLowerCase()),
+                      u.email
+                        ?.toLowerCase()
+                        .includes(userSearch.toLowerCase()) ||
+                      (u as any).displayName
+                        ?.toLowerCase()
+                        .includes(userSearch.toLowerCase()),
                   ).length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400 italic">
                     No users found.
                   </p>
                 ) : (
                   <ul className="divide-y divide-slate-100 dark:divide-slate-800/50 border border-slate-200 dark:border-slate-800/50 rounded-lg overflow-visible w-full relative">
-                    {[...(userFilter === "all" ? allFirebaseUsers : allAppUsers)]
-                      .filter((u) => isOwner || u.email !== "mrityunjoyk29@gmail.com")
+                    {[
+                      ...(userFilter === "all"
+                        ? allFirebaseUsers
+                        : allAppUsers),
+                    ]
+                      .filter(
+                        (u) => isOwner || u.email !== "mrityunjoyk29@gmail.com",
+                      )
                       .filter(
                         (u) =>
                           userSearch.trim() === "" ||
-                          u.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
-                          (u as any).displayName?.toLowerCase().includes(userSearch.toLowerCase()),
+                          u.email
+                            ?.toLowerCase()
+                            .includes(userSearch.toLowerCase()) ||
+                          (u as any).displayName
+                            ?.toLowerCase()
+                            .includes(userSearch.toLowerCase()),
                       )
                       .sort((a, b) => {
                         const search = userSearch.toLowerCase().trim();
-                        const nameA = ((a as any).displayName || a.email || "").toLowerCase();
-                        const nameB = ((b as any).displayName || b.email || "").toLowerCase();
+                        const nameA = (
+                          (a as any).displayName ||
+                          a.email ||
+                          ""
+                        ).toLowerCase();
+                        const nameB = (
+                          (b as any).displayName ||
+                          b.email ||
+                          ""
+                        ).toLowerCase();
                         if (search) {
                           const aStarts = nameA.startsWith(search) ? 1 : 0;
                           const bStarts = nameB.startsWith(search) ? 1 : 0;
@@ -145,13 +179,21 @@ export function AdminUsersTab({
                         const bActive = getMs(b.lastActiveAt);
                         return bActive - aActive;
                       })
-                      .slice(0, 100).map((user) => (
+                      .slice(0, 100)
+                      .map((user) => (
                         <li
                           key={user.userId}
-                          ref={expandedAdminId === user.userId ? adminListRef : null}
+                          ref={
+                            expandedAdminId === user.userId
+                              ? adminListRef
+                              : null
+                          }
                           className={`p-3 bg-white dark:bg-slate-900 transition-colors first:rounded-t-lg last:rounded-b-lg ${user.role === "admin" ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" : ""}`}
                           onClick={(e) => {
-                            if (user.role === "admin" && expandedAdminId !== user.userId) {
+                            if (
+                              user.role === "admin" &&
+                              expandedAdminId !== user.userId
+                            ) {
                               setExpandedAdminId(user.userId);
                             }
                           }}
@@ -179,39 +221,56 @@ export function AdminUsersTab({
                                     <p className="text-[10px] text-slate-400 mt-0.5">
                                       Last active:{" "}
                                       {user.lastActiveAt
-                                        ? new Date(user.lastActiveAt).toLocaleString()
+                                        ? new Date(
+                                            user.lastActiveAt,
+                                          ).toLocaleString()
                                         : "N/A"}
                                     </p>
                                   </>
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              {isOwner && user.email !== "mrityunjoyk29@gmail.com" && (
-                                <CustomDropdown
-                                  value={user.role === "admin" ? "Admin" : "User"}
-                                  options={["User", "Admin"]}
-                                  onChange={(val) => handleUpdateUserRole(user.userId, val.toLowerCase())}
-                                  placeholder="Role"
-                                  buttonClassName="px-2.5 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 font-semibold h-[26px] flex items-center justify-between"
-                                  optionClassName="px-2 py-1 text-[11px]"
-                                  className="w-[85px]"
-                                />
-                              )}
+                            <div
+                              className="flex items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {isOwner &&
+                                user.email !== "mrityunjoyk29@gmail.com" && (
+                                  <CustomDropdown
+                                    value={
+                                      user.role === "admin" ? "Admin" : "User"
+                                    }
+                                    options={["User", "Admin"]}
+                                    onChange={(val) =>
+                                      handleUpdateUserRole(
+                                        user.userId,
+                                        val.toLowerCase(),
+                                      )
+                                    }
+                                    placeholder="Role"
+                                    buttonClassName="px-2.5 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 font-semibold h-[26px] flex items-center justify-between"
+                                    optionClassName="px-2 py-1 text-[11px]"
+                                    className="w-[85px]"
+                                  />
+                                )}
                               {isOwner && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRecalculateStats(user.userId);
                                   }}
-                                  disabled={recalculatingUserIds.has(user.userId)}
+                                  disabled={recalculatingUserIds.has(
+                                    user.userId,
+                                  )}
                                   className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${
                                     recalculatingUserIds.has(user.userId)
                                       ? "bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed"
                                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-900/50 dark:hover:text-indigo-400"
                                   }`}
                                 >
-                                  {recalculatingUserIds.has(user.userId) ? "Updating..." : "Update"}
+                                  {recalculatingUserIds.has(user.userId)
+                                    ? "Updating..."
+                                    : "Update"}
                                 </button>
                               )}
                               {user.email !== "mrityunjoyk29@gmail.com" && (
@@ -228,55 +287,72 @@ export function AdminUsersTab({
                                   Mute
                                 </button>
                               )}
-                              {isOwner && user.email !== "mrityunjoyk29@gmail.com" && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateUserStatus(user.userId, { isBanned: true });
-                                  }}
-                                  className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/50 dark:hover:text-rose-400 rounded-md transition-colors flex items-center gap-1"
-                                >
-                                  Ban
-                                </button>
-                              )}
+                              {isOwner &&
+                                user.email !== "mrityunjoyk29@gmail.com" && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateUserStatus(user.userId, {
+                                        isBanned: true,
+                                      });
+                                    }}
+                                    className="text-xs font-medium px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-900/50 dark:hover:text-rose-400 rounded-md transition-colors flex items-center gap-1"
+                                  >
+                                    Ban
+                                  </button>
+                                )}
                             </div>
                           </div>
-                          {isOwner && user.role === "admin" && expandedAdminId === user.userId && (
-                            <div
-                              className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/50 w-full animate-in slide-in-from-top-2 duration-200"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2">
-                                Admin Permissions
-                              </p>
-                              <div className="flex flex-wrap gap-1.5 w-full">
-                                {[
-                                  "canManageUsers",
-                                  "canManageNotices",
-                                  "canManageChallenges",
-                                  "canManageLiveMocks",
-                                  "canManageCountdowns",
-                                  "canManageSettings",
-                                  "canManageFeatures",
-                                  "canManageQuotes",
-                                  "canManageLearning",
-                                ].map((perm) => (
-                                  <label
-                                    key={perm}
-                                    className={`text-[10px] flex items-center justify-center font-medium px-2 py-1 rounded-md cursor-pointer transition-colors border select-none ${!!(user.permissions as any)?.[perm] ? "bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-800/50 dark:text-indigo-300" : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
-                                  >
-                                    <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
-                                      type="checkbox"
-                                      checked={!!(user.permissions as any)?.[perm]}
-                                      onChange={() => handleTogglePermission(user, perm)}
-                                      className="sr-only"
-                                    />
-                                    {perm.replace("canManage", "")}
-                                  </label>
-                                ))}
+                          {isOwner &&
+                            user.role === "admin" &&
+                            expandedAdminId === user.userId && (
+                              <div
+                                className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/50 w-full animate-in slide-in-from-top-2 duration-200"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-2">
+                                  Admin Permissions
+                                </p>
+                                <div className="flex flex-wrap gap-1.5 w-full">
+                                  {[
+                                    "canManageUsers",
+                                    "canManageNotices",
+                                    "canManageChallenges",
+                                    "canManageLiveMocks",
+                                    "canManageCountdowns",
+                                    "canManageSettings",
+                                    "canManageFeatures",
+                                    "canManageQuotes",
+                                    "canManageLearning",
+                                    "canManageYpt",
+                                  ].map((perm) => (
+                                    <label
+                                      key={perm}
+                                      className={`text-[10px] flex items-center justify-center font-medium px-2 py-1 rounded-md cursor-pointer transition-colors border select-none ${!!(user.permissions as any)?.[perm] ? "bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-800/50 dark:text-indigo-300" : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800/50 dark:border-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+                                    >
+                                      <input
+                                        autoComplete="new-password"
+                                        list="autocompleteOff"
+                                        data-1p-ignore="true"
+                                        data-lpignore="true"
+                                        data-form-type="other"
+                                        type="checkbox"
+                                        checked={
+                                          !!(user.permissions as any)?.[perm]
+                                        }
+                                        onChange={() =>
+                                          handleTogglePermission(user, perm)
+                                        }
+                                        className="sr-only"
+                                      />
+                                      {perm === "canManageYpt"
+                                        ? "YPT"
+                                        : perm.replace("canManage", "")}
+                                    </label>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </li>
                       ))}
                   </ul>
@@ -285,7 +361,8 @@ export function AdminUsersTab({
               {isOwner && (
                 <div>
                   <h4 className="text-sm font-semibold text-rose-600 dark:text-rose-400 mb-3 flex items-center gap-1.5">
-                    <UserX className="w-4 h-4" /> Banned Users ({bannedUsers.length})
+                    <UserX className="w-4 h-4" /> Banned Users (
+                    {bannedUsers.length})
                   </h4>
                   {bannedUsers.length === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400 italic">
@@ -324,7 +401,11 @@ export function AdminUsersTab({
                             </div>
                           </div>
                           <button
-                            onClick={() => handleUpdateUserStatus(user.userId, { isBanned: false })}
+                            onClick={() =>
+                              handleUpdateUserStatus(user.userId, {
+                                isBanned: false,
+                              })
+                            }
                             className="text-xs font-medium px-3 py-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-md transition-colors flex items-center gap-1"
                           >
                             <UserCheck className="w-3.5 h-3.5" /> Unban
@@ -345,7 +426,8 @@ export function AdminUsersTab({
                           isOwner ||
                           (u.email !== "mrityunjoyk29@gmail.com" &&
                             u.mutedAt &&
-                            (new Date().getTime() - u.mutedAt) / (1000 * 60 * 60 * 24) <=
+                            (new Date().getTime() - u.mutedAt) /
+                              (1000 * 60 * 60 * 24) <=
                               (Number(muteDurationDays) || 1)),
                       ).length
                     }
@@ -356,13 +438,20 @@ export function AdminUsersTab({
                       <label className="text-xs text-slate-500 dark:text-slate-400">
                         Duration (Days):
                       </label>
-                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                      <input
+                        autoComplete="new-password"
+                        list="autocompleteOff"
+                        data-1p-ignore="true"
+                        data-lpignore="true"
+                        data-form-type="other"
                         type="number"
                         min="1"
                         value={muteDurationDays}
                         onChange={(e) =>
                           setMuteDurationDays(
-                            e.target.value === "" ? "" : parseInt(e.target.value),
+                            e.target.value === ""
+                              ? ""
+                              : parseInt(e.target.value),
                           )
                         }
                         onBlur={saveSettings}
@@ -376,7 +465,8 @@ export function AdminUsersTab({
                     isOwner ||
                     (u.email !== "mrityunjoyk29@gmail.com" &&
                       u.mutedAt &&
-                      (new Date().getTime() - u.mutedAt) / (1000 * 60 * 60 * 24) <=
+                      (new Date().getTime() - u.mutedAt) /
+                        (1000 * 60 * 60 * 24) <=
                         (Number(muteDurationDays) || 1)),
                 ).length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400 italic">
@@ -390,10 +480,12 @@ export function AdminUsersTab({
                           isOwner ||
                           (u.email !== "mrityunjoyk29@gmail.com" &&
                             u.mutedAt &&
-                            (new Date().getTime() - u.mutedAt) / (1000 * 60 * 60 * 24) <=
+                            (new Date().getTime() - u.mutedAt) /
+                              (1000 * 60 * 60 * 24) <=
                               (Number(muteDurationDays) || 1)),
                       )
-                      .slice(0, 100).map((user) => (
+                      .slice(0, 100)
+                      .map((user) => (
                         <li
                           key={user.userId}
                           className="p-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 bg-white dark:bg-slate-900 transition-colors first:rounded-t-lg last:rounded-b-lg"
@@ -420,7 +512,9 @@ export function AdminUsersTab({
                                   <p className="text-[10px] text-slate-400 mt-0.5">
                                     Last active:{" "}
                                     {user.lastActiveAt
-                                      ? new Date(user.lastActiveAt).toLocaleString()
+                                      ? new Date(
+                                          user.lastActiveAt,
+                                        ).toLocaleString()
                                       : "N/A"}
                                   </p>
                                 </>
@@ -428,7 +522,11 @@ export function AdminUsersTab({
                             </div>
                           </div>
                           <button
-                            onClick={() => handleUpdateUserStatus(user.userId, { isMuted: false })}
+                            onClick={() =>
+                              handleUpdateUserStatus(user.userId, {
+                                isMuted: false,
+                              })
+                            }
                             className="text-xs font-medium px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-md transition-colors flex items-center gap-1"
                           >
                             <MessageSquare className="w-3.5 h-3.5" /> Unmute

@@ -196,8 +196,8 @@ export function AdminNoticesTab({
         </div>
 
         {(adminCategoryScope
-          ? notices.filter((n) => n.categoryId === adminCategoryScope)
-          : notices.filter((n) => !n.categoryId)
+          ? notices.filter((n) => n.categoryId === adminCategoryScope || (!n.categoryId && adminCategoryScope === 'banking'))
+          : notices
         ).length > 0 && (
           <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
             <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-4">
@@ -207,8 +207,8 @@ export function AdminNoticesTab({
             </h4>
             <ul className="space-y-3">
               {(adminCategoryScope
-                ? notices.filter((n) => n.categoryId === adminCategoryScope)
-                : notices.filter((n) => !n.categoryId)
+                ? notices.filter((n) => n.categoryId === adminCategoryScope || (!n.categoryId && adminCategoryScope === 'banking'))
+                : notices
               ).map((n) => (
                 <li
                   key={n.id}

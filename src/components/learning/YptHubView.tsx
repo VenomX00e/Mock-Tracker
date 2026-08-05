@@ -1,0 +1,758 @@
+import React, { useState, useEffect } from 'react';
+import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap } from 'lucide-react';
+import { useAppStateCtx, useUserProfileCtx } from '../../context/AppContext';
+import { YptChallenge, YptSubmissionLog } from '../../types/yptTypes';
+import { getAllYptChallenges, getYptSubmissionLogs, softDeleteYptChallenge, getRegisteredUserYptList, YptUserEntry, getDeduplicatedDailyMemberStats } from '../../services/yptService';
+import { CreateYptChallengeModal } from './ypt/CreateYptChallengeModal';
+import { YptUploadModal } from './ypt/YptUploadModal';
+import { YptChallengeDetail } from './ypt/YptChallengeDetail';
+import { YptRecycleBinModal } from './ypt/YptRecycleBinModal';
+import { ConfirmDeleteModal } from './ypt/ConfirmDeleteModal';
+
+type SubViewTab = 'global' | 'challenges' | 'leaderboard';
+type GlobalDateFilter = 'today' | 'yesterday' | 'last7days' | 'allTime';
+
+export interface GlobalMemberStat {
+  cleanHandle: string;
+  displayHandle: string;
+  periodHours: number;
+  periodXP: number;
+  totalHours: number;
+  totalXP: number;
+  submissionCount: number;
+}
+
+function getLocalYmd(dateInput: Date | string | number): string {
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatStudyHours(hours: number): string {
+  if (!hours || hours <= 0) return '0h 00m';
+  const totalMins = Math.round(hours * 60);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return `${h}h ${m < 10 ? '0' : ''}${m}m`;
+}
+
+export function YptHubView() {
+  const { isOwner, isAdmin } = useAppStateCtx();
+  const { profile: userProfile } = useUserProfileCtx();
+
+  const canManageYptChallenges = 
+    isOwner || 
+    isAdmin || 
+    userProfile?.role === 'admin' || 
+    Boolean(userProfile?.permissions?.canManageYpt);
+
+  const [challenges, setChallenges] = useState<YptChallenge[]>([]);
+  const [allSubmissions, setAllSubmissions] = useState<YptSubmissionLog[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<YptUserEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [activeTab, setActiveTab] = useState<SubViewTab>('global');
+  const [dateFilter, setDateFilter] = useState<GlobalDateFilter>('today');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedChallenge, setSelectedChallenge] = useState<YptChallenge | null>(null);
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingChallenge, setEditingChallenge] = useState<YptChallenge | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
+  const [challengeToDelete, setChallengeToDelete] = useState<YptChallenge | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const fetchAllSubmissions = async (activeChs: YptChallenge[]) => {
+    setLoadingSubmissions(true);
+    try {
+      const subPromises = activeChs.map((c) => getYptSubmissionLogs(c.id));
+      const results = await Promise.all(subPromises);
+      const combined = results.flat();
+      setAllSubmissions(combined);
+    } catch (err) {
+      console.error('Failed to load global submissions:', err);
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
+
+  const fetchChallenges = async () => {
+    setLoading(true);
+    try {
+      const [data, users] = await Promise.all([
+        getAllYptChallenges(),
+        getRegisteredUserYptList(),
+      ]);
+      setChallenges(data);
+      setRegisteredUsers(users);
+      const activeChs = data.filter((c) => !c.isDeleted && c.status !== 'deleted');
+      await fetchAllSubmissions(activeChs);
+    } catch (err) {
+      console.error('Failed to load YPT challenges:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchChallenges();
+  }, []);
+
+  const activeChallenges = challenges.filter((c) => !c.isDeleted && c.status !== 'deleted');
+  const deletedChallenges = challenges.filter((c) => c.isDeleted || c.status === 'deleted');
+
+  // Compute unique registered handles across all active challenges
+  const uniqueRegisteredHandles = Array.from(
+    new Set(
+      activeChallenges.flatMap((c) =>
+        c.teams.flatMap((t) => (t.memberUids || []).map((h) => h.replace(/^@/, '').trim().toLowerCase()))
+      ).filter(Boolean)
+    )
+  );
+
+  // Global Leaderboard Aggregator - Unifies member handles under user account starred default handle
+  const getGlobalLeaderboardData = (): (GlobalMemberStat & { aliases: string[] })[] => {
+    const todayObj = new Date();
+    const todayYmd = getLocalYmd(todayObj);
+
+    const yesterdayObj = new Date(todayObj);
+    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+    const yesterdayYmd = getLocalYmd(yesterdayObj);
+
+    const sevenDaysAgoObj = new Date(todayObj);
+    sevenDaysAgoObj.setDate(sevenDaysAgoObj.getDate() - 6);
+    const sevenDaysAgoYmd = getLocalYmd(sevenDaysAgoObj);
+
+    // Build alias map and pre-initialize registered members in membersMap
+    const aliasToUserMap = new Map<string, { userKey: string; primaryDisplayHandle: string; allAliases: string[] }>();
+    const membersMap = new Map<string, GlobalMemberStat & { aliases: string[] }>();
+
+    registeredUsers.forEach((u) => {
+      const allAliases = Array.isArray(u.yptNames) ? u.yptNames : [];
+      if (allAliases.length === 0) return;
+
+      let primaryDisplay = u.defaultYptHandle;
+      if (!primaryDisplay && allAliases.length > 0) {
+        primaryDisplay = allAliases[0];
+      }
+      if (!primaryDisplay) {
+        primaryDisplay = u.displayName || u.uid;
+      }
+      primaryDisplay = primaryDisplay.replace(/^@/, '').trim();
+
+      const userKey = u.uid;
+
+      membersMap.set(userKey, {
+        cleanHandle: userKey,
+        displayHandle: primaryDisplay,
+        periodHours: 0,
+        periodXP: 0,
+        totalHours: 0,
+        totalXP: 0,
+        submissionCount: 0,
+        aliases: allAliases,
+      });
+
+      allAliases.forEach((alias) => {
+        const clean = alias.replace(/^@/, '').trim().toLowerCase();
+        if (clean) {
+          aliasToUserMap.set(clean, {
+            userKey,
+            primaryDisplayHandle: primaryDisplay!,
+            allAliases,
+          });
+        }
+      });
+    });
+
+    // Helper to get registered member record (returns null for non-registered handles)
+    const getOrInitMemberRecord = (rawHandle: string) => {
+      const cleanHandle = rawHandle.replace(/^@/, '').trim().toLowerCase();
+      if (!cleanHandle) return null;
+
+      const registered = aliasToUserMap.get(cleanHandle);
+      if (!registered) return null; // Strictly only registered YPT handles on global leaderboard
+
+      return membersMap.get(registered.userKey) || null;
+    };
+
+    // 1. Index registered members across all active challenges
+    activeChallenges.forEach((c) => {
+      c.teams.forEach((t) => {
+        (t.memberUids || []).forEach((rawHandle) => {
+          getOrInitMemberRecord(rawHandle);
+        });
+      });
+    });
+
+    // 2. Scan deduplicated submissions across all challenges (same-day replacement per member & challenge)
+    const deduplicatedStats = getDeduplicatedDailyMemberStats(allSubmissions);
+
+    deduplicatedStats.forEach((dStat) => {
+      const subYmd = dStat.dateYmd;
+
+      let isPeriodMatch = false;
+      if (dateFilter === 'allTime') {
+        isPeriodMatch = true;
+      } else if (dateFilter === 'today') {
+        isPeriodMatch = subYmd === todayYmd;
+      } else if (dateFilter === 'yesterday') {
+        isPeriodMatch = subYmd === yesterdayYmd;
+      } else if (dateFilter === 'last7days') {
+        isPeriodMatch = subYmd >= sevenDaysAgoYmd && subYmd <= todayYmd;
+      }
+
+      const stat = getOrInitMemberRecord(dStat.memberHandle);
+      if (!stat) return;
+
+      stat.totalHours += dStat.hoursStudied || 0;
+      stat.submissionCount += 1;
+
+      if (isPeriodMatch) {
+        stat.periodHours += dStat.hoursStudied || 0;
+      }
+    });
+
+    // 3. Convert to array and round floats nicely (1 study hour = 1 XP)
+    const result = Array.from(membersMap.values()).map((stat) => {
+      const periodHours = Math.round(stat.periodHours * 100) / 100;
+      const totalHours = Math.round(stat.totalHours * 100) / 100;
+      return {
+        ...stat,
+        periodHours,
+        periodXP: periodHours,
+        totalHours,
+        totalXP: totalHours,
+      };
+    });
+
+    // 4. Sorting: If dateFilter is allTime, sort by totalHours/totalXP.
+    // If dateFilter is period (today, yesterday, last7days), sort by periodHours/periodXP first, then totalHours.
+    result.sort((a, b) => {
+      if (dateFilter === 'allTime') {
+        if (b.totalHours !== a.totalHours) return b.totalHours - a.totalHours;
+        return b.periodHours - a.periodHours;
+      } else {
+        if (b.periodHours !== a.periodHours) return b.periodHours - a.periodHours;
+        return b.totalHours - a.totalHours;
+      }
+    });
+
+    return result;
+  };
+
+  const globalLeaderboard = getGlobalLeaderboardData();
+
+  const totalGlobalPeriodHours = Math.round(globalLeaderboard.reduce((acc, m) => acc + (dateFilter === 'allTime' ? m.totalHours : m.periodHours), 0) * 100) / 100;
+  const activeScholarsCount = globalLeaderboard.filter((m) => (dateFilter === 'allTime' ? m.totalHours > 0 : m.periodHours > 0)).length;
+  const topScholar = globalLeaderboard.length > 0 && (dateFilter === 'allTime' ? globalLeaderboard[0].totalHours > 0 : globalLeaderboard[0].periodHours > 0) ? globalLeaderboard[0] : null;
+
+  const filteredLeaderboard = globalLeaderboard.filter((m) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().replace(/^@/, '');
+    return (
+      m.cleanHandle.includes(q) ||
+      m.displayHandle.toLowerCase().includes(q) ||
+      m.aliases.some((alias) => alias.toLowerCase().includes(q))
+    );
+  });
+
+  const handleCardDelete = (e: React.MouseEvent, c: YptChallenge) => {
+    e.stopPropagation();
+    setChallengeToDelete(c);
+  };
+
+  const confirmSoftDelete = async () => {
+    if (!challengeToDelete) return;
+    const targetId = challengeToDelete.id;
+    setIsDeleting(true);
+    // Optimistically update local state
+    setChallenges((prev) =>
+      prev.map((item) =>
+        item.id === targetId ? { ...item, isDeleted: true, status: 'deleted' } : item
+      )
+    );
+    try {
+      await softDeleteYptChallenge(targetId);
+      await fetchChallenges();
+    } catch (err: any) {
+      console.error('Failed to soft delete challenge:', err);
+      fetchChallenges();
+    } finally {
+      setIsDeleting(false);
+      setChallengeToDelete(null);
+    }
+  };
+
+  const handleCardEdit = (e: React.MouseEvent, c: YptChallenge) => {
+    e.stopPropagation();
+    setEditingChallenge(c);
+    setIsCreateModalOpen(true);
+  };
+
+  if (selectedChallenge) {
+    return (
+      <YptChallengeDetail
+        challenge={selectedChallenge}
+        onBack={() => setSelectedChallenge(null)}
+        onRefresh={() => {
+          fetchChallenges();
+        }}
+      />
+    );
+  }
+
+  return (
+    <div data-jarvis-section="YPT Challenges" className="space-y-6">
+      {/* Top Banner with Action Buttons */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl shadow-xl">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">YPT Group Challenges</h2>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+          {canManageYptChallenges && (
+            <button
+              onClick={() => {
+                setEditingChallenge(null);
+                setIsCreateModalOpen(true);
+              }}
+              className="px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsUploadModalOpen(true)}
+            className="px-4 py-2.5 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+          >
+            <FileImage className="w-4 h-4" />
+            <span>Upload</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Tab Switcher & Bin Icon */}
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+          <button
+            onClick={() => setActiveTab('global')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'global'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+            <span>Global Leaderboard ({uniqueRegisteredHandles.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('global')}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => setActiveTab('challenges')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === 'challenges'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            Active Challenges ({activeChallenges.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('leaderboard')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+              activeTab === 'leaderboard'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            Team Rankings
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Recycle Bin Button */}
+          {canManageYptChallenges && (
+            <button
+              onClick={() => setIsRecycleBinOpen(true)}
+              className="relative p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 transition-colors"
+              title="Recycle Bin (Soft Deleted Challenges)"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deletedChallenges.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center border border-white dark:border-slate-900 shadow-sm">
+                  {deletedChallenges.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          <button
+            onClick={fetchChallenges}
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            title="Refresh List"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Tab Content */}
+      {loading ? (
+        <div className="py-12 text-center text-xs text-slate-500">Loading YPT challenges...</div>
+      ) : activeTab === 'global' ? (
+        <div className="space-y-6">
+          {/* Global Arena Header Banner */}
+          <div className="bg-gradient-to-r from-indigo-900/90 via-slate-900 to-indigo-950 border border-indigo-500/20 rounded-2xl p-4 sm:p-5 text-white shadow-lg">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-400" /> Global YPT Arena
+                  </span>
+                  <span className="text-[11px] sm:text-xs text-indigo-200/80 font-medium">
+                    Real-time study analytics across all challenges
+                  </span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white mt-1">
+                  Global Individual Leaderboard
+                </h2>
+              </div>
+
+              {/* Filter Controls: Handle Search Input & Date Filter Toggles */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full md:w-auto">
+                {/* Search Input */}
+                <div className="relative w-full sm:w-auto">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter by @handle..."
+                    className="pl-8 pr-3 py-1.5 text-[11px] sm:text-xs bg-slate-800/90 border border-indigo-500/30 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400 w-full sm:w-44 transition-all"
+                  />
+                </div>
+
+                {/* Date Filter Toggle Buttons */}
+                <div className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-xl border border-indigo-500/30 overflow-x-auto max-w-full">
+                  <button
+                    onClick={() => setDateFilter('today')}
+                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
+                      dateFilter === 'today'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    ☀️ Today
+                  </button>
+                  <button
+                    onClick={() => setDateFilter('yesterday')}
+                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
+                      dateFilter === 'yesterday'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    📅 Yesterday
+                  </button>
+                  <button
+                    onClick={() => setDateFilter('last7days')}
+                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
+                      dateFilter === 'last7days'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    📅 Last 7 Days
+                  </button>
+                  <button
+                    onClick={() => setDateFilter('allTime')}
+                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
+                      dateFilter === 'allTime'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    🏆 All-Time
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Leaderboard Member Cards Grid */}
+          {filteredLeaderboard.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-2xl text-center space-y-2">
+              <Trophy className="w-8 h-8 text-slate-400 mx-auto" />
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {searchQuery ? `No members found matching "@${searchQuery}"` : 'No study data available for this period'}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Try changing the date filter or searching for another handle.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {filteredLeaderboard.map((member) => {
+                // True rank (1-indexed) in full globalLeaderboard array (sorted by cumulative totalHours)
+                const rank = globalLeaderboard.findIndex((m) => m.cleanHandle === member.cleanHandle) + 1;
+
+                const isRank1 = rank === 1 && member.totalHours > 0;
+                const isRank2 = rank === 2 && member.totalHours > 0;
+                const isRank3 = rank === 3 && member.totalHours > 0;
+
+                return (
+                  <div
+                    key={member.cleanHandle}
+                    className={`p-3 sm:p-4 rounded-2xl border transition-all flex items-center justify-between gap-2 sm:gap-3 ${
+                      isRank1
+                        ? 'bg-amber-500/15 dark:bg-amber-500/20 border-amber-400 dark:border-amber-500/80 shadow-md shadow-amber-500/10 ring-1 ring-amber-400/30'
+                        : isRank2
+                        ? 'bg-slate-200/60 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 shadow-2xs'
+                        : isRank3
+                        ? 'bg-orange-500/10 dark:bg-orange-500/15 border-orange-500/30 dark:border-orange-500/40 shadow-2xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    {/* Rank + Handle Info */}
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      {/* Rank Position Pill */}
+                      <div
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl shrink-0 flex items-center justify-center font-black text-[11px] sm:text-xs font-mono shadow-2xs ${
+                          isRank1
+                            ? 'bg-amber-400 text-amber-950 shadow-amber-500/30'
+                            : isRank2
+                            ? 'bg-slate-300 dark:bg-slate-700 text-slate-800 dark:text-slate-100'
+                            : isRank3
+                            ? 'bg-orange-400 text-orange-950'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        #{rank}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+                          <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white font-mono truncate">
+                            @{member.displayHandle}
+                          </span>
+
+                          {isRank1 ? (
+                            <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-700 dark:text-amber-300 font-extrabold border border-amber-400/30 shrink-0 flex items-center gap-1">
+                              👑 Gold Scholar
+                            </span>
+                          ) : isRank2 ? (
+                            <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-300/60 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold border border-slate-400/30 shrink-0 flex items-center gap-1">
+                              🥈 Silver Scholar
+                            </span>
+                          ) : isRank3 ? (
+                            <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300 font-extrabold border border-orange-500/30 shrink-0 flex items-center gap-1">
+                              🥉 Bronze Scholar
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* Study Duration Details */}
+                        <div className="text-[10px] sm:text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-0.5 flex flex-wrap sm:flex-nowrap items-center gap-1 sm:gap-2">
+                          <span>
+                            {dateFilter === 'today' ? 'Today' : dateFilter === 'yesterday' ? 'Yesterday' : dateFilter === 'last7days' ? '7 Days' : 'Period'}:{' '}
+                            <strong className="font-mono">{formatStudyHours(member.periodHours)}</strong>
+                          </span>
+                          <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
+                          <span className="text-slate-500 dark:text-slate-400 text-[10px] sm:text-[11px]">
+                            Total: <strong className="font-mono">{formatStudyHours(member.totalHours)}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Metrics: Earned XP */}
+                    <div className="flex flex-col items-end text-right shrink-0 font-mono space-y-0.5">
+                      <div className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400">
+                        Total: {member.totalXP} XP
+                      </div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                        +{member.periodXP} XP {dateFilter === 'today' ? 'today' : dateFilter === 'yesterday' ? 'yesterday' : dateFilter === 'last7days' ? '7 days' : 'period'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'challenges' ? (
+        activeChallenges.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-8 rounded-2xl text-center space-y-3">
+            <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400 mx-auto" />
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">No Active YPT Challenges</h3>
+            <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto">
+              Create your first team study challenge to start tracking YPT group study hours automatically!
+            </p>
+            {canManageYptChallenges && (
+              <button
+                onClick={() => {
+                  setEditingChallenge(null);
+                  setIsCreateModalOpen(true);
+                }}
+                className="px-3.5 sm:px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all"
+              >
+                Create First Challenge
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            {activeChallenges.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => setSelectedChallenge(c)}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 p-3.5 sm:p-5 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group relative"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5 sm:mb-2">
+                    <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+                      {c.status}
+                    </span>
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <span className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        {new Date(c.startDate).toLocaleDateString()}
+                      </span>
+                      {/* Action buttons on card */}
+                      {canManageYptChallenges && (
+                        <>
+                          <button
+                            onClick={(e) => handleCardEdit(e, c)}
+                            className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                            title="Edit Settings"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => handleCardDelete(e, c)}
+                            className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                            title="Move to Recycle Bin"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {c.title}
+                  </h3>
+                  {c.description && (
+                    <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                      {c.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] sm:text-xs">
+                  <div className="flex items-center gap-2.5 sm:gap-3 text-slate-600 dark:text-slate-400 font-medium">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {c.teams.length} Teams
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {c.rules.pointsPerStudyHour} XP/hr
+                    </span>
+                  </div>
+
+                  <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5 group-hover:translate-x-1 transition-transform">
+                    View <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        /* Team Rankings Tab */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl space-y-4">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-400" /> Overall Challenge Standings
+          </h3>
+
+          <div className="space-y-3">
+            {activeChallenges.flatMap((c) => c.teams).length === 0 ? (
+              <div className="text-xs text-slate-500 py-4 text-center">No team records found.</div>
+            ) : (
+              activeChallenges
+                .flatMap((c) => c.teams.map((t) => ({ ...t, challengeTitle: c.title })))
+                .sort((a, b) => b.totalPoints - a.totalPoints)
+                .map((team, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-extrabold text-xs flex items-center justify-center shrink-0">
+                        #{idx + 1}
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 dark:text-white">{team.name}</p>
+                        <p className="text-[10px] text-slate-500">{team.challengeTitle}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                      {team.totalPoints} XP
+                    </span>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      <CreateYptChallengeModal
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setEditingChallenge(null);
+        }}
+        challengeToEdit={editingChallenge}
+        onSuccess={fetchChallenges}
+      />
+
+      <YptUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        challenges={activeChallenges}
+        onSuccess={fetchChallenges}
+      />
+
+      <YptRecycleBinModal
+        isOpen={isRecycleBinOpen}
+        onClose={() => setIsRecycleBinOpen(false)}
+        deletedChallenges={deletedChallenges}
+        onRefresh={fetchChallenges}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(challengeToDelete)}
+        title="Move to Recycle Bin?"
+        message={`Are you sure you want to delete "${challengeToDelete?.title}"? It will be moved to the Recycle Bin and can be restored anytime.`}
+        confirmText="Move to Bin"
+        isLoading={isDeleting}
+        onConfirm={confirmSoftDelete}
+        onClose={() => setChallengeToDelete(null)}
+      />
+    </div>
+  );
+}
+

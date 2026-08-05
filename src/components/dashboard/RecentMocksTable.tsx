@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CheckSquare, Check, Download, History, Trash2, CalendarDays, RotateCcw, Edit2, BookA } from 'lucide-react';
+import { CheckSquare, Check, Download, History, Trash2, CalendarDays, RotateCcw, Edit2, BookA, X } from 'lucide-react';
+import { useCacheStore } from '../../store/analyticsStore';
 import { getHeatmapColor, getPlatformShort, parseLocalDate } from '../../lib/utils';
 import { handleExportExcel } from '../../lib/exportUtils';
 import { ReflectionEditor } from '../ReflectionEditor';
@@ -66,11 +67,30 @@ export const RecentMocksTable: React.FC<RecentMocksTableProps> = ({
     return sortDirection === 'desc' ? '⬇' : '⬆';
   };
 
-  const displayedMocks = showRecycleBin ? deletedMocks : activeTrendFilteredMocks;
+  
+  const { selectedHistoryDate, updateDashboardCache } = useCacheStore();
+  
+  let displayedMocks = showRecycleBin ? deletedMocks : activeTrendFilteredMocks;
+  
+  if (selectedHistoryDate && !showRecycleBin) {
+    displayedMocks = displayedMocks.filter(mock => mock.date === selectedHistoryDate);
+  }
+
 
   return (
     <>
       <div id="history-log" className="flex flex-wrap items-center mt-12 mb-6 gap-3 sm:gap-4 scroll-mt-24">
+        {selectedHistoryDate && !showRecycleBin && (
+           <div className="w-full mb-2">
+             <div className="inline-flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-lg text-sm border border-indigo-100 dark:border-indigo-800/50">
+               <CalendarDays className="w-4 h-4" />
+               <span>Showing mocks for <strong>{selectedHistoryDate}</strong></span>
+               <button onClick={() => updateDashboardCache({ selectedHistoryDate: null })} className="ml-2 hover:text-indigo-900 dark:hover:text-indigo-100 p-0.5 rounded-full hover:bg-indigo-200/50 dark:hover:bg-indigo-800/50 transition-colors">
+                 <X className="w-3.5 h-3.5" />
+               </button>
+             </div>
+           </div>
+        )}
         <div className="flex items-center gap-4">
           <h3 className="font-semibold text-xl text-slate-800 dark:text-slate-100 flex items-center gap-2 mr-2">
             {showRecycleBin ? 'Recycle Bin' : 'History Log'}
@@ -119,7 +139,7 @@ export const RecentMocksTable: React.FC<RecentMocksTableProps> = ({
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-8" data-jarvis-section="mock-history">
         {(() => {
           const dataToRender = showRecycleBin ? deletedMocks : activeTrendFilteredMocks;
           if (dataToRender.length === 0) {
@@ -151,11 +171,23 @@ export const RecentMocksTable: React.FC<RecentMocksTableProps> = ({
             const formattedTime = mockDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
             const isTimeValid = !isNaN(mockDate.getTime()) && mock.date.includes('T');
             
+            const sectionBreakdownStr = subjects && subjects.length > 0
+              ? subjects.map((s: any) => {
+                  const sub = getSub(mock, s.id, subjects);
+                  const scoreVal = sub?.score != null && sub.score !== 0 ? sub.score : '-';
+                  const percVal = sub?.percentile != null && sub.percentile !== 0 ? `${sub.percentile}%P` : '';
+                  const accVal = sub?.accuracy != null && sub.accuracy !== 0 ? `${sub.accuracy}%A` : '';
+                  const details = [percVal, accVal].filter(Boolean).join(', ');
+                  return `${s.name || s.id}: ${scoreVal}${details ? ` (${details})` : ''}`;
+                }).join(' | ')
+              : '';
+
             return (
               <React.Fragment key={mock.id}>
               <tr 
                 onClick={() => setActiveRowId(activeRowId === mock.id ? null : mock.id)}
                 className={`border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/80 dark:hover:bg-slate-700/50 transition-colors group relative cursor-pointer ${activeRowId === mock.id ? 'bg-slate-50/80 dark:bg-slate-700/50' : ''}`}
+                data-jarvis-item={`Mock Test: ${mock.mockName || 'Full Test'} (${mock.examType}) - Score: ${mock.score ?? '-'} (${mock.percentile || 0}%ile) | Sections: ${sectionBreakdownStr}`}
               >
                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs whitespace-nowrap text-center align-middle w-[140px]">
                   <div className="flex flex-col items-center">

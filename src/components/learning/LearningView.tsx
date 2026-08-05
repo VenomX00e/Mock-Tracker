@@ -1,28 +1,46 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2, EyeOff } from 'lucide-react';
-import { useAppStateCtx, usePublicSettingsCtx } from '../../context/AppContext';
+import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2, EyeOff, Trophy } from 'lucide-react';
+import { useAppStateCtx, usePublicSettingsCtx, useUserProfileCtx } from '../../context/AppContext';
+import { useUIStore } from '../../store/uiStore';
 import { LearningAIAssistant } from './LearningAIAssistant';
 import { VocabularyFeed } from './VocabularyFeed';
 import { SpeedMathHub } from './SpeedMathHub';
 import { PracticeLibrary } from './PracticeLibrary';
+import { YptHubView } from './YptHubView';
 import { useVocabularyStore } from '../../store/vocabularyStore';
 import { subscribeToCanvases } from '../../services/vocabularyFirebaseService';
 import { ApiKeyEntry, getApiKeys, saveApiKeys } from '../../utils/apiKeyManager';
+import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
 
 const MODELS = [
   { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Default)' },
   { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
   { value: 'gemini-3-flash-preview', label: 'Gemini 3.0 Flash' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
   { value: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B IT' },
-  { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' },
+  { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' }
 ];
 
 export function LearningView() {
   const { isOwner, isAdmin } = useAppStateCtx();
+  const { profile: userProfile } = useUserProfileCtx();
   const { enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary } = usePublicSettingsCtx();
-  const [activeTab, setActiveTab] = useState<'ai' | 'vocab' | 'math' | 'practice'>('ai');
+
+  const hasYptHandle = Boolean(
+    (userProfile?.yptNames && userProfile.yptNames.length > 0) ||
+    userProfile?.defaultYptHandle?.trim()
+  );
+  const isYptAdmin = Boolean(
+    isOwner ||
+    isAdmin ||
+    userProfile?.role === 'admin' ||
+    userProfile?.permissions?.canManageYpt
+  );
+  const canSeeYptTab = hasYptHandle || isYptAdmin;
+  const activeTab = useUIStore(state => state.learningTab);
+  const setActiveTab = useUIStore(state => state.setLearningTab);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
@@ -32,6 +50,25 @@ export function LearningView() {
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const setCanvases = useVocabularyStore(state => state.setCanvases);
+
+  useEffect(() => {
+    const handleSubNavigate = (action: any) => {
+      if (action.type === 'SUB_NAVIGATE') {
+        const { mainTab, subTab, section } = action.payload;
+        if (mainTab === 'learning') {
+          if (subTab === 'practice' && section) {
+             setActiveTab('practice');
+             // We need to pass the section down. 
+             // Best way without context is to use a global store or dispatch another event inside PracticeLibrary.
+             // For now we will rely on PracticeLibrary picking up the same event.
+          }
+        }
+      }
+    };
+    const unsubscribe = jarvisEventBus.subscribe(handleSubNavigate);
+    return () => unsubscribe();
+  }, []);
+
 
   useEffect(() => {
     // Determine the next available tab if the current one is disabled
@@ -57,6 +94,24 @@ export function LearningView() {
     setKeys(getApiKeys());
     const savedModel = localStorage.getItem('geminiModel');
     if (savedModel) setSelectedModel(savedModel);
+  }, []);
+
+  useEffect(() => {
+    const handleJarvisAction = (action: JarvisActionEvent) => {
+      if (action.type === 'NAVIGATE' && action.payload) {
+        const fullPath = action.payload.replace(/^\//, '');
+        const parts = fullPath.split('/');
+        // e.g. "learning/vocab" or just "vocab" if we are already in learning.
+        const subTab = parts.length > 1 ? parts[1] : parts[0];
+        
+        if (['ai', 'vocab', 'math', 'practice', 'ypt'].includes(subTab)) {
+          setActiveTab(subTab as any);
+        }
+      }
+    };
+
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisAction);
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -117,7 +172,7 @@ export function LearningView() {
   };
 
   return (
-    <div className={`flex flex-col h-full relative ${isEnlarged ? 'space-y-0' : 'space-y-6'}`}>
+    <div data-jarvis-section="Learning Hub" className={`flex flex-col h-full relative ${isEnlarged ? 'space-y-0' : 'space-y-6'}`}>
       {!isEnlarged && (
         <div className="flex flex-col justify-between gap-4">
           <div className="flex items-start justify-between">
@@ -266,8 +321,23 @@ export function LearningView() {
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 w-full">
+            {canSeeYptTab && (
+              <button
+                data-jarvis-item={`Learning Tab: YPT [State: ${activeTab === 'ypt' ? 'Active' : 'Inactive'}]`}
+                onClick={() => setActiveTab('ypt')}
+                className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
+                  activeTab === 'ypt' 
+                    ? 'bg-indigo-600 text-white shadow-sm border border-indigo-500' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                YPT
+              </button>
+            )}
             {(enableAiTutor || isOwner || isAdmin) && (
               <button
+                data-jarvis-item={`Learning Tab: AI Tutor [State: ${activeTab === 'ai' ? 'Active' : 'Inactive'}]`}
                 onClick={() => setActiveTab('ai')}
                 className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
                   activeTab === 'ai' 
@@ -282,6 +352,7 @@ export function LearningView() {
             )}
             {(enableVocabulary || isOwner || isAdmin) && (
               <button
+                data-jarvis-item={`Learning Tab: Vocabulary [State: ${activeTab === 'vocab' ? 'Active' : 'Inactive'}]`}
                 onClick={() => setActiveTab('vocab')}
                 className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
                   activeTab === 'vocab' 
@@ -296,6 +367,7 @@ export function LearningView() {
             )}
             {(enableSpeedMath || isOwner || isAdmin) && (
               <button
+                data-jarvis-item={`Learning Tab: Speed Math [State: ${activeTab === 'math' ? 'Active' : 'Inactive'}]`}
                 onClick={() => setActiveTab('math')}
                 className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
                   activeTab === 'math' 
@@ -310,6 +382,7 @@ export function LearningView() {
             )}
             {(enablePracticeLibrary || isOwner || isAdmin) && (
               <button
+                data-jarvis-item={`Learning Tab: Practice Library [State: ${activeTab === 'practice' ? 'Active' : 'Inactive'}]`}
                 onClick={() => setActiveTab('practice')}
                 className={`flex items-center gap-1.5 px-3 md:px-5 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
                   activeTab === 'practice' 
@@ -331,6 +404,31 @@ export function LearningView() {
         {activeTab === 'vocab' && <VocabularyFeed />}
         {activeTab === 'math' && <SpeedMathHub />}
         {activeTab === 'practice' && <PracticeLibrary />}
+        {activeTab === 'ypt' && (
+          canSeeYptTab ? (
+            <YptHubView />
+          ) : (
+            <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm my-6 max-w-lg mx-auto">
+              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mb-4 shadow-inner">
+                <Trophy className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                YPT Profile Required
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+                To view and participate in YPT Group Challenges, please add your YPT handle or username in your Profile Settings first.
+              </p>
+              <button
+                onClick={() => {
+                  useUIStore.getState().setActiveTab('profile');
+                }}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-md transition-all flex items-center gap-2"
+              >
+                <span>Go to Profile Settings</span>
+              </button>
+            </div>
+          )
+        )}
       </div>
     </div>
   );

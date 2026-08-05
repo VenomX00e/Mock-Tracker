@@ -19,9 +19,12 @@ export const DashboardStatCards: React.FC<DashboardStatCardsProps> = ({
   leaderboardRank
 }) => {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" data-jarvis-section="mock-summary">
       {/* 1. Streak */}
-      <div className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm border-l-4 transition-colors ${profile?.streakActive !== false ? 'border-l-orange-500 border-slate-100 dark:border-slate-700' : 'border-l-slate-300 dark:border-l-slate-600 border-slate-100 dark:border-slate-700'}`}>
+      <div 
+        className={`bg-white dark:bg-slate-800 p-5 rounded-2xl border shadow-sm border-l-4 transition-colors ${profile?.streakActive !== false ? 'border-l-orange-500 border-slate-100 dark:border-slate-700' : 'border-l-slate-300 dark:border-l-slate-600 border-slate-100 dark:border-slate-700'}`}
+        data-jarvis-stat={`studyStreak: ${profile?.streak || 0} days`}
+      >
         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2">
           <Flame className={`w-5 h-5 ${profile?.streakActive !== false ? 'text-orange-500 animate-pulse drop-shadow-sm' : 'text-slate-300 dark:text-slate-600'}`} />
           <span className={`font-medium text-xs sm:text-sm truncate ${profile?.streakActive === false && 'text-slate-400 dark:text-slate-500'}`}>Streak</span>
@@ -30,7 +33,10 @@ export const DashboardStatCards: React.FC<DashboardStatCardsProps> = ({
       </div>
 
       {/* 2. Avg Percentile */}
-      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-indigo-500 relative overflow-hidden transition-all">
+      <div 
+        className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-indigo-500 relative overflow-hidden transition-all"
+        data-jarvis-stat={`percentile: ${stats.avgPercentile}th`}
+      >
         <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-2 mt-1">
           <Trophy className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
           <span className="font-medium text-xs sm:text-sm truncate">Avg Percentile</span>
@@ -49,7 +55,10 @@ export const DashboardStatCards: React.FC<DashboardStatCardsProps> = ({
       </div>
 
       {/* 3. Avg Accuracy */}
-      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-blue-500 relative overflow-hidden transition-all">
+      <div 
+        className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm border-l-4 border-l-blue-500 relative overflow-hidden transition-all"
+        data-jarvis-stat={`accuracy: ${stats.avgAccuracy}%`}
+      >
         <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mb-2 mt-1">
           <Target className="w-5 h-5 text-blue-500 dark:text-blue-400" />
           <span className="font-medium text-xs sm:text-sm truncate">Avg Accuracy</span>

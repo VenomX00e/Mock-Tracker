@@ -435,6 +435,366 @@ app.post("/api/extract-scorecard", async (req, res) => {
   }
 });
 
+// API route for YPT Screenshot OCR Parsing & Point Auto-Calculation
+app.post("/api/parse-ypt-screenshot", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: Missing token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+    try {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
+      return res.status(403).json({ error: "Forbidden: Invalid auth token" });
+    }
+
+    const { image, rules, knownUsers, customApiKey, model = "gemini-3.1-flash-lite" } = req.body;
+    if (!image || !image.base64) {
+      return res.status(400).json({ error: "Image base64 is required" });
+    }
+
+    // Helper functions for handle matching
+    const normalizeHandle = (str: string): string => {
+      if (!str) return "";
+      return str
+        .trim()
+        .replace(/^@/, "")
+        .normalize("NFKC")
+        .replace(/[\uFE00-\uFE0F\u200B-\u200D]/g, "")
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+    };
+
+    const extractAlpha = (str: string): string => {
+      if (!str) return "";
+      return normalizeHandle(str).replace(/[^a-z0-9]/g, "");
+    };
+
+    // Build registered users list (combining client knownUsers & Firestore server query)
+    const registeredUserList: Array<{ uid: string; yptNames: string[]; displayName?: string }> = [];
+
+    if (Array.isArray(knownUsers)) {
+      knownUsers.forEach((u: any) => {
+        if (u && u.uid) {
+          registeredUserList.push({
+            uid: String(u.uid),
+            displayName: u.displayName ? String(u.displayName) : undefined,
+            yptNames: Array.isArray(u.yptNames) ? u.yptNames.map(String) : [],
+          });
+        }
+      });
+    }
+
+    try {
+      const usersSnap = await getAdminDb().collection("users").get();
+      usersSnap.forEach((doc) => {
+        const data = doc.data();
+        const names = new Set<string>();
+        if (Array.isArray(data.yptNames)) {
+          data.yptNames.forEach((n: string) => {
+            if (n && typeof n === "string") names.add(n.trim());
+          });
+        }
+        if (typeof data.yptName === "string" && data.yptName.trim()) {
+          names.add(data.yptName.trim());
+        }
+        if (typeof data.displayName === "string" && data.displayName.trim()) {
+          names.add(data.displayName.trim());
+        }
+
+        const existing = registeredUserList.find((u) => u.uid === doc.id);
+        if (existing) {
+          names.forEach((n) => {
+            if (!existing.yptNames.includes(n)) existing.yptNames.push(n);
+          });
+        } else {
+          registeredUserList.push({
+            uid: doc.id,
+            displayName: data.displayName,
+            yptNames: Array.from(names),
+          });
+        }
+      });
+    } catch (e: any) {
+      // Fallback to Firestore REST API using request authorization header if admin SDK lacks credentials
+      try {
+        const projId = firebaseConfig.projectId;
+        const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+        const apiKey = firebaseConfig.apiKey;
+        const url = `https://firestore.googleapis.com/v1/projects/${projId}/databases/${dbId}/documents/users?key=${apiKey}`;
+        const headers: Record<string, string> = {};
+        if (req.headers.authorization) {
+          headers["Authorization"] = req.headers.authorization;
+        }
+        const restRes = await fetch(url, { headers });
+        if (restRes.ok) {
+          const restData = await restRes.json();
+          if (Array.isArray(restData.documents)) {
+            restData.documents.forEach((doc: any) => {
+              const docId = doc.name ? doc.name.split("/").pop() : "";
+              const names = new Set<string>();
+              const yptNamesVal = doc.fields?.yptNames?.arrayValue?.values;
+              if (Array.isArray(yptNamesVal)) {
+                yptNamesVal.forEach((v: any) => {
+                  if (v?.stringValue) names.add(v.stringValue.trim());
+                });
+              }
+              const dispVal = doc.fields?.displayName?.stringValue;
+              if (dispVal) names.add(dispVal.trim());
+
+              if (docId) {
+                const existing = registeredUserList.find((u) => u.uid === docId);
+                if (existing) {
+                  names.forEach((n) => {
+                    if (!existing.yptNames.includes(n)) existing.yptNames.push(n);
+                  });
+                } else {
+                  registeredUserList.push({
+                    uid: docId,
+                    displayName: dispVal,
+                    yptNames: Array.from(names),
+                  });
+                }
+              }
+            });
+          }
+        } else {
+          console.warn("Firestore REST API fallback for user YPT names returned status:", restRes.status);
+        }
+      } catch (restErr: any) {
+        console.warn("Failed to fetch user YPT names map via REST fallback:", restErr.message);
+      }
+    }
+
+    const matchYptHandleToUid = (handle: string): string | undefined => {
+      if (!handle || registeredUserList.length === 0) return undefined;
+
+      const rawTarget = handle.trim().toLowerCase();
+      const cleanTarget = normalizeHandle(handle);
+      const alphaTarget = extractAlpha(handle);
+
+      // Pass 1: Raw case-insensitive exact match
+      for (const user of registeredUserList) {
+        const allNames = [...(user.yptNames || [])];
+        if (user.displayName) allNames.push(user.displayName);
+        for (const name of allNames) {
+          if (name && name.trim().toLowerCase() === rawTarget) return user.uid;
+        }
+      }
+
+      // Pass 2: Clean normalized match
+      for (const user of registeredUserList) {
+        const allNames = [...(user.yptNames || [])];
+        if (user.displayName) allNames.push(user.displayName);
+        for (const name of allNames) {
+          if (name && normalizeHandle(name) === cleanTarget) return user.uid;
+        }
+      }
+
+      // Pass 3: Alphanumeric base match
+      if (alphaTarget.length >= 2) {
+        for (const user of registeredUserList) {
+          const allNames = [...(user.yptNames || [])];
+          if (user.displayName) allNames.push(user.displayName);
+          for (const name of allNames) {
+            if (name) {
+              const nameAlpha = extractAlpha(name);
+              if (nameAlpha.length >= 2 && nameAlpha === alphaTarget) return user.uid;
+            }
+          }
+        }
+      }
+
+      // Pass 4: Substring match
+      if (alphaTarget.length >= 3) {
+        for (const user of registeredUserList) {
+          const allNames = [...(user.yptNames || [])];
+          if (user.displayName) allNames.push(user.displayName);
+          for (const name of allNames) {
+            if (name) {
+              const nameAlpha = extractAlpha(name);
+              if (nameAlpha.length >= 3 && (alphaTarget.includes(nameAlpha) || nameAlpha.includes(alphaTarget))) {
+                return user.uid;
+              }
+            }
+          }
+        }
+      }
+
+      return undefined;
+    };
+
+
+    const aiClient = getAiClient(customApiKey);
+
+    const ruleConfig = rules || {
+      pointsPerStudyHour: 2,
+      morningSnapBonus: 5,
+      noStudyPenaltyThresholdHours: 3,
+      penaltyPoints: 5,
+    };
+
+    let customRuleDesc = "";
+    if (Array.isArray(ruleConfig.customRules) && ruleConfig.customRules.length > 0) {
+      const ruleLines = ruleConfig.customRules
+        .map((cr: any) => `- ${cr.emoji || '✨'} = ${cr.name} (${cr.type === 'bonus' ? '+' : '-'}${cr.points} pts)`)
+        .join("\n");
+      customRuleDesc = `\nMatching challenge rules to look for under/near each user's study timer/name:\n${ruleLines}\n`;
+    }
+
+    const prompt = `
+      Analyze the uploaded YPT (Yeolpumta) study group app screenshot.
+      YPT screenshots display group members, their daily study times (e.g. "05:30:00", "07:12:19", "1h 45m"), and challenge badge emojis displayed in a horizontal row right below or next to each member's study timer/name (e.g. ☀️, 🌻, 📱, 🔟, 🔥, 🎯, ⏰, 🏆, ⚡).
+
+      Check the area below each user's study timer for challenge badge emojis. ${customRuleDesc}
+
+      Extract each visible member row into a JSON array:
+      - "yptHandle": Clean text of member handle/username (e.g. "VENOM ☣️", "The nun 👻", "Sub Lt Vedu🇮🇳").
+      - "studyTimeFormatted": Raw formatted study time string shown (e.g. "07:12:19").
+      - "hoursStudied": Numerical study duration in decimal hours (e.g. "07:12:19" = 7.21, "05:30:00" = 5.5, "00:00:00" = 0).
+      - "morningSnap": Boolean (true if ☀️ morning snap / camera icon / checked status or ☀️ emoji is visible, false otherwise).
+      - "detectedEmojis": Array of badge emoji characters detected under or beside the member's timer/name (e.g. ["☀️", "🌻", "📱"]).
+
+      Return structured JSON conforming to the schema.
+    `;
+
+    const contents = [
+      { text: prompt },
+      { inlineData: { data: image.base64, mimeType: image.mimeType || "image/png" } },
+    ];
+
+    const response = await fetchWithRetry(() =>
+      aiClient.models.generateContent({
+        model: model,
+        contents: contents,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              members: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    yptHandle: { type: Type.STRING },
+                    studyTimeFormatted: { type: Type.STRING },
+                    hoursStudied: { type: Type.NUMBER },
+                    morningSnap: { type: Type.BOOLEAN },
+                    detectedEmojis: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                    },
+                  },
+                  required: ["yptHandle", "hoursStudied", "morningSnap"],
+                },
+              },
+            },
+            required: ["members"],
+          },
+        },
+      })
+    );
+
+    const jsonText = response.text || "{}";
+    const parsed = JSON.parse(jsonText);
+    const rawMembers = Array.isArray(parsed.members) ? parsed.members : [];
+
+    // Calculate points & match user IDs
+    const extractedMembers = rawMembers.map((m: any) => {
+      const handle = String(m.yptHandle || "").trim();
+      const hours = typeof m.hoursStudied === "number" ? Math.max(0, m.hoursStudied) : 0;
+      const snap = Boolean(m.morningSnap);
+      const detectedEmojis: string[] = Array.isArray(m.detectedEmojis) ? m.detectedEmojis : [];
+
+      // Match against registered user YPT handles
+      const matchedUid = matchYptHandleToUid(handle);
+
+      // Points calculation based on rules
+      let intervalInHours = 1;
+      if (ruleConfig.studyIntervalValue && ruleConfig.studyIntervalValue > 0) {
+        intervalInHours = ruleConfig.studyIntervalUnit === 'minutes'
+          ? ruleConfig.studyIntervalValue / 60
+          : ruleConfig.studyIntervalValue;
+      }
+      const intervalsCompleted = intervalInHours > 0 ? Math.floor(hours / intervalInHours) : Math.floor(hours);
+      const ptsPerInt = typeof ruleConfig.pointsPerInterval === 'number'
+        ? ruleConfig.pointsPerInterval
+        : (ruleConfig.pointsPerStudyHour || 0);
+      let studyPoints = intervalsCompleted * ptsPerInt;
+
+      let penaltyThresholdInHours = ruleConfig.noStudyPenaltyThresholdHours || 0;
+      if (ruleConfig.penaltyThresholdValue && ruleConfig.penaltyThresholdValue > 0) {
+        penaltyThresholdInHours = ruleConfig.penaltyThresholdUnit === 'minutes'
+          ? ruleConfig.penaltyThresholdValue / 60
+          : ruleConfig.penaltyThresholdValue;
+      }
+      let penalty = 0;
+      if (penaltyThresholdInHours > 0 && hours < penaltyThresholdInHours) {
+        penalty = ruleConfig.penaltyPoints || 0;
+      }
+
+      let customPoints = 0;
+      const detectedRules: Array<{ ruleId?: string; ruleName: string; emoji: string; points: number }> = [];
+
+      if (Array.isArray(ruleConfig.customRules)) {
+        for (const cr of ruleConfig.customRules) {
+          if (!cr || !cr.name) continue;
+          const nameLower = String(cr.name).toLowerCase();
+          const crEmoji = cr.emoji ? String(cr.emoji).trim() : '';
+          const p = Number(cr.points) || 0;
+
+          let ruleMatched = false;
+
+          // Match by emoji or morning snap flag
+          if (crEmoji && detectedEmojis.some(e => e.includes(crEmoji) || crEmoji.includes(e))) {
+            ruleMatched = true;
+          } else if (snap && (nameLower.includes('snap') || crEmoji === '☀️')) {
+            ruleMatched = true;
+          }
+
+          if (ruleMatched) {
+            if (cr.type === 'bonus') {
+              customPoints += p;
+            } else if (cr.type === 'penalty') {
+              customPoints -= p;
+            }
+
+            detectedRules.push({
+              ruleId: cr.id,
+              ruleName: cr.name,
+              emoji: cr.emoji || '✨',
+              points: cr.type === 'bonus' ? p : -p,
+            });
+          }
+        }
+      }
+
+      const pointsEarned = studyPoints - penalty + customPoints;
+
+      return {
+        yptHandle: handle,
+        matchedUid: matchedUid || null,
+        hoursStudied: Number(hours.toFixed(2)),
+        morningSnap: snap,
+        detectedEmojis: detectedEmojis,
+        detectedRules: detectedRules,
+        pointsEarned: pointsEarned,
+      };
+    });
+
+    res.json({
+      success: true,
+      extractedMembers,
+      totalMembersFound: extractedMembers.length,
+    });
+  } catch (error: any) {
+    console.error("YPT OCR Gemini Error:", error);
+    res.status(500).json({ error: String(error.message || error) });
+  }
+});
+
 app.post("/api/generate-badge", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -709,6 +1069,115 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
   } catch (error: any) {
     console.error("Gemini Chat Error:", error);
     res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
+// API route for Jarvis Brain Engine Chat (/api/jarvis/chat)
+app.post("/api/jarvis/chat", async (req, res) => {
+  try {
+    const { messages, message, context, customApiKey, model } = req.body;
+    const keyToUse = customApiKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!keyToUse) {
+      return res.status(403).json({ error: "Gemini API key is required." });
+    }
+
+    const aiClient = new GoogleGenAI({ apiKey: keyToUse });
+
+    let screenContextBlock = "";
+    if (context) {
+      const nav = context.visionContext?.navigation || { currentTab: context.location?.activeTab || "Dashboard", activeSubject: null, activeMockId: null };
+      const screen = context.visionContext?.screenData || { title: "Overview", visibleSummary: {}, activeQuestion: null, visibleItems: [] };
+      const user = context.visionContext?.userState || { targetExam: context.data?.targetExam || "JEE 2026", totalMocksAttempted: 0, weakSubjects: [], strongSubjects: [] };
+
+      let activeRouteStr = context.location?.activeTab || nav.currentTab || "Dashboard";
+      if (nav.activeMockId) activeRouteStr += ` -> ${nav.activeMockId}`;
+      else if (nav.activeSubject) activeRouteStr += ` -> ${nav.activeSubject}`;
+
+      const metricsEntries = Object.entries(screen.visibleSummary || {}).filter(([_, v]) => v !== undefined && v !== null);
+      const metricsStr = metricsEntries.length > 0
+        ? metricsEntries.map(([k, v]) => `  • ${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join('\n')
+        : '  • No specific score metrics on screen';
+
+      let focusedQStr = 'None';
+      if (screen.activeQuestion) {
+        const q = screen.activeQuestion;
+        focusedQStr = `${q.id || 'Question'} (${q.topic || q.subject || 'General'}${q.status ? ` - ${q.status}` : ''})`;
+      }
+
+      const weakStr = user.weakSubjects && user.weakSubjects.length > 0 ? user.weakSubjects.join(', ') : 'None identified yet';
+      const profileStr = `Target ${user.targetExam || 'Competitive Exam'}${weakStr !== 'None identified yet' ? ` | Weak Area: ${weakStr}` : ''}`;
+
+      const itemsStr = screen.visibleItems && screen.visibleItems.length > 0
+        ? `- Visible Items Snapshot:\n${screen.visibleItems.map((item: string) => `  • ${item}`).join('\n')}`
+        : '';
+
+      const navigatedFrom = context.location?.navigatedFrom || context.navigatedFrom;
+
+      screenContextBlock = `<CURRENT_USER_SCREEN_CONTEXT>
+- Active Page / Route: ${activeRouteStr}
+${navigatedFrom ? `- Auto-Navigated: Yes\n- Navigated From: ${navigatedFrom}` : ''}
+- Screen Header: "${screen.title || 'Screen Overview'}"
+- Visible Metrics on Screen:
+${metricsStr}
+- Currently Focused Question: ${focusedQStr}
+- User Profile: ${profileStr}
+${itemsStr ? `${itemsStr}` : ''}
+</CURRENT_USER_SCREEN_CONTEXT>`;
+    } else {
+      screenContextBlock = `<CURRENT_USER_SCREEN_CONTEXT>
+- Active Page / Route: Home
+- Screen Header: "Home Dashboard"
+- Visible Metrics on Screen:
+  • General Screen View (No specific test score metric active)
+- Currently Focused Question: None
+- User Profile: Target Competitive Exam
+</CURRENT_USER_SCREEN_CONTEXT>`;
+    }
+
+    const systemInstruction = `SYSTEM INSTRUCTION:
+You are Jarvis, an intelligent AI study partner for competitive exam preparation.
+You have real-time visibility into the user's screen and study progress.
+
+${screenContextBlock}
+
+CRITICAL CONSTRAINTS FOR PAGE SUMMARIES:
+- You must base your page summary STRICTLY AND ONLY on what is listed inside <CURRENT_USER_SCREEN_CONTEXT>.
+- If auto-navigation has taken place (indicated by "Auto-Navigated: Yes" and "Navigated From" in <CURRENT_USER_SCREEN_CONTEXT>), acknowledge the page navigation naturally at the beginning of your response (e.g., "I've navigated you to the Live Mocks section...").
+- NEVER mention or hallucinate mock test scores, percentiles, accuracy percentages, study streak days, or mock test performance history logs when the user is on 'home', 'community', 'profile', 'learning', or 'tasks' pages, unless those exact metrics appear explicitly in 'Visible Metrics on Screen' or 'Visible Items Snapshot' for this prompt.
+- On the HOME page (route: home): summarize ONLY the Welcome Greeting, Daily Motivation Quote, and Activity Heatmap Map. Do NOT mention mock test performance, percentile, accuracy, or study streak.
+- On the PROFILE page (route: profile): summarize ONLY profile settings (Display Name, Target Exam, Sector, Bio). Do NOT mention mock test performance, percentile, accuracy, study streak, or mock history log.
+- Do NOT output placeholder or hallucinated performance metrics. Describe ONLY what is strictly visible in <CURRENT_USER_SCREEN_CONTEXT>.
+
+INSTRUCTIONS & RESPONSE TRACES:
+1. Use the screen context above to answer user questions directly without asking them what they are looking at.
+2. If the user asks a question about a section or page that required auto-navigation, acknowledge switching to that view and answer based on the newly updated screen context.
+3. If the user asks "How did I do on my last mock?", strictly analyze ONLY the data present in the screen context.
+   - For full mocks: Report overall score, percentile, and subject breakdowns for sections with scores.
+   - For sectional mocks (e.g. Reasoning Sectional Test): Report ONLY on the single active subject score present. NEVER hallucinate scores or topics for N/A or '-' sections (such as Quant, English, or GA) when they are not part of the test.
+4. If the user asks "Can you summarize what I am looking at right now?" or "What am I looking at?", summarize the active screen components directly from the screen context items and metrics.
+5. Keep responses strictly truthful to the visible screen context, helpful, concise, friendly, and structured.`;
+
+    const chatMessages = messages || (message ? [{ role: "user", text: message }] : []);
+    const contents = chatMessages.map((m: any) => ({
+      role: m.role === "assistant" || m.role === "model" ? "model" : "user",
+      parts: [{ text: m.text || m.content || "" }]
+    }));
+
+    const response = await aiClient.models.generateContent({
+      model: model || "gemini-3.5-flash",
+      contents: contents,
+      config: {
+        systemInstruction
+      }
+    });
+
+    res.json({
+      reply: response.text || "No response generated.",
+      screenContextUsed: screenContextBlock
+    });
+  } catch (error: any) {
+    console.error("Jarvis Chat API Error:", error);
+    res.status(500).json({ error: error.message || "Failed to process Jarvis query." });
   }
 });
 

@@ -14,6 +14,7 @@ import { ChatMessage as ChatMessageBubble } from './ai/ChatMessage';
 import { ChatInputForm } from './ai/ChatInputForm';
 import { AppStateCtx } from '../../context/AppContext';
 import { useContext } from 'react';
+import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
 
 interface LearningAIAssistantProps {
   isEnlarged?: boolean;
@@ -82,6 +83,25 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSendRef = useRef<any>(null);
+
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
+
+  useEffect(() => {
+    const handleJarvisAction = (action: JarvisActionEvent) => {
+      const topic = action.payload?.topic || (action as any).topic;
+      if (action.type === 'EXECUTE_INTENT' && action.intent === 'OPEN_AI_TUTOR' && topic) {
+        if (handleSendRef.current) {
+          handleSendRef.current({ input: topic, attachment: null, pdfPagesInput: "", useWebSearch: false });
+        }
+      }
+    };
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisAction);
+    return () => unsubscribe();
   }, []);
 
   const handleSend = async (params: { input: string; attachment: any; pdfPagesInput: string; useWebSearch: boolean }) => {

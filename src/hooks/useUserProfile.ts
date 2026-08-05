@@ -20,7 +20,11 @@ export function useUserProfile() {
     const unsubscribe = onSnapshot(docRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        setProfile({ ...data } as UserProfile);
+        setProfile({
+          ...data,
+          yptNames: Array.isArray(data.yptNames) ? data.yptNames : [],
+          defaultYptHandle: typeof data.defaultYptHandle === 'string' ? data.defaultYptHandle : undefined,
+        } as UserProfile);
       } else {
         // Initialize profile locally to avoid immediate write loop inside read listener
         const newProfile: UserProfile = {
@@ -35,6 +39,7 @@ export function useUserProfile() {
           avgEnglishPercentile: 0,
           totalTests: 0,
           streak: 0,
+          yptNames: [],
         };
         // Don't setDoc inside onSnapshot here either. If we need to bootstrap, 
         // rely on an action or a separate hook.
@@ -60,6 +65,23 @@ export function useUserProfile() {
     if (data.bio !== undefined) {
       if (data.bio.length > 70) throw new Error("Bio must be 70 characters or less");
       if (data.bio.length > 0 && !/^[a-zA-Z0-9\s.,!?-]*$/.test(data.bio)) throw new Error("Bio can contain letters, numbers, spaces, and punctuation.");
+    }
+    if (data.yptNames !== undefined) {
+      if (!Array.isArray(data.yptNames)) throw new Error("YPT Names must be an array");
+      if (data.yptNames.some(name => typeof name !== 'string')) {
+        throw new Error("YPT Names must be strings");
+      }
+      if (data.yptNames.some(name => name.length > 50)) {
+        throw new Error("Each YPT Name must be 50 characters or less");
+      }
+    }
+    if (data.defaultYptHandle !== undefined && data.defaultYptHandle !== null) {
+      if (typeof data.defaultYptHandle !== 'string') {
+        throw new Error("Default YPT handle must be a string");
+      }
+      if (data.defaultYptHandle.length > 50) {
+        throw new Error("Default YPT handle must be 50 characters or less");
+      }
     }
   };
 

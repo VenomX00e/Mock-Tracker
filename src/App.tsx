@@ -19,6 +19,8 @@ import { HomeView } from './components/views/HomeView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewManager } from './components/ViewManager';
 import UpdateChangelogModal from './components/UpdateChangelogModal';
+import { Jarvis } from './features/jarvis';
+import { useJarvisListener } from './hooks/useJarvisListener';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from './services/firebase';
 import { useVersionStore } from './store/versionStore';
@@ -30,6 +32,8 @@ function AppContent() {
   const { addMock, updateMock, loading: mocksLoading } = useMocks();
   const { selectedCategory, categories, fetchAnnouncement } = useContext(SystemDataCtx)!;
   const { isOwner, isAdmin, adminPermissions } = useContext(AppStateCtx)!;
+
+  useJarvisListener();
 
   const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
   const [isGoingDown, setIsGoingDown] = useState(true);
@@ -173,6 +177,7 @@ function AppContent() {
         <BottomNav />
         <ModalsSection />
         <UpdateChangelogModal />
+        <Jarvis />
       </div>
     </div>
   );

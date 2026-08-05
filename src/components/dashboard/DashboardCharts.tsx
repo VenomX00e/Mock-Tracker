@@ -84,7 +84,7 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+    <div id="performance-trend" className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative scroll-mt-24">
       {/* Chart: Percentile Trend */}
       <Card noPadding className="p-6 flex flex-col min-h-[325px] sm:h-[325px] lg:col-span-2 relative mt-0">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-3 lg:mb-2 gap-3 lg:gap-4">

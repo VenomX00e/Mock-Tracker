@@ -112,7 +112,7 @@ export function HomeView() {
   };
 
   return (
-    <div className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20 mt-2 md:mt-0">
+    <div data-jarvis-section="Home Dashboard" className="w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20 mt-2 md:mt-0">
       {/* Header Area */}
       <div className="flex flex-col mb-4 sm:mb-8 gap-4 sm:gap-6 px-1">
         {/* Top Right Actions (Theme + Profile) - Visible only on md+ since mobile has top nav */}
@@ -226,7 +226,10 @@ export function HomeView() {
              <Calendar className="w-3.5 h-3.5" />
              {formattedDate}
            </div>
-           <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white">
+           <h1 
+             data-jarvis-item={`Header Greeting: ${greeting}, ${profile?.displayName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'User'}!`}
+             className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white"
+           >
              <span className="theme-greeting-text">{greeting},</span> <span className="text-indigo-600 dark:text-indigo-400">{profile?.displayName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'User'}</span>!
            </h1>
         </div>
@@ -237,6 +240,7 @@ export function HomeView() {
          {/* Quote */}
          <div 
            ref={quoteContainerRef}
+           data-jarvis-item={`Daily Motivation Quote: "${activeQuote.text}" - ${activeQuote.author}`}
            onClick={() => {
              if (canEditQuotes && !quoteControlsVisible) {
                setQuoteControlsVisible(true);

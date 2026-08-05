@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback, memo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MockScore, ExamCategory } from '../types';
 import { parseScorecardImage } from '../services/geminiService';
@@ -6,6 +6,7 @@ import { X, Upload, Loader2, ArrowLeft, Image as ImageIcon, BarChart3, Settings,
 import { cn } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 import { usePublicSettingsCtx } from '../context/AppContext';
+import { jarvisEventBus, JarvisActionEvent } from '../features/jarvis/utils/eventBus';
 
 import { EXAMS as fallback_EXAMS, ROLES as fallback_ROLES, PHASES as fallback_PHASES, SCOPES as fallback_SCOPES, PLATFORMS as fallback_PLATFORMS } from '../lib/constants';
 import { getErrorMessage } from '../lib/errorUtils';
@@ -184,6 +185,25 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
       setSelectedSection(subjects[0].id);
     }
   }, [subjects, selectedSection]);
+
+  useEffect(() => {
+    const handleJarvisEvent = (action: JarvisActionEvent) => {
+      if (action.type === 'EXECUTE_INTENT') {
+        const payload = action.payload || {};
+        if (action.intent === 'ADD_MOCK_SCORE' || action.intent === 'FILL_MOCK_SCORE') {
+          if (payload && typeof payload === 'object') {
+            setFormData((prev: any) => ({
+              ...prev,
+              ...payload,
+            }));
+          }
+        }
+      }
+    };
+
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisEvent);
+    return () => unsubscribe();
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];

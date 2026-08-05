@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { jarvisEventBus } from '../../features/jarvis/utils/eventBus';
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { PracticeFolder, PracticeFile } from "../../types";
@@ -19,6 +20,47 @@ export function PracticeLibrary() {
   const [files, setFiles] = useState<PracticeFile[]>([]);
   const [folderPath, setFolderPath] = useState<PracticeFolder[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const handleJarvisEvent = (action: any) => {
+      if (action.type === 'SUB_NAVIGATE') {
+        const { mainTab, subTab, section } = action.payload;
+        if (mainTab === 'learning' && subTab === 'practice' && section) {
+          // Find the subject id that matches the section name
+          if (section === 'quant') setCurrentSubjectId('quant');
+          else if (section === 'reasoning') setCurrentSubjectId('reasoning');
+          else if (section === 'english') setCurrentSubjectId('english');
+          else if (section === 'ga') setCurrentSubjectId('ga');
+        }
+      } else if (action.type === 'EXECUTE_INTENT' && action.intent === 'FILTER_PRACTICE_SUBJECT') {
+        const payload = action.payload || {};
+        const subjectTarget = (payload.subject || action.subject || '').toLowerCase();
+        if (subjectTarget) {
+          const matched = subjects.find((s: any) =>
+            s.id.toLowerCase() === subjectTarget ||
+            s.name.toLowerCase().includes(subjectTarget) ||
+            subjectTarget.includes(s.id.toLowerCase()) ||
+            subjectTarget.includes(s.name.toLowerCase())
+          );
+          if (matched) {
+            setCurrentSubjectId(matched.id);
+            setParentFolderId(null);
+            setFolderPath([]);
+          } else {
+            // Fallback matching by id
+            if (['quant', 'reasoning', 'english', 'ga'].includes(subjectTarget)) {
+              setCurrentSubjectId(subjectTarget);
+              setParentFolderId(null);
+              setFolderPath([]);
+            }
+          }
+        }
+      }
+    };
+    const unsubscribe = jarvisEventBus.subscribe(handleJarvisEvent);
+    return () => unsubscribe();
+  }, [subjects]);
+
 
   useEffect(() => {
     if (subjects.length > 0 && !currentSubjectId) {

@@ -18,6 +18,66 @@ import { parseLocalDate } from '../../lib/utils';
 import { getErrorMessage } from '../../lib/errorUtils';
 import { useCacheStore } from '../../store/analyticsStore';
 
+export interface PollOption {
+  id: string;
+  text: string;
+  isCorrect?: boolean;
+  votes?: Record<string, { timestamp: number }> | string[];
+}
+
+export interface PollData {
+  question: string;
+  isMulti?: boolean;
+  options: PollOption[];
+}
+
+export const createCommunityPoll = async (
+  user: any,
+  question: string,
+  options: (string | { id: string; text: string; isCorrect?: boolean })[],
+  isMulti: boolean = false
+) => {
+  if (!user) throw new Error("User required to create poll");
+  if (!question || question.trim().length === 0) throw new Error("Question is required");
+  
+  const formattedOptions: PollOption[] = options.map((opt, index) => {
+    if (typeof opt === 'string') {
+      return {
+        id: (index + 1).toString(),
+        text: opt.trim(),
+        isCorrect: false,
+        votes: {}
+      };
+    }
+    return {
+      id: opt.id || (index + 1).toString(),
+      text: opt.text.trim(),
+      isCorrect: !!opt.isCorrect,
+      votes: {}
+    };
+  }).filter(o => o.text.length > 0);
+
+  if (formattedOptions.length < 2) {
+    throw new Error("At least 2 non-empty options are required");
+  }
+
+  const payload: any = {
+    userId: user.uid,
+    userName: user.displayName || 'Anonymous',
+    userPhoto: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'A'}`,
+    text: '',
+    createdAt: Date.now(),
+    isPoll: true,
+    poll: {
+      question: question.trim(),
+      isMulti,
+      options: formattedOptions
+    }
+  };
+
+  return await addDoc(collection(db, 'community_chat'), payload);
+};
+
 export function useCommunityPosts(user: any, isAdmin: boolean, categoryId: string | undefined) {
   const cache = useCacheStore();
   const [allUsers, setAllUsers] = useState<UserProfile[]>(cache.allUsers || []);
@@ -377,14 +437,19 @@ export function useCommunityUI(user: any, isAdmin: boolean, categoryId: string |
   const chatBottomRef = useRef<HTMLDivElement>(null);
   
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const hasText = newMessage.trim().length > 0;
+  const handleSendMessage = async (e?: React.FormEvent | string, directText?: string) => {
+    if (e && typeof (e as any).preventDefault === 'function') {
+      (e as any).preventDefault();
+    }
+
+    const messageText = typeof e === 'string' ? e : (directText || newMessage);
+    const textTrimmed = (messageText || '').trim();
+    const hasText = textTrimmed.length > 0;
     const hasPoll = showPollMaker && pollQuestion.trim().length > 0 && pollOptions.filter(o => o.text.trim().length > 0).length >= 2;
     if (!user || isSending || (!hasText && !hasPoll)) return;
     
     // UI Hardening: enforce maxLength on text as per DB rules
-    if (newMessage.trim().length > 2000) {
+    if (textTrimmed.length > 2000) {
       setChatError(`Message cannot exceed 2000 characters.`);
       setTimeout(() => setChatError(''), 4000);
       return;
@@ -412,7 +477,7 @@ export function useCommunityUI(user: any, isAdmin: boolean, categoryId: string |
     try {
       if (editingMessageId) {
         const updatePayload: any = {
-          text: newMessage.trim(),
+          text: textTrimmed,
           isEdited: true,
           updatedAt: Date.now()
         };
@@ -449,11 +514,12 @@ export function useCommunityUI(user: any, isAdmin: boolean, categoryId: string |
         userId: user.uid,
         userName: user.displayName || 'Anonymous',
         userPhoto: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'A'}`,
-        text: newMessage.trim(),
+        text: textTrimmed,
         createdAt: Date.now()
       };
 
       if (hasPoll) {
+        payload.isPoll = true;
         payload.poll = {
           question: pollQuestion.trim(),
           isMulti: pollIsMulti,
@@ -908,6 +974,6 @@ export function useCommunityUI(user: any, isAdmin: boolean, categoryId: string |
     
     handleSendMessage, handleDeleteMessage, handlePinMessage, handleChatReact, handlePollVote, handleSort, handleFeedSort,
     getFeedSortConfig, availablePhases, activeAllUsers, sortedLeaderboard, filteredFeedLogs, handleAdminRestore,
-    handleAdminPermanentDelete, handleAdminChangeGlobalSort, handleReact
+    handleAdminPermanentDelete, handleAdminChangeGlobalSort, handleReact, createCommunityPoll
   };
 }

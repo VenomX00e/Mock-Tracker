@@ -25,6 +25,8 @@ interface UIState {
     | "profile"
     | "learning"
     | "countdowns";
+  learningTab: "ai" | "vocab" | "math" | "practice" | "ypt";
+  setLearningTab: (tab: "ai" | "vocab" | "math" | "practice" | "ypt") => void;
   setActiveTab: (
     tab:
       | "home"
@@ -151,6 +153,8 @@ export const useUIStore = create<UIState>((set) => ({
   setAdminEditCountdown: (countdown) => set({ adminEditCountdown: countdown }),
 
 
+  learningTab: "ai",
+  setLearningTab: (tab) => set({ learningTab: tab }),
   activeTab: "home",
   setActiveTab: (tab) => set({ activeTab: tab }),
 
