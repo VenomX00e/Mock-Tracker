@@ -1,9 +1,13 @@
+export type YptRuleConditionType = 'emoji_only' | 'hours_only' | 'both' | 'either';
+
 export interface YptCustomRule {
   id: string;
   name: string; // e.g. "Morning Snap Bonus", "Target 5 Hours Bonus"
   emoji?: string; // e.g. "☀️", "🌻", "📱"
   points: number; // e.g. 5
   type: 'bonus' | 'penalty';
+  conditionType?: YptRuleConditionType; // Default 'emoji_only'
+  minHoursNeeded?: number; // Minimum hours required for 'hours_only', 'both', or 'either'
 }
 
 export interface YptRuleConfig {

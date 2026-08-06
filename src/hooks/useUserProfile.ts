@@ -89,9 +89,12 @@ export function useUserProfile() {
     if (!user) return;
     try {
       validateUserProfile(updates);
+      const cleanUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, val]) => val !== undefined)
+      );
       await setDoc(doc(db, 'users', user.uid), {
         userId: user.uid,
-        ...updates,
+        ...cleanUpdates,
         lastActiveAt: Date.now(),
         updatedAt: serverTimestamp()
       }, { merge: true });

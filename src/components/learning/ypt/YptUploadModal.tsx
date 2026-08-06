@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Upload, FileImage, Sparkles, AlertCircle, CheckCircle2, Shield, UserCheck, UserX, Loader2, Plus, Info, Lock, Trophy, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { YptChallenge, YptExtractedMemberData, YptRuleConfig } from '../../../types/yptTypes';
 import { parseYptScreenshot } from '../../../services/yptOcrService';
-import { addYptSubmissionLog } from '../../../services/yptService';
+import { addYptSubmissionLog, evaluatePointRule } from '../../../services/yptService';
 import { useAuthCtx } from '../../../context/AppContext';
 import { formatStudyDuration, getLocalYmd } from '../../../utils/yptUtils';
 
@@ -135,19 +135,9 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
     if (Array.isArray(rules.customRules)) {
       for (const cr of rules.customRules) {
         if (!cr || !cr.name) continue;
-        const crEmoji = cr.emoji ? String(cr.emoji).trim() : '';
         const p = Number(cr.points) || 0;
-        const nameLower = cr.name.toLowerCase();
 
-        let ruleMatched = false;
-
-        if (crEmoji && newDetectedEmojis.some((e) => e.includes(crEmoji) || crEmoji.includes(e))) {
-          ruleMatched = true;
-        } else if (newMorningSnap && (nameLower.includes('snap') || crEmoji === '☀️')) {
-          ruleMatched = true;
-        }
-
-        if (ruleMatched) {
+        if (evaluatePointRule(cr, newDetectedEmojis, member.hoursStudied, newMorningSnap)) {
           if (cr.type === 'bonus') {
             points += p;
           } else if (cr.type === 'penalty') {
@@ -202,7 +192,38 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
     });
   };
 
-  // Date Bounded Helper (3-Day Lookback Window)
+  // Challenge Start Date & Date Navigation Helpers
+  const currentChallenge = challenges.find((c) => c.id === selectedChallengeId);
+
+  const getChallengeStartDateYmd = (challenge?: YptChallenge | null): string => {
+    if (!challenge || !challenge.startDate) {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return getLocalYmd(d);
+    }
+    const raw = String(challenge.startDate).trim();
+    if (raw.includes('T')) {
+      const ymd = raw.split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return raw;
+    }
+    const parsed = new Date(raw);
+    if (!isNaN(parsed.getTime())) {
+      return getLocalYmd(parsed);
+    }
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return getLocalYmd(d);
+  };
+
+  const minAllowedDateYmd = getChallengeStartDateYmd(currentChallenge);
+  const todayYmd = getLocalYmd(new Date());
+
+  const isPrevDisabled = selectedDateYmd <= minAllowedDateYmd;
+  const isNextDisabled = selectedDateYmd >= todayYmd;
+
   const getDayOffset = (dateYmd: string): number => {
     const todayStr = getLocalYmd(new Date());
     if (dateYmd === todayStr) return 0;
@@ -236,22 +257,26 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
   };
 
   const handlePrevDate = () => {
-    const currentOffset = getDayOffset(selectedDateYmd);
-    if (currentOffset > -3) {
+    if (!isPrevDisabled) {
       const [y, m, d] = selectedDateYmd.split('-').map(Number);
       const dateObj = new Date(y, m - 1, d);
       dateObj.setDate(dateObj.getDate() - 1);
-      setSelectedDateYmd(getLocalYmd(dateObj));
+      const nextYmd = getLocalYmd(dateObj);
+      if (nextYmd >= minAllowedDateYmd) {
+        setSelectedDateYmd(nextYmd);
+      }
     }
   };
 
   const handleNextDate = () => {
-    const currentOffset = getDayOffset(selectedDateYmd);
-    if (currentOffset < 0) {
+    if (!isNextDisabled) {
       const [y, m, d] = selectedDateYmd.split('-').map(Number);
       const dateObj = new Date(y, m - 1, d);
       dateObj.setDate(dateObj.getDate() + 1);
-      setSelectedDateYmd(getLocalYmd(dateObj));
+      const nextYmd = getLocalYmd(dateObj);
+      if (nextYmd <= todayYmd) {
+        setSelectedDateYmd(nextYmd);
+      }
     }
   };
 
@@ -381,7 +406,7 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
             </div>
           )}
 
-          {/* Date Selector Toolbar (3-Day Bounded Navigation) */}
+          {/* Date Selector Toolbar (Bounded by Challenge Start Date) */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
               Screenshot Date *
@@ -390,9 +415,9 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
               <button
                 type="button"
                 onClick={handlePrevDate}
-                disabled={getDayOffset(selectedDateYmd) <= -3}
+                disabled={isPrevDisabled}
                 className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-                title="Previous day (max 3 days ago)"
+                title={`Previous day (challenge start: ${minAllowedDateYmd})`}
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -405,7 +430,7 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
               <button
                 type="button"
                 onClick={handleNextDate}
-                disabled={getDayOffset(selectedDateYmd) >= 0}
+                disabled={isNextDisabled}
                 className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
                 title="Next day (up to Today)"
               >

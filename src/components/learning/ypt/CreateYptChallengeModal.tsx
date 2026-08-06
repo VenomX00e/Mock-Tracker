@@ -1,11 +1,88 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Trash2, Award, Clock, Users, ShieldAlert, Sparkles, Crown } from 'lucide-react';
-import { YptRuleConfig, YptTeam } from '../../../types/yptTypes';
+import { X, Plus, Trash2, Award, Clock, Users, ShieldAlert, Sparkles, Crown, ChevronDown, Check } from 'lucide-react';
+import { YptRuleConfig, YptTeam, YptRuleConditionType } from '../../../types/yptTypes';
 import { createYptChallenge, updateYptChallenge, getAllKnownYptNames } from '../../../services/yptService';
 import { useAuthCtx } from '../../../context/AppContext';
 import { YptMemberPicker } from './YptMemberPicker';
 import { YptChallenge } from '../../../types/yptTypes';
+
+interface CustomSelectOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+interface CustomSelectProps<T extends string> {
+  value: T;
+  onChange: (val: T) => void;
+  options: CustomSelectOption<T>[];
+  className?: string;
+}
+
+function CustomSelect<T extends string>({
+  value,
+  onChange,
+  options,
+  className = '',
+}: CustomSelectProps<T>) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedOption = options.find((o) => o.value === value) || options[0];
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className="relative inline-block text-left shrink-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center justify-between gap-1.5 px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${className}`}
+      >
+        <span>{selectedOption?.label}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-indigo-500' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 mt-1.5 min-w-[150px] w-max max-w-[240px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                  isSelected
+                    ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                }`}
+              >
+                <span>{opt.label}</span>
+                {isSelected && <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0 ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface CreateYptChallengeModalProps {
   isOpen: boolean;
@@ -68,9 +145,17 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
   const [penaltyPoints, setPenaltyPoints] = useState('5');
 
   const [customRules, setCustomRules] = useState<
-    Array<{ id: string; name: string; emoji?: string; points: string; type: 'bonus' | 'penalty' }>
+    Array<{
+      id: string;
+      name: string;
+      emoji?: string;
+      points: string;
+      type: 'bonus' | 'penalty';
+      conditionType?: YptRuleConditionType;
+      minHoursNeeded?: string;
+    }>
   >([
-    { id: 'rule_1', name: 'Morning Snap Bonus', emoji: '☀️', points: '5', type: 'bonus' }
+    { id: 'rule_1', name: 'Morning Snap Bonus', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10' }
   ]);
 
   // Teams
@@ -187,6 +272,8 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                 emoji: cr.emoji || '☀️',
                 points: String(cr.points),
                 type: cr.type,
+                conditionType: cr.conditionType || 'emoji_only',
+                minHoursNeeded: cr.minHoursNeeded !== undefined ? String(cr.minHoursNeeded) : '10',
               }))
             );
           } else {
@@ -219,7 +306,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         setPenaltyThresholdValue('3');
         setPenaltyThresholdUnit('hours');
         setPenaltyPoints('5');
-        setCustomRules([{ id: 'rule_1', name: 'Morning Snap Bonus', emoji: '☀️', points: '5', type: 'bonus' }]);
+        setCustomRules([{ id: 'rule_1', name: 'Morning Snap Bonus', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10' }]);
         setTeams([
           { name: 'Alpha Striker', color: '#6366f1', memberUids: [], teamLeaders: [] },
           { name: 'Beta Victors', color: '#ec4899', memberUids: [], teamLeaders: [] },
@@ -232,10 +319,26 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
   const PRESET_EMOJIS = ['☀️', '🌻', '📱', '🔟', '🔥', '🎯', '⏰', '🏆', '⚡', '🏞️', '📑'];
 
+  const getConditionLabel = (rule: { conditionType?: YptRuleConditionType; minHoursNeeded?: string }) => {
+    const cond = rule.conditionType || 'emoji_only';
+    const hrs = rule.minHoursNeeded || '10';
+    switch (cond) {
+      case 'hours_only':
+        return `Req: ≥${hrs}h`;
+      case 'both':
+        return `Req: Emoji + ≥${hrs}h`;
+      case 'either':
+        return `Req: Emoji or ≥${hrs}h`;
+      case 'emoji_only':
+      default:
+        return `Req: Emoji`;
+    }
+  };
+
   const handleAddCustomRule = () => {
     setCustomRules([
       ...customRules,
-      { id: `rule_${Date.now()}`, name: '', emoji: '☀️', points: '5', type: 'bonus' }
+      { id: `rule_${Date.now()}`, name: '', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10' }
     ]);
   };
 
@@ -245,11 +348,31 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
   const handleUpdateCustomRule = (
     id: string,
-    field: 'name' | 'emoji' | 'points' | 'type',
+    field: 'name' | 'emoji' | 'points' | 'type' | 'conditionType' | 'minHoursNeeded',
     value: string
   ) => {
     setCustomRules(
       customRules.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
+
+  const handleSelectEmojiPreset = (ruleId: string, emoji: string) => {
+    setCustomRules(
+      customRules.map((r) => {
+        if (r.id !== ruleId) return r;
+        if (emoji === '🔟') {
+          return {
+            ...r,
+            emoji: '🔟',
+            name: r.name ? r.name : '10hr zone',
+            conditionType: 'both',
+            minHoursNeeded: '10',
+            points: r.points || '1',
+            type: 'bonus',
+          };
+        }
+        return { ...r, emoji };
+      })
     );
   };
 
@@ -311,6 +434,8 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
             emoji: r.emoji?.trim() || undefined,
             points: parseFloat(r.points) || 0,
             type: r.type,
+            conditionType: r.conditionType || 'emoji_only',
+            minHoursNeeded: r.conditionType && r.conditionType !== 'emoji_only' ? (parseFloat(r.minHoursNeeded || '10') || 0) : undefined,
           })),
       };
 
@@ -497,14 +622,14 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                         className="w-16 px-2.5 py-1.5 text-xs bg-transparent dark:text-white font-bold text-center focus:outline-none"
                         placeholder="30"
                       />
-                      <select
+                      <CustomSelect<'minutes' | 'hours'>
                         value={studyIntervalUnit}
-                        onChange={(e) => setStudyIntervalUnit(e.target.value as 'minutes' | 'hours')}
-                        className="px-2 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 dark:text-white font-semibold focus:outline-none cursor-pointer"
-                      >
-                        <option value="minutes">Minutes</option>
-                        <option value="hours">Hours</option>
-                      </select>
+                        onChange={(val) => setStudyIntervalUnit(val)}
+                        options={[
+                          { value: 'minutes', label: 'Minutes' },
+                          { value: 'hours', label: 'Hours' },
+                        ]}
+                      />
                     </div>
                     <span className="font-semibold">studied → Award</span>
                     <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 overflow-hidden shadow-sm">
@@ -543,14 +668,14 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                         className="w-16 px-2.5 py-1.5 text-xs bg-transparent dark:text-white font-bold text-center focus:outline-none"
                         placeholder="3"
                       />
-                      <select
+                      <CustomSelect<'hours' | 'minutes'>
                         value={penaltyThresholdUnit}
-                        onChange={(e) => setPenaltyThresholdUnit(e.target.value as 'minutes' | 'hours')}
-                        className="px-2 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 dark:text-white font-semibold focus:outline-none cursor-pointer"
-                      >
-                        <option value="hours">Hours</option>
-                        <option value="minutes">Minutes</option>
-                      </select>
+                        onChange={(val) => setPenaltyThresholdUnit(val)}
+                        options={[
+                          { value: 'hours', label: 'Hours' },
+                          { value: 'minutes', label: 'Minutes' },
+                        ]}
+                      />
                     </div>
                     <span className="font-semibold">→ Subtract</span>
                     <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 overflow-hidden shadow-sm">
@@ -614,19 +739,47 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                               type="text"
                               value={rule.name}
                               onChange={(e) => handleUpdateCustomRule(rule.id, 'name', e.target.value)}
-                              placeholder="Rule Name (e.g. Morning Snap)"
-                              className="flex-1 min-w-[140px] px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                              placeholder="Rule Name (e.g. 10hr zone)"
+                              className="flex-1 min-w-[130px] px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                             />
 
+                            {/* Condition Type Dropdown */}
+                            <CustomSelect<YptRuleConditionType>
+                              value={rule.conditionType || 'emoji_only'}
+                              onChange={(val) => handleUpdateCustomRule(rule.id, 'conditionType', val)}
+                              options={[
+                                { value: 'emoji_only', label: 'Emoji Present Only' },
+                                { value: 'hours_only', label: 'Min Hours Only' },
+                                { value: 'both', label: 'Emoji AND Min Hours' },
+                                { value: 'either', label: 'Emoji OR Min Hours' },
+                              ]}
+                            />
+
+                            {/* Conditional Min Hours Input */}
+                            {rule.conditionType && rule.conditionType !== 'emoji_only' && (
+                              <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-900 shrink-0">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  value={rule.minHoursNeeded || '10'}
+                                  onChange={(e) => handleUpdateCustomRule(rule.id, 'minHoursNeeded', e.target.value)}
+                                  placeholder="10"
+                                  className="w-14 px-2 py-2 text-xs bg-transparent dark:text-white font-bold text-center focus:outline-none"
+                                />
+                                <span className="pr-2 text-[10px] text-slate-400 font-bold uppercase">hrs</span>
+                              </div>
+                            )}
+
                             {/* Rule Type */}
-                            <select
+                            <CustomSelect<'bonus' | 'penalty'>
                               value={rule.type}
-                              onChange={(e) => handleUpdateCustomRule(rule.id, 'type', e.target.value as any)}
-                              className="px-2.5 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl dark:text-white font-semibold focus:outline-none cursor-pointer"
-                            >
-                              <option value="bonus">Bonus (+)</option>
-                              <option value="penalty">Penalty (-)</option>
-                            </select>
+                              onChange={(val) => handleUpdateCustomRule(rule.id, 'type', val)}
+                              options={[
+                                { value: 'bonus', label: 'Bonus (+)' },
+                                { value: 'penalty', label: 'Penalty (-)' },
+                              ]}
+                            />
 
                             {/* Points */}
                             <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-900 shrink-0">
@@ -660,7 +813,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                                 <button
                                   key={e}
                                   type="button"
-                                  onClick={() => handleUpdateCustomRule(rule.id, 'emoji', e)}
+                                  onClick={() => handleSelectEmojiPreset(rule.id, e)}
                                   className={`w-7 h-7 flex items-center justify-center text-sm rounded-lg border transition-all shrink-0 ${
                                     rule.emoji === e
                                       ? 'bg-indigo-500/20 border-indigo-500 text-indigo-500 scale-105 shadow-xs'
@@ -687,6 +840,9 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                                     : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                                 }`}>
                                   {rule.type === 'bonus' ? '+' : '-'}{rule.points || '0'} XP
+                                </span>
+                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-200/60 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
+                                  {getConditionLabel(rule)}
                                 </span>
                               </span>
                             </div>

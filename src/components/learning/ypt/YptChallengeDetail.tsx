@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, FileImage, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X } from 'lucide-react';
+import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, FileImage, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAppStateCtx, useUserProfileCtx, useAuthCtx } from '../../../context/AppContext';
 import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam } from '../../../types/yptTypes';
 import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog } from '../../../services/yptService';
@@ -61,18 +61,42 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | 'last7days' | 'allTime'>('today');
+  const [dateFilter, setDateFilter] = useState<'date' | 'allTime'>('date');
+  const [selectedFilterDateYmd, setSelectedFilterDateYmd] = useState<string>(getLocalYmd(new Date()));
   const [editingMemberHandle, setEditingMemberHandle] = useState<string | null>(null);
   const [quickRulePopoverMember, setQuickRulePopoverMember] = useState<string | null>(null);
 
-  const getTargetDateYmdForFilter = () => {
-    const todayObj = new Date();
-    if (dateFilter === 'yesterday') {
-      const y = new Date(todayObj);
-      y.setDate(y.getDate() - 1);
-      return getLocalYmd(y);
+  const getChallengeStartDateYmd = (ch?: YptChallenge | null): string => {
+    if (!ch) {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return getLocalYmd(d);
     }
-    return getLocalYmd(todayObj);
+    const raw = ch.startDate || (ch as any).createdAt;
+    if (!raw) {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return getLocalYmd(d);
+    }
+    const str = String(raw).trim();
+    if (str.includes('T')) {
+      const ymd = str.split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) return getLocalYmd(parsed);
+
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return getLocalYmd(d);
+  };
+
+  const getTargetDateYmdForFilter = () => {
+    if (dateFilter === 'allTime') {
+      return getLocalYmd(new Date());
+    }
+    return selectedFilterDateYmd;
   };
 
   const handleApplyQuickRule = async (
@@ -373,49 +397,112 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
             <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Live performance ranking & team standings</p>
           </div>
 
-          {/* Date Toggle Control: Today / Yesterday / Last 7 Days / All-Time */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs font-bold overflow-x-auto max-w-full">
-            <button
-              onClick={() => setDateFilter('today')}
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all whitespace-nowrap ${
-                dateFilter === 'today'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              ☀️ Today
-            </button>
-            <button
-              onClick={() => setDateFilter('yesterday')}
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all whitespace-nowrap ${
-                dateFilter === 'yesterday'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              📅 Yesterday
-            </button>
-            <button
-              onClick={() => setDateFilter('last7days')}
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all whitespace-nowrap ${
-                dateFilter === 'last7days'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              📅 Last 7 Days
-            </button>
-            <button
-              onClick={() => setDateFilter('allTime')}
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all whitespace-nowrap ${
-                dateFilter === 'allTime'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              🏆 All-Time
-            </button>
-          </div>
+          {/* Date Toggle Control: Date Navigator (Today -> Yesterday -> Date) / All-Time */}
+          {(() => {
+            const minFilterDateYmd = getChallengeStartDateYmd(challenge);
+            const todayYmd = getLocalYmd(new Date());
+
+            const isPrevDateDisabled = selectedFilterDateYmd <= minFilterDateYmd;
+            const isNextDateDisabled = selectedFilterDateYmd >= todayYmd;
+
+            const getDayOffsetFromToday = (dateYmd: string): number => {
+              const todayStr = getLocalYmd(new Date());
+              if (dateYmd === todayStr) return 0;
+              const [tY, tM, tD] = todayStr.split('-').map(Number);
+              const [sY, sM, sD] = dateYmd.split('-').map(Number);
+              const tDate = new Date(tY, tM - 1, tD);
+              const sDate = new Date(sY, sM - 1, sD);
+              const diffMs = sDate.getTime() - tDate.getTime();
+              return Math.round(diffMs / (1000 * 60 * 60 * 24));
+            };
+
+            const getFilterDateLabel = (dateYmd: string): string => {
+              const offset = getDayOffsetFromToday(dateYmd);
+              if (offset === 0) return '☀️ Today';
+              if (offset === -1) return '📅 Yesterday';
+
+              const [y, m, d] = dateYmd.split('-').map(Number);
+              const dateObj = new Date(y, m - 1, d);
+              const formatted = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              return `📅 ${formatted}`;
+            };
+
+            return (
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs font-bold overflow-x-auto max-w-full shrink-0">
+                {/* Single Date Navigator Pill with Left/Right Arrows */}
+                <div
+                  className={`flex items-center rounded-lg transition-all ${
+                    dateFilter === 'date'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isPrevDateDisabled) {
+                        const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
+                        const dateObj = new Date(y, m - 1, d);
+                        dateObj.setDate(dateObj.getDate() - 1);
+                        const nextYmd = getLocalYmd(dateObj);
+                        if (nextYmd >= minFilterDateYmd) {
+                          setSelectedFilterDateYmd(nextYmd);
+                          setDateFilter('date');
+                        }
+                      }
+                    }}
+                    disabled={isPrevDateDisabled}
+                    className="p-1 sm:p-1.5 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-l-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title={`Previous day (challenge start: ${minFilterDateYmd})`}
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter('date')}
+                    className="px-2 sm:px-2.5 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer"
+                  >
+                    {getFilterDateLabel(selectedFilterDateYmd)}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isNextDateDisabled) {
+                        const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
+                        const dateObj = new Date(y, m - 1, d);
+                        dateObj.setDate(dateObj.getDate() + 1);
+                        const nextYmd = getLocalYmd(dateObj);
+                        if (nextYmd <= todayYmd) {
+                          setSelectedFilterDateYmd(nextYmd);
+                          setDateFilter('date');
+                        }
+                      }
+                    }}
+                    disabled={isNextDateDisabled}
+                    className="p-1 sm:p-1.5 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-r-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Next day (up to Today)"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* All-Time Pill */}
+                <button
+                  type="button"
+                  onClick={() => setDateFilter('allTime')}
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all font-bold whitespace-nowrap ${
+                    dateFilter === 'allTime'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  🏆 All-Time
+                </button>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Compute Stats based on active dateFilter */}
@@ -423,23 +510,30 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           const todayObj = new Date();
           const todayYmd = getLocalYmd(todayObj);
 
-          const yesterdayObj = new Date(todayObj);
-          yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-          const yesterdayYmd = getLocalYmd(yesterdayObj);
+          const getDayOffsetFromToday = (dateYmd: string): number => {
+            const todayStr = getLocalYmd(new Date());
+            if (dateYmd === todayStr) return 0;
+            const [tY, tM, tD] = todayStr.split('-').map(Number);
+            const [sY, sM, sD] = dateYmd.split('-').map(Number);
+            const tDate = new Date(tY, tM - 1, tD);
+            const sDate = new Date(sY, sM - 1, sD);
+            const diffMs = sDate.getTime() - tDate.getTime();
+            return Math.round(diffMs / (1000 * 60 * 60 * 24));
+          };
 
-          const sevenDaysAgoObj = new Date(todayObj);
-          sevenDaysAgoObj.setDate(sevenDaysAgoObj.getDate() - 6);
-          const sevenDaysAgoYmd = getLocalYmd(sevenDaysAgoObj);
+          const getFilterDateLabel = (dateYmd: string): string => {
+            const offset = getDayOffsetFromToday(dateYmd);
+            if (offset === 0) return 'Today';
+            if (offset === -1) return 'Yesterday';
 
-          let filterPeriodLabel = 'today';
-          let filterTitleLabel = 'Today';
-          if (dateFilter === 'yesterday') {
-            filterPeriodLabel = 'yesterday';
-            filterTitleLabel = 'Yesterday';
-          } else if (dateFilter === 'last7days') {
-            filterPeriodLabel = '7 days';
-            filterTitleLabel = 'Last 7 Days';
-          } else if (dateFilter === 'allTime') {
+            const [y, m, d] = dateYmd.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          };
+
+          let filterPeriodLabel = 'day';
+          let filterTitleLabel = getFilterDateLabel(selectedFilterDateYmd);
+          if (dateFilter === 'allTime') {
             filterPeriodLabel = 'total';
             filterTitleLabel = 'All-Time';
           }
@@ -472,12 +566,8 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 let isMatch = false;
                 if (dateFilter === 'allTime') {
                   isMatch = true;
-                } else if (dateFilter === 'today') {
-                  isMatch = subYmd === todayYmd;
-                } else if (dateFilter === 'yesterday') {
-                  isMatch = subYmd === yesterdayYmd;
-                } else if (dateFilter === 'last7days') {
-                  isMatch = subYmd >= sevenDaysAgoYmd && subYmd <= todayYmd;
+                } else {
+                  isMatch = subYmd === selectedFilterDateYmd;
                 }
 
                 const hours = stat.hoursStudied || 0;
@@ -668,30 +758,35 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                               >
                                 <div className="flex items-center justify-between gap-1.5">
                                   <div className="min-w-0 space-y-0.5">
+                                    {(isAssignedLeader || isGlobalMvp || isTeamMvp || isTeamSilver) && (
+                                      <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap mb-1 pl-5 sm:pl-6">
+                                        {isAssignedLeader && (
+                                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 font-extrabold shrink-0 flex items-center gap-0.5 border border-amber-500/40">
+                                            👑 Team Leader
+                                          </span>
+                                        )}
+                                        {isGlobalMvp ? (
+                                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shrink-0 flex items-center gap-0.5 border border-amber-500/30">
+                                            👑 MVP
+                                          </span>
+                                        ) : isTeamMvp ? (
+                                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold shrink-0 flex items-center gap-0.5 border border-amber-500/20">
+                                            👑 Team MVP
+                                          </span>
+                                        ) : isTeamSilver ? (
+                                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 font-bold shrink-0 flex items-center gap-0.5 border border-slate-300 dark:border-slate-600">
+                                            🥈 2nd Contributor
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    )}
+
                                     <div className="font-bold text-[11px] sm:text-xs text-slate-800 dark:text-slate-100 truncate flex items-center gap-1 sm:gap-1.5 flex-wrap">
                                       <span className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 font-mono shrink-0">
                                         #{idx + 1}
                                       </span>
                                       <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: team.color || '#6366f1' }} />
                                       <span className="truncate">@{member.handleRaw.replace(/^@/, '')}</span>
-                                      {isAssignedLeader && (
-                                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 font-extrabold shrink-0 flex items-center gap-0.5 border border-amber-500/40">
-                                          👑 Team Leader
-                                        </span>
-                                      )}
-                                      {isGlobalMvp ? (
-                                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shrink-0 flex items-center gap-0.5 border border-amber-500/30">
-                                          👑 MVP
-                                        </span>
-                                      ) : isTeamMvp ? (
-                                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold shrink-0 flex items-center gap-0.5 border border-amber-500/20">
-                                          👑 Team MVP
-                                        </span>
-                                      ) : isTeamSilver ? (
-                                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 font-bold shrink-0 flex items-center gap-0.5 border border-slate-300 dark:border-slate-600">
-                                          🥈 2nd Contributor
-                                        </span>
-                                      ) : null}
 
                                       {canEditThisMember && (
                                         <button

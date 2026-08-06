@@ -108,6 +108,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(['badges']) || data.badges is map || data.badges is list || data.badges == null)
         && (!data.keys().hasAny(['bio']) || data.bio is string || data.bio == null)
         && (!data.keys().hasAny(['yptNames']) || data.yptNames is list || data.yptNames == null)
+        && (!data.keys().hasAny(['defaultYptHandle']) || data.defaultYptHandle is string || data.defaultYptHandle == null)
         && (!data.keys().hasAny(['permissions']) || data.permissions is map || data.permissions == null)
         && (!data.keys().hasAny(['tasks']) || data.tasks is list || data.tasks == null)
         && (!data.keys().hasAny(['lastActiveAt']) || data.lastActiveAt is number || data.lastActiveAt is timestamp || data.lastActiveAt == null);
@@ -247,12 +248,12 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
           'userId', 'email', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
           'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 'totalTests', 'streak', 
-          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'tasks', 'lastActiveAt'
+          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'defaultYptHandle', 'tasks', 'lastActiveAt'
         ]) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
         || (isAnyAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
           'userId', 'email', 'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
           'avgAccuracy', 'avgQuantPercentile', 'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 
-          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'tasks', 'lastActiveAt'
+          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'defaultYptHandle', 'tasks', 'lastActiveAt'
         ]));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
     }

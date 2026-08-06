@@ -314,7 +314,7 @@ export default function ProfileDialog({
         categoryId,
         bio,
         yptNames,
-        defaultYptHandle: defaultYptHandle || (yptNames.length > 0 ? yptNames[0] : undefined),
+        defaultYptHandle: defaultYptHandle || (yptNames.length > 0 ? yptNames[0] : ''),
       });
       onClose();
     } catch (e: any) {

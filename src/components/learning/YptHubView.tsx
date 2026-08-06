@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap } from 'lucide-react';
+import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap } from 'lucide-react';
 import { useAppStateCtx, useUserProfileCtx } from '../../context/AppContext';
 import { YptChallenge, YptSubmissionLog } from '../../types/yptTypes';
 import { getAllYptChallenges, getYptSubmissionLogs, softDeleteYptChallenge, getRegisteredUserYptList, YptUserEntry, getDeduplicatedDailyMemberStats } from '../../services/yptService';
+import { useYptStore } from '../../store/useYptStore';
 import { CreateYptChallengeModal } from './ypt/CreateYptChallengeModal';
 import { YptUploadModal } from './ypt/YptUploadModal';
 import { YptChallengeDetail } from './ypt/YptChallengeDetail';
 import { YptRecycleBinModal } from './ypt/YptRecycleBinModal';
 import { ConfirmDeleteModal } from './ypt/ConfirmDeleteModal';
+import { formatStudyDuration } from '../../utils/yptUtils';
 
 type SubViewTab = 'global' | 'challenges' | 'leaderboard';
-type GlobalDateFilter = 'today' | 'yesterday' | 'last7days' | 'allTime';
+type GlobalDateFilter = 'date' | 'allTime';
 
 export interface GlobalMemberStat {
   cleanHandle: string;
@@ -55,7 +57,8 @@ export function YptHubView() {
   const [loading, setLoading] = useState(true);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [activeTab, setActiveTab] = useState<SubViewTab>('global');
-  const [dateFilter, setDateFilter] = useState<GlobalDateFilter>('today');
+  const [dateFilter, setDateFilter] = useState<GlobalDateFilter>('date');
+  const [selectedFilterDateYmd, setSelectedFilterDateYmd] = useState<string>(getLocalYmd(new Date()));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChallenge, setSelectedChallenge] = useState<YptChallenge | null>(null);
 
@@ -97,6 +100,29 @@ export function YptHubView() {
       setLoading(false);
     }
   };
+
+  const storeChallenges = useYptStore((s) => s.challenges);
+  const storeLoading = useYptStore((s) => s.isLoading);
+
+  useEffect(() => {
+    const init = useYptStore.getState().initChallengesListener;
+    const cleanup = useYptStore.getState().cleanupListeners;
+
+    init(); // Starts Firestore onSnapshot listener
+    
+    return () => {
+      cleanup(); // Safely closes listener when leaving tab
+    };
+  }, []);
+
+  useEffect(() => {
+    if (storeChallenges) {
+      setChallenges(storeChallenges);
+    }
+    if (!storeLoading && storeChallenges !== undefined) {
+      setLoading(false);
+    }
+  }, [storeChallenges, storeLoading]);
 
   useEffect(() => {
     fetchChallenges();
@@ -198,12 +224,8 @@ export function YptHubView() {
       let isPeriodMatch = false;
       if (dateFilter === 'allTime') {
         isPeriodMatch = true;
-      } else if (dateFilter === 'today') {
-        isPeriodMatch = subYmd === todayYmd;
-      } else if (dateFilter === 'yesterday') {
-        isPeriodMatch = subYmd === yesterdayYmd;
-      } else if (dateFilter === 'last7days') {
-        isPeriodMatch = subYmd >= sevenDaysAgoYmd && subYmd <= todayYmd;
+      } else {
+        isPeriodMatch = subYmd === selectedFilterDateYmd;
       }
 
       const stat = getOrInitMemberRecord(dStat.memberHandle);
@@ -444,49 +466,118 @@ export function YptHubView() {
                   />
                 </div>
 
-                {/* Date Filter Toggle Buttons */}
-                <div className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-xl border border-indigo-500/30 overflow-x-auto max-w-full">
-                  <button
-                    onClick={() => setDateFilter('today')}
-                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
-                      dateFilter === 'today'
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    ☀️ Today
-                  </button>
-                  <button
-                    onClick={() => setDateFilter('yesterday')}
-                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
-                      dateFilter === 'yesterday'
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    📅 Yesterday
-                  </button>
-                  <button
-                    onClick={() => setDateFilter('last7days')}
-                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
-                      dateFilter === 'last7days'
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    📅 Last 7 Days
-                  </button>
-                  <button
-                    onClick={() => setDateFilter('allTime')}
-                    className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 whitespace-nowrap ${
-                      dateFilter === 'allTime'
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    🏆 All-Time
-                  </button>
-                </div>
+                {/* Date Filter Toggle Control with Arrow Navigation */}
+                {(() => {
+                  const earliestStartDateYmd = activeChallenges.reduce((earliest, c) => {
+                    if (!c.startDate) return earliest;
+                    const raw = String(c.startDate).trim();
+                    const ymd = raw.split('T')[0];
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(ymd) && ymd < earliest) return ymd;
+                    return earliest;
+                  }, getLocalYmd(new Date(Date.now() - 60 * 86400000)));
+
+                  const minAllowedDateYmd = earliestStartDateYmd;
+                  const todayYmd = getLocalYmd(new Date());
+
+                  const isPrevDateDisabled = selectedFilterDateYmd <= minAllowedDateYmd;
+                  const isNextDateDisabled = selectedFilterDateYmd >= todayYmd;
+
+                  const getDayOffsetFromToday = (dateYmd: string): number => {
+                    const todayStr = getLocalYmd(new Date());
+                    if (dateYmd === todayStr) return 0;
+                    const [tY, tM, tD] = todayStr.split('-').map(Number);
+                    const [sY, sM, sD] = dateYmd.split('-').map(Number);
+                    const tDate = new Date(tY, tM - 1, tD);
+                    const sDate = new Date(sY, sM - 1, sD);
+                    const diffMs = sDate.getTime() - tDate.getTime();
+                    return Math.round(diffMs / (1000 * 60 * 60 * 24));
+                  };
+
+                  const getFilterDateLabel = (dateYmd: string): string => {
+                    const offset = getDayOffsetFromToday(dateYmd);
+                    if (offset === 0) return '☀️ Today';
+                    if (offset === -1) return '📅 Yesterday';
+
+                    const [y, m, d] = dateYmd.split('-').map(Number);
+                    const dateObj = new Date(y, m - 1, d);
+                    const formatted = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    return `📅 ${formatted}`;
+                  };
+
+                  return (
+                    <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-indigo-500/30 text-xs font-bold shrink-0">
+                      <div
+                        className={`flex items-center rounded-lg transition-all ${
+                          dateFilter === 'date'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isPrevDateDisabled) {
+                              const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
+                              const dateObj = new Date(y, m - 1, d);
+                              dateObj.setDate(dateObj.getDate() - 1);
+                              const nextYmd = getLocalYmd(dateObj);
+                              if (nextYmd >= minAllowedDateYmd) {
+                                setSelectedFilterDateYmd(nextYmd);
+                                setDateFilter('date');
+                              }
+                            }
+                          }}
+                          disabled={isPrevDateDisabled}
+                          className="p-1 hover:bg-indigo-700 rounded-l-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={`Previous day (${minAllowedDateYmd})`}
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setDateFilter('date')}
+                          className="px-2 py-1 text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer"
+                        >
+                          {getFilterDateLabel(selectedFilterDateYmd)}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isNextDateDisabled) {
+                              const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
+                              const dateObj = new Date(y, m - 1, d);
+                              dateObj.setDate(dateObj.getDate() + 1);
+                              const nextYmd = getLocalYmd(dateObj);
+                              if (nextYmd <= todayYmd) {
+                                setSelectedFilterDateYmd(nextYmd);
+                                setDateFilter('date');
+                              }
+                            }
+                          }}
+                          disabled={isNextDateDisabled}
+                          className="p-1 hover:bg-indigo-700 rounded-r-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Next day (up to Today)"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setDateFilter('allTime')}
+                        className={`px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all whitespace-nowrap ${
+                          dateFilter === 'allTime'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        🏆 All-Time
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -566,7 +657,7 @@ export function YptHubView() {
                         {/* Study Duration Details */}
                         <div className="text-[10px] sm:text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-0.5 flex flex-wrap sm:flex-nowrap items-center gap-1 sm:gap-2">
                           <span>
-                            {dateFilter === 'today' ? 'Today' : dateFilter === 'yesterday' ? 'Yesterday' : dateFilter === 'last7days' ? '7 Days' : 'Period'}:{' '}
+                            {dateFilter === 'date' ? (selectedFilterDateYmd === getLocalYmd(new Date()) ? 'Today' : selectedFilterDateYmd) : 'Period'}:{' '}
                             <strong className="font-mono">{formatStudyHours(member.periodHours)}</strong>
                           </span>
                           <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
@@ -583,7 +674,7 @@ export function YptHubView() {
                         Total: {member.totalXP} XP
                       </div>
                       <div className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        +{member.periodXP} XP {dateFilter === 'today' ? 'today' : dateFilter === 'yesterday' ? 'yesterday' : dateFilter === 'last7days' ? '7 days' : 'period'}
+                        +{member.periodXP} XP {dateFilter === 'date' ? (selectedFilterDateYmd === getLocalYmd(new Date()) ? 'today' : selectedFilterDateYmd) : 'period'}
                       </div>
                     </div>
                   </div>

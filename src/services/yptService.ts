@@ -8,11 +8,13 @@ import {
   deleteDoc,
   query,
   orderBy,
+  onSnapshot,
   serverTimestamp,
   Timestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam } from "../types/yptTypes";
+import { YptChallenge, YptCustomRule, YptExtractedMemberData, YptSubmissionLog, YptTeam } from "../types/yptTypes";
 import { getLocalYmd } from "../utils/yptUtils";
 
 const CHALLENGES_COLLECTION = "yptChallenges";
@@ -33,6 +35,90 @@ export interface DailyMemberStat {
   }>;
   submissionId: string;
   timestamp: string | number;
+}
+
+/**
+ * Evaluates whether a custom point rule condition matches based on detected emojis, study hours, and morning snap status.
+ */
+export function evaluatePointRule(
+  rule: YptCustomRule,
+  detectedEmojis: string[] = [],
+  hoursStudied: number = 0,
+  hasSnap: boolean = false
+): boolean {
+  if (!rule || !rule.name) return false;
+
+  const ruleEmoji = rule.emoji ? String(rule.emoji).trim() : '';
+  const nameLower = rule.name.toLowerCase();
+
+  const emojiMatched =
+    Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
+    Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'));
+
+  const minHours = rule.minHoursNeeded ?? 0;
+  const hoursMatched = hoursStudied >= minHours;
+
+  const condition = rule.conditionType || 'emoji_only';
+
+  switch (condition) {
+    case 'hours_only':
+      return hoursMatched;
+    case 'both':
+      return emojiMatched && hoursMatched;
+    case 'either':
+      return emojiMatched || hoursMatched;
+    case 'emoji_only':
+    default:
+      return emojiMatched;
+  }
+}
+
+/**
+ * Calculates base points, penalties, and custom rule evaluations for a member's daily study record.
+ */
+export function calculatePointsFromRules(
+  hoursStudied: number,
+  rules: YptChallenge['rules'],
+  detectedEmojis: string[] = [],
+  hasSnap: boolean = false
+): { totalPoints: number; appliedRules: Array<{ ruleId?: string; ruleName: string; emoji: string; points: number }> } {
+  const intervalVal = rules.studyIntervalValue ?? 1;
+  const intervalUnit = rules.studyIntervalUnit ?? 'hours';
+  const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+  const ptsPerInterval = rules.pointsPerInterval ?? rules.pointsPerStudyHour ?? 1;
+
+  const baseStudyPoints = Math.floor(hoursStudied / (intervalHours || 1)) * ptsPerInterval;
+
+  const penaltyThresholdVal = rules.penaltyThresholdValue ?? rules.noStudyPenaltyThresholdHours ?? 3;
+  const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
+  const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
+
+  const isPenalized = hoursStudied < penaltyThresholdHours;
+  const penaltyDeduction = isPenalized ? (rules.penaltyPoints || 0) : 0;
+
+  const appliedRules: Array<{ ruleId?: string; ruleName: string; emoji: string; points: number }> = [];
+  let customRulePointsSum = 0;
+
+  if (Array.isArray(rules.customRules)) {
+    for (const cr of rules.customRules) {
+      if (evaluatePointRule(cr, detectedEmojis, hoursStudied, hasSnap)) {
+        const p = Number(cr.points) || 0;
+        const awardedPts = cr.type === 'bonus' ? p : -p;
+        customRulePointsSum += awardedPts;
+
+        appliedRules.push({
+          ruleId: cr.id,
+          ruleName: cr.name,
+          emoji: cr.emoji || (cr.type === 'bonus' ? '☀️' : '📱'),
+          points: awardedPts,
+        });
+      }
+    }
+  }
+
+  const totalPoints = baseStudyPoints - penaltyDeduction + customRulePointsSum;
+
+  return { totalPoints, appliedRules };
 }
 
 export function calculateMemberPointsForDate(
@@ -222,6 +308,33 @@ export async function getAllYptChallenges(): Promise<YptChallenge[]> {
 }
 
 /**
+ * Real-time listener for all YPT Challenges.
+ */
+export function subscribeToYptChallenges(
+  callback: (challenges: YptChallenge[]) => void
+): () => void {
+  const colRef = collection(db, CHALLENGES_COLLECTION);
+  
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const challenges = snap.docs
+        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as YptChallenge))
+        .filter((c) => !c.isDeleted);
+      challenges.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+      callback(challenges);
+    },
+    (err) => {
+      console.warn("Error listening to YPT challenges:", err);
+    }
+  );
+}
+
+/**
  * Updates an existing YPT Challenge document.
  */
 export async function updateYptChallenge(
@@ -322,6 +435,38 @@ export async function getYptSubmissionLogs(
       targetDateYmd,
     };
   });
+}
+
+/**
+ * Real-time listener for submission logs of a specific YPT Challenge.
+ */
+export function subscribeToSubmissionLogs(
+  challengeId: string,
+  callback: (logs: YptSubmissionLog[]) => void
+): () => void {
+  const subColRef = collection(db, CHALLENGES_COLLECTION, challengeId, "submissions");
+  const q = query(subColRef, orderBy("timestamp", "desc"));
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const logs = snap.docs.map((docSnap) => {
+        const data = docSnap.data() as YptSubmissionLog;
+        const targetDateYmd = data.targetDateYmd || data.dateYmd || getLocalYmd(data.timestamp);
+        return {
+          ...data,
+          id: docSnap.id,
+          challengeId: data.challengeId || challengeId,
+          dateYmd: targetDateYmd,
+          targetDateYmd,
+        };
+      });
+      callback(logs);
+    },
+    (err) => {
+      console.warn("Error listening to submission logs:", err);
+    }
+  );
 }
 
 /**
@@ -562,5 +707,38 @@ export async function getRegisteredUserYptList(): Promise<YptUserEntry[]> {
     console.warn('Could not fetch user profiles for YPT list:', err);
   }
   return users;
+}
+
+/**
+  * Executes a bulk batch mutation for member daily logs in Firestore.
+  */
+export async function batchUpdateMemberLogs(
+  challengeId: string,
+  updates: Array<{ memberHandle: string; dateYmd: string; hours: number; points: number }>
+): Promise<void> {
+  if (!updates || updates.length === 0) return;
+
+  const batch = writeBatch(db);
+
+  updates.forEach((update) => {
+    const logRef = doc(collection(db, CHALLENGES_COLLECTION, challengeId, "submissions"));
+    batch.set(logRef, {
+      challengeId,
+      dateYmd: update.dateYmd,
+      targetDateYmd: update.dateYmd,
+      extractedMembers: [{
+        yptHandle: update.memberHandle,
+        hoursStudied: update.hours,
+        pointsEarned: update.points,
+      }],
+      status: 'verified',
+      timestamp: new Date().toISOString(),
+      rawOcrText: 'Admin Manual Batch Entry',
+      submittedByUid: 'admin_batch',
+    });
+  });
+
+  // Executes all writes in a single batch request
+  await batch.commit();
 }
 
