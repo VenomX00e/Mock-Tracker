@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2, EyeOff, Trophy } from 'lucide-react';
+import { Settings, Cpu, ChevronDown, Check, Book, Plus, Trash2, EyeOff, Trophy, Lock, AlertCircle } from 'lucide-react';
 import { useAppStateCtx, usePublicSettingsCtx, useUserProfileCtx } from '../../context/AppContext';
 import { useUIStore } from '../../store/uiStore';
+import { useGeminiResolution } from '../../hooks/useGeminiResolution';
 import { LearningAIAssistant } from './LearningAIAssistant';
 import { VocabularyFeed } from './VocabularyFeed';
 import { SpeedMathHub } from './SpeedMathHub';
@@ -13,7 +14,9 @@ import { ApiKeyEntry, getApiKeys, saveApiKeys } from '../../utils/apiKeyManager'
 import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
 
 const MODELS = [
+  { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
   { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Default)' },
+  { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
   { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
   { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
   { value: 'gemini-3-flash-preview', label: 'Gemini 3.0 Flash' },
@@ -39,6 +42,7 @@ export function LearningView() {
     userProfile?.permissions?.canManageYpt
   );
   const canSeeYptTab = hasYptHandle || isYptAdmin;
+  const { isFeatureAllowed: isAiTutorAllowed, isModelLocked: isAiTutorModelLocked, activeModel: aiTutorActiveModel } = useGeminiResolution('ai_tutor');
   const activeTab = useUIStore(state => state.learningTab);
   const setActiveTab = useUIStore(state => state.setLearningTab);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -205,16 +209,30 @@ export function LearningView() {
                       <div className="relative" ref={dropdownRef}>
                         <button
                           type="button"
+                          disabled={isAiTutorModelLocked}
                           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                          className="w-full flex items-center justify-between text-left bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-3 py-2.5 outline-none transition-all hover:bg-slate-50 dark:hover:bg-slate-700/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm font-medium shadow-sm"
+                          className={`w-full flex items-center justify-between text-left bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-indigo-200 dark:border-indigo-500/30 rounded-xl px-3 py-2.5 outline-none transition-all text-sm font-medium shadow-sm ${
+                            isAiTutorModelLocked ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer'
+                          }`}
                         >
                           <span className="truncate">
-                            {MODELS.find(m => m.value === selectedModel)?.label}
+                            {isAiTutorModelLocked ? (MODELS.find(m => m.value === aiTutorActiveModel)?.label || aiTutorActiveModel) : (MODELS.find(m => m.value === selectedModel)?.label || selectedModel)}
                           </span>
-                          <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                          {isAiTutorModelLocked ? (
+                            <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+                          ) : (
+                            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                          )}
                         </button>
 
-                        {isDropdownOpen && (
+                        {isAiTutorModelLocked && (
+                          <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-1.5 font-medium">
+                            <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>🔒 Model locked to [{MODELS.find(m => m.value === aiTutorActiveModel)?.label || aiTutorActiveModel}] (Using Admin Global Key)</span>
+                          </div>
+                        )}
+
+                        {!isAiTutorModelLocked && isDropdownOpen && (
                           <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-1 shadow-lg z-[120] overflow-hidden">
                             {MODELS.map(m => (
                               <button

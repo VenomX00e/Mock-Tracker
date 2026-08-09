@@ -6,6 +6,7 @@ import { parseYptScreenshot } from '../../../services/yptOcrService';
 import { addYptSubmissionLog, evaluatePointRule } from '../../../services/yptService';
 import { useAuthCtx } from '../../../context/AppContext';
 import { formatStudyDuration, getLocalYmd } from '../../../utils/yptUtils';
+import { useGeminiResolution } from '../../../hooks/useGeminiResolution';
 
 interface YptUploadModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface YptUploadModalProps {
 
 export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initialChallengeId }: YptUploadModalProps) {
   const { user } = useAuthCtx();
+  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('ypt_screenshot_parser');
   const [selectedChallengeId, setSelectedChallengeId] = useState<string>(
     initialChallengeId || challenges[0]?.id || ''
   );
@@ -78,6 +80,11 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
   };
 
   const handleRunOcr = async () => {
+    if (!isFeatureAllowed) {
+      setError('An API Key is required for YPT Screenshot Parser. Please add your Gemini key in Settings or request access from your Administrator.');
+      return;
+    }
+
     if (!imageBase64) {
       setError('Please upload a YPT screenshot first.');
       return;
@@ -95,7 +102,8 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
     try {
       const results = await parseYptScreenshot(
         { base64: imageBase64, mimeType },
-        currentChallenge.rules
+        currentChallenge.rules,
+        activeModel
       );
       setExtractedData(results);
     } catch (err: any) {
@@ -353,10 +361,28 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
             Extract study duration and calculate points with Gemini Vision AI.
           </p>
+          {isModelLocked && (
+            <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+              <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+              <span>🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
+            </div>
+          )}
         </div>
 
         {/* Scrollable Modal Content */}
         <div className="p-5 sm:p-7 space-y-5 overflow-y-auto flex-1">
+          {!isFeatureAllowed && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-sm mb-0.5 text-amber-900 dark:text-amber-100">API Key Required</p>
+                <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
+                  An API Key is required for YPT Screenshot Parser. Please add your Gemini key in Settings or request access from your Administrator.
+                </p>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs rounded-xl flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />

@@ -32,6 +32,7 @@ export async function parseYptScreenshot(
       knownUsers: registeredUsers,
       customApiKey: customKey || null,
       model,
+      featureKey: 'ypt_screenshot_parser',
     }),
   });
 

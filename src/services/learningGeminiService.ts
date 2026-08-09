@@ -31,7 +31,7 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
   const response = await fetch('/api/tutor-chat-stream', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ messages, customApiKey: customKey || null, model: modelKey, useWebSearch, useCustomWebSearch, chatMode, customSearchApi })
+    body: JSON.stringify({ messages, customApiKey: customKey || null, model: modelKey, useWebSearch, useCustomWebSearch, chatMode, customSearchApi, featureKey: 'ai_tutor' })
   });
   
   if (!response.ok) {

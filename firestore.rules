@@ -355,6 +355,11 @@ service cloud.firestore {
                    request.auth.token.email_verified == true;
     }
 
+    match /system_config/{docId} {
+      allow read: if true;
+      allow write: if isAnyAdmin();
+    }
+
     match /yptChallenges/{challengeId} {
       allow read, create, update, delete: if isSignedIn();
 

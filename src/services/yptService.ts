@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { YptChallenge, YptCustomRule, YptExtractedMemberData, YptSubmissionLog, YptTeam } from "../types/yptTypes";
-import { getLocalYmd } from "../utils/yptUtils";
+import { getLocalYmd, areYptHandlesMatching, normalizeHandle, extractAlpha } from "../utils/yptUtils";
 
 const CHALLENGES_COLLECTION = "yptChallenges";
 
@@ -104,13 +104,16 @@ export function calculatePointsFromRules(
       if (evaluatePointRule(cr, detectedEmojis, hoursStudied, hasSnap)) {
         const p = Number(cr.points) || 0;
         const awardedPts = cr.type === 'bonus' ? p : -p;
-        customRulePointsSum += awardedPts;
+        const isTeamAll = cr.scope === 'team_all';
+        const effectivePts = isTeamAll ? 0 : awardedPts;
+
+        customRulePointsSum += effectivePts;
 
         appliedRules.push({
           ruleId: cr.id,
           ruleName: cr.name,
           emoji: cr.emoji || (cr.type === 'bonus' ? '☀️' : '📱'),
-          points: awardedPts,
+          points: effectivePts,
         });
       }
     }
@@ -190,11 +193,118 @@ export async function updateMemberLogAndRecalculate(
 }
 
 /**
+ * Evaluates team-wide (team_all) custom rules for a set of daily stats against a challenge's team structure.
+ * Awards bonus/penalty points ONLY if 100% of registered team members fulfilled the rule on that date.
+ */
+export function evaluateAndApplyTeamWideRules(
+  stats: DailyMemberStat[],
+  challenge?: YptChallenge
+): DailyMemberStat[] {
+  if (!challenge || !challenge.rules || !Array.isArray(challenge.rules.customRules)) {
+    return stats;
+  }
+
+  const teamWideRules = challenge.rules.customRules.filter((r) => r.scope === 'team_all');
+  if (teamWideRules.length === 0) {
+    return stats;
+  }
+
+  const teams = challenge.teams || [];
+  if (teams.length === 0) {
+    return stats;
+  }
+
+  const updatedStats: DailyMemberStat[] = stats.map((s) => ({
+    ...s,
+    detectedRules: s.detectedRules ? s.detectedRules.map((r) => ({ ...r })) : [],
+  }));
+
+  const allDates = Array.from(new Set(updatedStats.map((s) => s.dateYmd))).filter(Boolean);
+
+  allDates.forEach((dateYmd) => {
+    teams.forEach((team) => {
+      const teamMemberHandles = team.memberUids || [];
+      if (teamMemberHandles.length === 0) return;
+
+      teamWideRules.forEach((rule) => {
+        const pointsVal = Number(rule.points) || 0;
+        const awardedPoints = rule.type === 'bonus' ? pointsVal : -pointsVal;
+
+        const memberStatsForDate = teamMemberHandles.map((handleOrUid) => {
+          const found = updatedStats.find(
+            (s) => s.dateYmd === dateYmd && areYptHandlesMatching(s.memberHandle, handleOrUid, s.matchedUid)
+          );
+          return { handleOrUid, stat: found };
+        });
+
+        // 100% compliance check: ALL registered team members must have submitted a log on dateYmd AND triggered the rule
+        const allSubmitted = memberStatsForDate.every((item) => item.stat !== undefined);
+        let allMetRule = false;
+
+        if (allSubmitted) {
+          allMetRule = memberStatsForDate.every((item) => {
+            const st = item.stat;
+            if (!st) return false;
+            const hasRuleDetected = (st.detectedRules || []).some(
+              (r) => r.ruleId === rule.id || r.ruleName === rule.name || (rule.emoji && r.emoji === rule.emoji)
+            );
+            if (hasRuleDetected) return true;
+
+            const emojis = (st.detectedRules || []).map((r) => r.emoji).filter((e): e is string => Boolean(e));
+            return evaluatePointRule(rule, emojis, st.hoursStudied, false);
+          });
+        }
+
+        // Apply bonus or penalty to all team members if 100% compliant; otherwise reset/strip team_all points
+        memberStatsForDate.forEach((item) => {
+          if (!item.stat) return;
+          const st = item.stat;
+          st.detectedRules = st.detectedRules || [];
+
+          const existingRuleIdx = st.detectedRules.findIndex(
+            (r) => r.ruleId === rule.id || r.ruleName === rule.name || (rule.emoji && r.emoji === rule.emoji)
+          );
+
+          if (allMetRule) {
+            if (existingRuleIdx >= 0) {
+              const currentPts = st.detectedRules[existingRuleIdx].points || 0;
+              if (currentPts !== awardedPoints) {
+                st.pointsEarned = (st.pointsEarned || 0) - currentPts + awardedPoints;
+                st.detectedRules[existingRuleIdx].points = awardedPoints;
+              }
+            } else {
+              st.detectedRules.push({
+                ruleId: rule.id,
+                ruleName: rule.name,
+                emoji: rule.emoji || (rule.type === 'bonus' ? '☀️' : '📱'),
+                points: awardedPoints,
+              });
+              st.pointsEarned = (st.pointsEarned || 0) + awardedPoints;
+            }
+          } else {
+            if (existingRuleIdx >= 0) {
+              const currentPts = st.detectedRules[existingRuleIdx].points || 0;
+              if (currentPts !== 0) {
+                st.pointsEarned = (st.pointsEarned || 0) - currentPts;
+                st.detectedRules[existingRuleIdx].points = 0;
+              }
+            }
+          }
+        });
+      });
+    });
+  });
+
+  return updatedStats;
+}
+
+/**
  * Group submissions by (memberHandle, targetDateYmd, challengeId).
  * Takes the latest valid submission log for that day (or higher verified study time for that date).
  */
 export function getDeduplicatedDailyMemberStats(
-  submissions: YptSubmissionLog[]
+  submissions: YptSubmissionLog[],
+  challenge?: YptChallenge
 ): DailyMemberStat[] {
   const dailyMap = new Map<string, DailyMemberStat>();
 
@@ -255,7 +365,8 @@ export function getDeduplicatedDailyMemberStats(
     });
   });
 
-  return Array.from(dailyMap.values());
+  const rawStats = Array.from(dailyMap.values());
+  return evaluateAndApplyTeamWideRules(rawStats, challenge);
 }
 
 /**
@@ -515,12 +626,17 @@ export async function recalculateTeamPointsFromSubmissions(
     }
   });
 
-  // Calculate team point totals
+  // Calculate team point totals using robust multi-tier handle matching
   const updatedTeams: YptTeam[] = challenge.teams.map((team) => {
     let teamTotal = 0;
     (team.memberUids || []).forEach((handleOrUid) => {
-      const clean = handleOrUid.replace(/^@/, '').trim().toLowerCase();
-      teamTotal += handlePointsMap.get(clean) || 0;
+      let memberPts = 0;
+      deduplicatedStats.forEach((stat) => {
+        if (areYptHandlesMatching(stat.memberHandle, handleOrUid, stat.matchedUid)) {
+          memberPts += stat.pointsEarned || 0;
+        }
+      });
+      teamTotal += memberPts;
     });
     return {
       ...team,
@@ -586,21 +702,7 @@ export interface YptUserEntry {
   defaultYptHandle?: string;
 }
 
-export function normalizeHandle(str: string): string {
-  if (!str) return '';
-  return str
-    .trim()
-    .replace(/^@/, '')
-    .normalize('NFKC')
-    .replace(/[\uFE00-\uFE0F\u200B-\u200D]/g, '')
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
-}
-
-export function extractAlpha(str: string): string {
-  if (!str) return '';
-  return normalizeHandle(str).replace(/[^a-z0-9]/g, '');
-}
+export { normalizeHandle, extractAlpha };
 
 export function matchYptHandleToUid(
   handle: string,
@@ -740,5 +842,62 @@ export async function batchUpdateMemberLogs(
 
   // Executes all writes in a single batch request
   await batch.commit();
+}
+
+/**
+ * Clears all submission logs for a specific challenge and date (targetDateYmd),
+ * returning the removed logs so they can be restored via Undo/Redo.
+ */
+export async function clearYptDayPoints(
+  challengeId: string,
+  selectedDateYmd: string
+): Promise<YptSubmissionLog[]> {
+  return clearDaySubmissions(challengeId, selectedDateYmd);
+}
+
+export async function clearDaySubmissions(
+  challengeId: string,
+  targetDateYmd: string
+): Promise<YptSubmissionLog[]> {
+  const subColRef = collection(db, CHALLENGES_COLLECTION, challengeId, "submissions");
+  const snap = await getDocs(subColRef);
+
+  const clearedLogs: YptSubmissionLog[] = [];
+  const batch = writeBatch(db);
+
+  snap.docs.forEach((docSnap) => {
+    const data = docSnap.data() as YptSubmissionLog;
+    const subDate = data.targetDateYmd || data.dateYmd || getLocalYmd(data.timestamp);
+    if (subDate === targetDateYmd) {
+      clearedLogs.push({ ...data, id: docSnap.id });
+      batch.delete(docSnap.ref);
+    }
+  });
+
+  if (clearedLogs.length > 0) {
+    await batch.commit();
+  }
+
+  await recalculateTeamPointsFromSubmissions(challengeId);
+  return clearedLogs;
+}
+
+/**
+ * Restores a collection of submission logs into Firestore and recalculates team scores.
+ */
+export async function restoreDaySubmissions(
+  challengeId: string,
+  logsToRestore: YptSubmissionLog[]
+): Promise<void> {
+  if (!logsToRestore || logsToRestore.length === 0) return;
+
+  const batch = writeBatch(db);
+  logsToRestore.forEach((log) => {
+    const subDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "submissions", log.id);
+    batch.set(subDocRef, log);
+  });
+
+  await batch.commit();
+  await recalculateTeamPointsFromSubmissions(challengeId);
 }
 

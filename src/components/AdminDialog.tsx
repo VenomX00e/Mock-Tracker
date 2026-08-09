@@ -38,6 +38,7 @@ import { AdminPracticeSetsTab } from "./admin/AdminPracticeSetsTab";
 import { AdminSettingsTab } from "./admin/AdminSettingsTab";
 import { AdminFeaturesTab } from "./admin/AdminFeaturesTab";
 import { AdminApiKeysTab } from "./admin/AdminApiKeysTab";
+import { AdminGlobalGeminiTab } from "./admin/AdminGlobalGeminiTab";
 import { AdminWebhooksTab } from "./admin/AdminWebhooksTab";
 import { AdminSearchLogsTab } from "./admin/AdminSearchLogsTab";
 import { AdminAdminsTab } from "./admin/AdminAdminsTab";
@@ -69,6 +70,7 @@ interface AdminDialogProps {
     | "categories"
     | "learning"
     | "keys"
+    | "global-gemini"
     | "admins"
     | "webhooks"
     | "search-logs";
@@ -107,6 +109,7 @@ export default function AdminDialog({
     | "learning"
     | "quotes"
     | "keys"
+    | "global-gemini"
     | "webhooks"
     | "search-logs"
   >(initialTab as any);
@@ -571,6 +574,10 @@ export default function AdminDialog({
               savingSettings={savingAnnouncement}
               saveSettings={saveSettings}
             />
+          )}
+
+          {activeTab === "global-gemini" && isOwner && (
+            <AdminGlobalGeminiTab />
           )}
 
           {activeTab === "webhooks" && isOwner && (

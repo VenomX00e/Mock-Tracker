@@ -9,7 +9,7 @@ import { YptUploadModal } from './ypt/YptUploadModal';
 import { YptChallengeDetail } from './ypt/YptChallengeDetail';
 import { YptRecycleBinModal } from './ypt/YptRecycleBinModal';
 import { ConfirmDeleteModal } from './ypt/ConfirmDeleteModal';
-import { formatStudyDuration } from '../../utils/yptUtils';
+import { formatStudyDuration, areYptHandlesMatching, normalizeHandle, extractAlpha } from '../../utils/yptUtils';
 
 type SubViewTab = 'global' | 'challenges' | 'leaderboard';
 type GlobalDateFilter = 'date' | 'allTime';
@@ -158,7 +158,13 @@ export function YptHubView() {
     const membersMap = new Map<string, GlobalMemberStat & { aliases: string[] }>();
 
     registeredUsers.forEach((u) => {
-      const allAliases = Array.isArray(u.yptNames) ? u.yptNames : [];
+      const allAliases = Array.isArray(u.yptNames) ? [...u.yptNames] : [];
+      if (u.displayName && !allAliases.includes(u.displayName)) {
+        allAliases.push(u.displayName);
+      }
+      if (u.defaultYptHandle && !allAliases.includes(u.defaultYptHandle)) {
+        allAliases.push(u.defaultYptHandle);
+      }
       if (allAliases.length === 0) return;
 
       let primaryDisplay = u.defaultYptHandle;
@@ -183,27 +189,83 @@ export function YptHubView() {
         aliases: allAliases,
       });
 
-      allAliases.forEach((alias) => {
-        const clean = alias.replace(/^@/, '').trim().toLowerCase();
-        if (clean) {
-          aliasToUserMap.set(clean, {
+      const addAliasToMap = (key: string) => {
+        if (!key) return;
+        if (!aliasToUserMap.has(key)) {
+          aliasToUserMap.set(key, {
             userKey,
             primaryDisplayHandle: primaryDisplay!,
             allAliases,
           });
         }
+      };
+
+      // Map UID directly
+      addAliasToMap(u.uid.toLowerCase());
+
+      allAliases.forEach((alias) => {
+        if (!alias) return;
+        const clean = alias.replace(/^@/, '').trim().toLowerCase();
+        addAliasToMap(clean);
+
+        const norm = normalizeHandle(alias);
+        addAliasToMap(norm);
+
+        const noSpace = norm.replace(/\s+/g, '');
+        addAliasToMap(noSpace);
+
+        const alpha = extractAlpha(alias);
+        if (alpha && alpha.length >= 2) {
+          addAliasToMap(alpha);
+        }
       });
     });
 
     // Helper to get registered member record (returns null for non-registered handles)
-    const getOrInitMemberRecord = (rawHandle: string) => {
-      const cleanHandle = rawHandle.replace(/^@/, '').trim().toLowerCase();
-      if (!cleanHandle) return null;
+    const getOrInitMemberRecord = (rawHandle?: string, matchedUid?: string) => {
+      if (!rawHandle && !matchedUid) return null;
 
-      const registered = aliasToUserMap.get(cleanHandle);
-      if (!registered) return null; // Strictly only registered YPT handles on global leaderboard
+      if (matchedUid && membersMap.has(matchedUid)) {
+        return membersMap.get(matchedUid)!;
+      }
 
-      return membersMap.get(registered.userKey) || null;
+      if (rawHandle) {
+        const cleanHandle = rawHandle.replace(/^@/, '').trim().toLowerCase();
+        let registered = aliasToUserMap.get(cleanHandle);
+        if (!registered) {
+          const norm = normalizeHandle(rawHandle);
+          registered = aliasToUserMap.get(norm);
+        }
+        if (!registered) {
+          const noSpace = normalizeHandle(rawHandle).replace(/\s+/g, '');
+          registered = aliasToUserMap.get(noSpace);
+        }
+        if (!registered) {
+          const alpha = extractAlpha(rawHandle);
+          if (alpha && alpha.length >= 2) {
+            registered = aliasToUserMap.get(alpha);
+          }
+        }
+
+        if (registered) {
+          return membersMap.get(registered.userKey) || null;
+        }
+
+        // Fallback multi-tier match
+        for (const userEntry of registeredUsers) {
+          const userKey = userEntry.uid;
+          const userAliases = Array.isArray(userEntry.yptNames) ? [...userEntry.yptNames] : [];
+          if (userEntry.displayName) userAliases.push(userEntry.displayName);
+
+          for (const alias of userAliases) {
+            if (areYptHandlesMatching(alias, rawHandle, userKey, matchedUid)) {
+              return membersMap.get(userKey) || null;
+            }
+          }
+        }
+      }
+
+      return null;
     };
 
     // 1. Index registered members across all active challenges
@@ -228,7 +290,7 @@ export function YptHubView() {
         isPeriodMatch = subYmd === selectedFilterDateYmd;
       }
 
-      const stat = getOrInitMemberRecord(dStat.memberHandle);
+      const stat = getOrInitMemberRecord(dStat.memberHandle, dStat.matchedUid);
       if (!stat) return;
 
       stat.totalHours += dStat.hoursStudied || 0;

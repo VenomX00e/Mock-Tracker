@@ -288,5 +288,24 @@ export interface CloudinaryWebhookLog {
   rawPayload: string;
 }
 
+export interface GlobalGeminiFeatureConfig {
+  enabled: boolean;          // Whether non-key users can use the global key for this feature
+  defaultModel: string;      // Enforced model (e.g., 'gemini-2.5-flash', 'gemini-2.5-pro')
+  allowCustomKeyOverride: boolean; // True by default (personal keys always override)
+}
+
+export interface GlobalGeminiSystemConfig {
+  features: {
+    ypt_screenshot_parser: GlobalGeminiFeatureConfig;
+    ai_tutor: GlobalGeminiFeatureConfig;
+    jarvis: GlobalGeminiFeatureConfig;
+    mock_exam_generator: GlobalGeminiFeatureConfig;
+    flashcards: GlobalGeminiFeatureConfig;
+    general_chat: GlobalGeminiFeatureConfig;
+  };
+  updatedAt: number;
+  updatedBy: string;
+}
+
 export * from './types/yptTypes';
 

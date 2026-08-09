@@ -47,10 +47,6 @@ function getAiSettings() {
 export async function generateWordDetails(word: string): Promise<WordDetails> {
   const { customApiKey, model } = getAiSettings();
 
-  if (!customApiKey) {
-    throw new Error("Your personal Gemini API key is missing. Please configure it in Settings.");
-  }
-
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   
@@ -61,7 +57,7 @@ export async function generateWordDetails(word: string): Promise<WordDetails> {
   const response = await fetch('/api/generate-word-details', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ word, customApiKey, model })
+    body: JSON.stringify({ word, customApiKey: customApiKey || null, model, featureKey: 'flashcards' })
   });
 
   if (!response.ok) {
@@ -82,10 +78,6 @@ export async function extractContentFromDocument(
 ): Promise<ExtractedDocumentContent> {
   const { customApiKey, model } = getAiSettings();
 
-  if (!customApiKey) {
-    throw new Error("Your personal Gemini API key is missing. Please configure it in Settings.");
-  }
-
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   
@@ -93,7 +85,7 @@ export async function extractContentFromDocument(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const payload: any = { customApiKey, model };
+  const payload: any = { customApiKey: customApiKey || null, model, featureKey: 'flashcards' };
   if (typeof data === 'string') {
     payload.base64Data = data;
     payload.mimeType = mimeType;

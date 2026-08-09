@@ -153,9 +153,10 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
       type: 'bonus' | 'penalty';
       conditionType?: YptRuleConditionType;
       minHoursNeeded?: string;
+      scope?: 'individual' | 'team_all';
     }>
   >([
-    { id: 'rule_1', name: 'Morning Snap Bonus', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10' }
+    { id: 'rule_1', name: 'Morning Snap Bonus', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10', scope: 'individual' }
   ]);
 
   // Teams
@@ -274,6 +275,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                 type: cr.type,
                 conditionType: cr.conditionType || 'emoji_only',
                 minHoursNeeded: cr.minHoursNeeded !== undefined ? String(cr.minHoursNeeded) : '10',
+                scope: cr.scope || 'individual',
               }))
             );
           } else {
@@ -338,7 +340,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
   const handleAddCustomRule = () => {
     setCustomRules([
       ...customRules,
-      { id: `rule_${Date.now()}`, name: '', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10' }
+      { id: `rule_${Date.now()}`, name: '', emoji: '☀️', points: '5', type: 'bonus', conditionType: 'emoji_only', minHoursNeeded: '10', scope: 'individual' }
     ]);
   };
 
@@ -348,7 +350,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
   const handleUpdateCustomRule = (
     id: string,
-    field: 'name' | 'emoji' | 'points' | 'type' | 'conditionType' | 'minHoursNeeded',
+    field: 'name' | 'emoji' | 'points' | 'type' | 'conditionType' | 'minHoursNeeded' | 'scope',
     value: string
   ) => {
     setCustomRules(
@@ -436,6 +438,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
             type: r.type,
             conditionType: r.conditionType || 'emoji_only',
             minHoursNeeded: r.conditionType && r.conditionType !== 'emoji_only' ? (parseFloat(r.minHoursNeeded || '10') || 0) : undefined,
+            scope: r.scope || 'individual',
           })),
       };
 
@@ -781,6 +784,16 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                               ]}
                             />
 
+                            {/* Target Scope Dropdown */}
+                            <CustomSelect<'individual' | 'team_all'>
+                              value={rule.scope || 'individual'}
+                              onChange={(val) => handleUpdateCustomRule(rule.id, 'scope', val)}
+                              options={[
+                                { value: 'individual', label: '👤 Individual' },
+                                { value: 'team_all', label: '👥 Whole Team (100% Met)' },
+                              ]}
+                            />
+
                             {/* Points */}
                             <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-900 shrink-0">
                               <input
@@ -843,6 +856,13 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                                 </span>
                                 <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-200/60 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
                                   {getConditionLabel(rule)}
+                                </span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                                  rule.scope === 'team_all'
+                                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                }`}>
+                                  {rule.scope === 'team_all' ? 'Req: Whole Team (100%)' : 'Req: Individual'}
                                 </span>
                               </span>
                             </div>

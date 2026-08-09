@@ -143,7 +143,112 @@ const fetchWithRetry = async (
   }
 };
 
-// Helper to format Gemini err
+// Helper to parse Firestore REST fields into plain JavaScript objects
+function parseFirestoreRestFields(fields: any): any {
+  if (!fields || typeof fields !== "object") return null;
+  const result: any = {};
+  for (const [key, value] of Object.entries(fields) as [string, any][]) {
+    if (!value || typeof value !== "object") continue;
+    if ("stringValue" in value) result[key] = value.stringValue;
+    else if ("booleanValue" in value) result[key] = value.booleanValue;
+    else if ("integerValue" in value) result[key] = parseInt(value.integerValue, 10);
+    else if ("doubleValue" in value) result[key] = parseFloat(value.doubleValue);
+    else if ("mapValue" in value) result[key] = parseFirestoreRestFields(value.mapValue?.fields);
+    else if ("arrayValue" in value) {
+      result[key] = (value.arrayValue?.values || []).map((item: any) =>
+        parseFirestoreRestFields({ temp: item })?.temp
+      );
+    } else if ("nullValue" in value) result[key] = null;
+  }
+  return result;
+}
+
+async function getGlobalGeminiConfigRest(): Promise<any> {
+  try {
+    const projectId = firebaseConfig.projectId;
+    const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+    if (!projectId) return null;
+
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/system_config/global_gemini`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.fields) {
+      return parseFirestoreRestFields(data.fields);
+    }
+  } catch (e) {
+    // Silent catch
+  }
+  return null;
+}
+
+const resolveGeminiProxyConfig = async (
+  reqBody: any = {},
+  reqHeaders: any = {},
+  fallbackFeatureKey: string = "general_chat"
+) => {
+  const featureKey = reqBody.featureKey || reqHeaders["x-feature-key"] || fallbackFeatureKey;
+  const clientApiKey = reqBody.customApiKey || reqHeaders["x-custom-api-key"];
+
+  // 1. If client API key attached
+  if (clientApiKey && typeof clientApiKey === "string" && clientApiKey.trim().length > 0) {
+    const keyToUse = clientApiKey.trim();
+    return {
+      apiKey: keyToUse,
+      model: reqBody.model || "gemini-2.5-flash",
+      isGlobalKey: false,
+      featureKey,
+      aiClient: new GoogleGenAI({ apiKey: keyToUse }),
+    };
+  }
+
+  // 2. No client key attached: check Firestore system_config/global_gemini
+  let globalConfig: any = null;
+  try {
+    const snap = await getAdminDb().collection("system_config").doc("global_gemini").get();
+    if (snap.exists) {
+      globalConfig = snap.data();
+    }
+  } catch (err: any) {
+    // If admin SDK failed due to missing service account / ADC permissions, fallback to REST API
+    globalConfig = await getGlobalGeminiConfigRest();
+    if (!globalConfig) {
+      console.warn("Could not retrieve system_config/global_gemini via Admin SDK or REST fallback.");
+    }
+  }
+
+  const featureSetting = globalConfig?.features?.[featureKey] || {
+    enabled: false,
+    defaultModel: "gemini-2.5-flash",
+  };
+
+  // If feature is disabled and no client key was attached: reject
+  if (!featureSetting.enabled) {
+    throw {
+      status: 403,
+      message: `Feature '${featureKey}' is disabled by administrator or requires a personal Gemini API key. Please add your key in Settings.`,
+    };
+  }
+
+  const globalApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!globalApiKey || globalApiKey.trim().length === 0) {
+    throw {
+      status: 500,
+      message: "Server global GEMINI_API_KEY is not configured on the server.",
+    };
+  }
+
+  // Force model = features[featureKey].defaultModel (ignore any user-crafted model parameter in request payload)
+  const forcedModel = featureSetting.defaultModel || "gemini-2.5-flash";
+
+  return {
+    apiKey: globalApiKey.trim(),
+    model: forcedModel, // Overridden!
+    isGlobalKey: true,
+    featureKey,
+    aiClient: new GoogleGenAI({ apiKey: globalApiKey.trim() }),
+  };
+};
 
 const requireAdminAuth = async (
   req: express.Request,
@@ -200,6 +305,60 @@ const formatGeminiError = (error: any) => {
   return error.message || "Failed to process, please try again.";
 };
 
+// Server-Side Gemini Proxy Route (/api/gemini-proxy)
+app.post("/api/gemini-proxy", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: Missing or invalid token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+
+    try {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
+      console.error("Token verification failed:", authErr);
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
+    }
+
+    const { contents, systemInstruction, config: userConfig, featureKey } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, featureKey || "general_chat");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const mergedConfig: any = {
+      ...(userConfig || {}),
+    };
+    if (systemInstruction) {
+      mergedConfig.systemInstruction = systemInstruction;
+    }
+
+    const response = await fetchWithRetry(() =>
+      proxyRes.aiClient.models.generateContent({
+        model: proxyRes.model, // Forced model if global key used
+        contents: contents || [],
+        config: mergedConfig,
+      })
+    );
+
+    res.json({
+      text: response.text || "",
+      modelUsed: proxyRes.model,
+      isGlobalKeyUsed: proxyRes.isGlobalKey,
+      candidates: response.candidates,
+    });
+  } catch (error: any) {
+    console.error("Gemini Proxy Error:", error);
+    res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
 // API route for Gemini extraction - Mock Announcement
 app.post("/api/extract-mock", async (req, res) => {
   try {
@@ -220,8 +379,16 @@ app.post("/api/extract-mock", async (req, res) => {
       });
     }
 
-    const { images, customApiKey, model = "gemini-3.1-flash-lite" } = req.body;
-    const aiClient = getAiClient(customApiKey);
+    const { images } = req.body;
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "mock_exam_generator");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
 
     const prompt = `
       Extract the following details from the uploaded banking exam live mock test announcement image(s). 
@@ -247,7 +414,7 @@ app.post("/api/extract-mock", async (req, res) => {
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: model,
+        model: modelToUse,
         contents: contents,
         config: {
           responseMimeType: "application/json",
@@ -295,8 +462,16 @@ app.post("/api/extract-scorecard", async (req, res) => {
       });
     }
 
-    const { images, customApiKey, subjects, model = "gemini-3.1-flash-lite" } = req.body;
-    const aiClient = getAiClient(customApiKey);
+    const { images, subjects } = req.body;
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "mock_exam_generator");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
 
     const isDynamic =
       subjects && Array.isArray(subjects) && subjects.length > 0;
@@ -341,7 +516,7 @@ app.post("/api/extract-scorecard", async (req, res) => {
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: model,
+        model: modelToUse,
         contents: contents,
         config: {
           responseMimeType: "application/json",
@@ -449,10 +624,20 @@ app.post("/api/parse-ypt-screenshot", async (req, res) => {
       return res.status(403).json({ error: "Forbidden: Invalid auth token" });
     }
 
-    const { image, rules, knownUsers, customApiKey, model = "gemini-3.1-flash-lite" } = req.body;
+    const { image, rules, knownUsers } = req.body;
     if (!image || !image.base64) {
       return res.status(400).json({ error: "Image base64 is required" });
     }
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "ypt_screenshot_parser");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
 
     // Helper functions for handle matching
     const normalizeHandle = (str: string): string => {
@@ -626,8 +811,6 @@ app.post("/api/parse-ypt-screenshot", async (req, res) => {
     };
 
 
-    const aiClient = getAiClient(customApiKey);
-
     const ruleConfig = rules || {
       pointsPerStudyHour: 2,
       morningSnapBonus: 5,
@@ -666,7 +849,7 @@ app.post("/api/parse-ypt-screenshot", async (req, res) => {
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: model,
+        model: modelToUse,
         contents: contents,
         config: {
           responseMimeType: "application/json",
@@ -814,8 +997,16 @@ app.post("/api/generate-badge", async (req, res) => {
       });
     }
 
-    const { promptText, customApiKey } = req.body;
-    const aiClient = getAiClient(customApiKey);
+    const { promptText } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "general_chat");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
 
     const actualPrompt = promptText || "random exciting achievement badge";
 
@@ -912,16 +1103,17 @@ app.post("/api/learning-chat", async (req, res) => {
       });
     }
 
-    const { messages, customApiKey, model, useWebSearch, chatMode, useCustomWebSearch } = req.body;
+    const { messages, useWebSearch, chatMode, useCustomWebSearch } = req.body;
 
-    if (!customApiKey) {
-      return res.status(403).json({
-        error:
-          "A personal Gemini API key is required to use this feature. Please add your key in the AI Tutor Settings.",
-      });
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "ai_tutor");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
     }
 
-    const aiClient = new GoogleGenAI({ apiKey: customApiKey });
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
 
     let modeInstruction = "";
     if (chatMode === "math") {
@@ -1043,7 +1235,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: model || "gemini-3.1-flash-lite",
+        model: modelToUse,
         contents: contents,
         config: config,
       }),
@@ -1075,13 +1267,17 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
 // API route for Jarvis Brain Engine Chat (/api/jarvis/chat)
 app.post("/api/jarvis/chat", async (req, res) => {
   try {
-    const { messages, message, context, customApiKey, model } = req.body;
-    const keyToUse = customApiKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
-    if (!keyToUse) {
-      return res.status(403).json({ error: "Gemini API key is required." });
+    const { messages, message, context } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "jarvis");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
     }
 
-    const aiClient = new GoogleGenAI({ apiKey: keyToUse });
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
 
     let screenContextBlock = "";
     if (context) {
@@ -1164,7 +1360,7 @@ INSTRUCTIONS & RESPONSE TRACES:
     }));
 
     const response = await aiClient.models.generateContent({
-      model: model || "gemini-3.5-flash",
+      model: modelToUse,
       contents: contents,
       config: {
         systemInstruction
@@ -1433,16 +1629,17 @@ app.post("/api/tutor-chat-stream", async (req, res) => {
       });
     }
 
-    const { messages, customApiKey, model, useWebSearch, useCustomWebSearch, chatMode, customSearchApi } = req.body;
+    const { messages, useWebSearch, useCustomWebSearch, chatMode, customSearchApi } = req.body;
 
-    if (!customApiKey) {
-      return res.status(403).json({
-        error:
-          "A personal Gemini API key is required to use this feature. Please add your key in the AI Tutor Settings.",
-      });
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "ai_tutor");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
     }
 
-    const aiClient = new GoogleGenAI({ apiKey: customApiKey });
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
 
     let modeInstruction = "";
     if (chatMode === "math") {
@@ -1555,7 +1752,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
 
     try {
       const responseStream = await aiClient.models.generateContentStream({
-        model: model || "gemini-3.1-flash-lite",
+        model: modelToUse,
         contents: contents,
         config: config,
       });
@@ -1695,16 +1892,22 @@ app.post("/api/generate-word-details", async (req, res) => {
     const token = authHeader.split("Bearer ")[1];
     await admin.auth().verifyIdToken(token);
 
-    const { word, customApiKey, model } = req.body;
-    if (!customApiKey)
-      return res.status(403).json({ error: "API key required" });
+    const { word } = req.body;
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "flashcards");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
 
-    const aiClient = new GoogleGenAI({ apiKey: customApiKey });
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
     const prompt = `Provide the English meaning and a helpful mnemonic (trick to remember) for the word "${word}". Return ONLY a JSON object: {"meaning": "...", "mnemonic": "..."}`;
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: model || "gemini-3.1-flash-lite",
+        model: modelToUse,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -1741,12 +1944,16 @@ app.post("/api/extract-document", async (req, res) => {
     const token = authHeader.split("Bearer ")[1];
     await admin.auth().verifyIdToken(token);
 
-    const { documents, base64Data, mimeType, customApiKey, model, textData } =
-      req.body;
-    if (!customApiKey)
-      return res.status(403).json({ error: "API key required" });
+    const { documents, base64Data, mimeType, textData } = req.body;
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "flashcards");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
 
-    const aiClient = new GoogleGenAI({ apiKey: customApiKey });
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
     const prompt = `You are a strict data extraction assistant. Extract vocabulary words, idioms, phrasal verbs, and one-word substitutions from the provided document.
 
 CRITICAL INSTRUCTIONS FOR VOCABULARY:
@@ -1790,7 +1997,7 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
 
     const response = await fetchWithRetry(() =>
       aiClient.models.generateContent({
-        model: model || "gemini-3.1-flash-lite",
+        model: modelToUse,
         contents: [
           {
             role: "user",

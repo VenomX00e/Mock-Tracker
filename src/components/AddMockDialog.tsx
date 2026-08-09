@@ -2,11 +2,12 @@ import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from '
 import { motion, AnimatePresence } from 'motion/react';
 import { MockScore, ExamCategory } from '../types';
 import { parseScorecardImage } from '../services/geminiService';
-import { X, Upload, Loader2, ArrowLeft, Image as ImageIcon, BarChart3, Settings, Calculator, Activity, Trophy } from 'lucide-react';
+import { X, Upload, Loader2, ArrowLeft, Image as ImageIcon, BarChart3, Settings, Calculator, Activity, Trophy, Lock, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CustomDropdown } from './CustomDropdown';
 import { usePublicSettingsCtx } from '../context/AppContext';
 import { jarvisEventBus, JarvisActionEvent } from '../features/jarvis/utils/eventBus';
+import { useGeminiResolution } from '../hooks/useGeminiResolution';
 
 import { EXAMS as fallback_EXAMS, ROLES as fallback_ROLES, PHASES as fallback_PHASES, SCOPES as fallback_SCOPES, PLATFORMS as fallback_PLATFORMS } from '../lib/constants';
 import { getErrorMessage } from '../lib/errorUtils';
@@ -103,6 +104,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
   }), [PHASES, SCOPES, allSubjects]);
 
 
+  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('mock_exam_generator');
   const [formData, setFormData] = useState<any>(defaultFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -209,6 +211,11 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
     const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
 
+    if (!isFeatureAllowed) {
+      setError('An API Key is required for Mock Exam Generator. Please add your Gemini key in Settings or request access from your Administrator.');
+      return;
+    }
+
     setIsProcessing(true);
     setError('');
 
@@ -261,7 +268,8 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
       }
 
       if (imagesPayload.length > 0) {
-        const extractedData = await parseScorecardImage(imagesPayload, allSubjects, mockExtractionModel);
+        const modelToUse = activeModel || mockExtractionModel;
+        const extractedData = await parseScorecardImage(imagesPayload, allSubjects, modelToUse);
         
         if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
         if (extractedData.examRole && !ROLES.includes(extractedData.examRole)) setIsCustomRole(true);
@@ -435,38 +443,59 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
           
           {/* AI Upload Section */}
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <ImageIcon className="w-5 h-5 text-indigo-500" />
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">AI Scorecard Upload</h3>
-            </div>
-            <label className="flex flex-col items-center justify-center w-full h-36 sm:h-40 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-2xl cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-slate-800/40 hover:border-indigo-400 transition-all bg-white dark:bg-slate-800/20 group relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/20 to-transparent dark:from-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="flex flex-col items-center justify-center relative z-10 py-6">
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-3" />
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Processing scorecard...</p>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-14 h-14 bg-indigo-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Upload className="w-6 h-6 text-indigo-500 dark:text-indigo-400" />
-                    </div>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Upload Image(s)</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Multi-select supported (PNG, JPG)</p>
-                  </>
-                )}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-indigo-500" />
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">AI Scorecard Upload</h3>
               </div>
-              <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"    
-                ref={fileInputRef}
-                type="file" 
-                multiple
-                className="hidden" 
-                accept="image/*" 
-                onChange={handleFileChange}
-                disabled={isProcessing}
-                autoCorrect="off" spellCheck={false}     />
-            </label>
+              {isModelLocked && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                  <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                  <span>🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
+                </div>
+              )}
+            </div>
+
+            {!isFeatureAllowed ? (
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-sm mb-0.5 text-amber-900 dark:text-amber-100">API Key Required</p>
+                  <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
+                    An API Key is required for Mock Exam Generator. Please add your Gemini key in Settings or request access from your Administrator.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center w-full h-36 sm:h-40 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-2xl cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-slate-800/40 hover:border-indigo-400 transition-all bg-white dark:bg-slate-800/20 group relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/20 to-transparent dark:from-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="flex flex-col items-center justify-center relative z-10 py-6">
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-3" />
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Processing scorecard...</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-14 h-14 bg-indigo-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                        <Upload className="w-6 h-6 text-indigo-500 dark:text-indigo-400" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Upload Image(s)</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Multi-select supported (PNG, JPG)</p>
+                    </>
+                  )}
+                </div>
+                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"    
+                  ref={fileInputRef}
+                  type="file" 
+                  multiple
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleFileChange}
+                  disabled={isProcessing || !isFeatureAllowed}
+                  autoCorrect="off" spellCheck={false}     />
+              </label>
+            )}
             {error && <p className="mt-2.5 text-sm text-red-500 font-medium px-2 flex items-center gap-1.5"><X className="w-4 h-4"/> {error}</p>}
           </section>
 

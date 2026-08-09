@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, FileImage, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, FileImage, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Eraser, Undo2, Redo2, AlertTriangle } from 'lucide-react';
 import { useAppStateCtx, useUserProfileCtx, useAuthCtx } from '../../../context/AppContext';
 import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam } from '../../../types/yptTypes';
-import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog } from '../../../services/yptService';
-import { formatStudyDuration, getLocalYmd } from '../../../utils/yptUtils';
+import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog, clearDaySubmissions, clearYptDayPoints, restoreDaySubmissions } from '../../../services/yptService';
+import { formatStudyDuration, getLocalYmd, areYptHandlesMatching } from '../../../utils/yptUtils';
 import { CreateYptChallengeModal } from './CreateYptChallengeModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { YptUploadModal } from './YptUploadModal';
 import { YptMemberEditModal } from './YptMemberEditModal';
+
+interface HistoryAction {
+  type: 'clear_day';
+  targetDateYmd: string;
+  clearedLogs: YptSubmissionLog[];
+  timestamp: number;
+}
 
 interface YptChallengeDetailProps {
   challenge: YptChallenge;
@@ -28,6 +35,16 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     challenge.leaderUid === user?.uid;
 
   const canManageYptChallenges = isGlobalAdmin;
+
+  // Strict Authorization Rule: Creator & App Owner Check for clearing daily points
+  const isChallengeCreatorOrOwner =
+    userProfile?.role === 'owner' ||
+    userProfile?.role === 'admin' ||
+    isOwner ||
+    isAdmin ||
+    challenge.leaderUid === user?.uid ||
+    (challenge as any).createdBy === user?.uid ||
+    (challenge as any).createdByEmail === user?.email;
 
   // Build array of current user's handles (lowercased without @ prefix)
   const userYptHandles = [
@@ -65,6 +82,14 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const [selectedFilterDateYmd, setSelectedFilterDateYmd] = useState<string>(getLocalYmd(new Date()));
   const [editingMemberHandle, setEditingMemberHandle] = useState<string | null>(null);
   const [quickRulePopoverMember, setQuickRulePopoverMember] = useState<string | null>(null);
+  const [isAuditLogsCollapsed, setIsAuditLogsCollapsed] = useState(true);
+  const [expandedTeamBreakdownId, setExpandedTeamBreakdownId] = useState<string | null>(null);
+
+  // Undo / Redo & Clear Day Points state
+  const [undoStack, setUndoStack] = useState<HistoryAction[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryAction[]>([]);
+  const [isClearingDay, setIsClearingDay] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
 
   const getChallengeStartDateYmd = (ch?: YptChallenge | null): string => {
     if (!ch) {
@@ -111,7 +136,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
       const subDate = sub.targetDateYmd || sub.dateYmd || getLocalYmd(sub.timestamp);
       if (subDate !== targetYmd) return false;
       return (sub.extractedMembers || []).some(
-        (m) => m.yptHandle && m.yptHandle.replace(/^@/, '').trim().toLowerCase() === cleanHandle
+        (m) => m.yptHandle && areYptHandlesMatching(m.yptHandle, memberHandleRaw, m.matchedUid)
       );
     });
 
@@ -120,7 +145,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
     if (existingSub) {
       const memberData = existingSub.extractedMembers.find(
-        (m) => m.yptHandle && m.yptHandle.replace(/^@/, '').trim().toLowerCase() === cleanHandle
+        (m) => m.yptHandle && areYptHandlesMatching(m.yptHandle, memberHandleRaw, m.matchedUid)
       );
       if (memberData) {
         currentHours = memberData.hoursStudied || 0;
@@ -184,14 +209,14 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
       const subDate = sub.targetDateYmd || sub.dateYmd || getLocalYmd(sub.timestamp);
       if (subDate !== targetYmd) return false;
       return (sub.extractedMembers || []).some(
-        (m) => m.yptHandle && m.yptHandle.replace(/^@/, '').trim().toLowerCase() === cleanHandle
+        (m) => m.yptHandle && areYptHandlesMatching(m.yptHandle, memberHandleRaw, m.matchedUid)
       );
     });
 
     if (!existingSub) return;
 
     const memberData = existingSub.extractedMembers.find(
-      (m) => m.yptHandle && m.yptHandle.replace(/^@/, '').trim().toLowerCase() === cleanHandle
+      (m) => m.yptHandle && areYptHandlesMatching(m.yptHandle, memberHandleRaw, m.matchedUid)
     );
 
     if (!memberData || !Array.isArray(memberData.detectedRules)) return;
@@ -262,6 +287,69 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     }
   };
 
+  const handleClearSelectedDayPoints = async () => {
+    if (!selectedFilterDateYmd) return;
+    setIsClearingDay(true);
+    try {
+      const removedLogs = await clearDaySubmissions(challenge.id, selectedFilterDateYmd);
+      setUndoStack((prev) => [
+        ...prev,
+        {
+          type: 'clear_day',
+          targetDateYmd: selectedFilterDateYmd,
+          clearedLogs: removedLogs,
+          timestamp: Date.now(),
+        },
+      ]);
+      setRedoStack([]);
+      await fetchLogs();
+      onRefresh();
+    } catch (err) {
+      console.error("Failed to clear day's points:", err);
+    } finally {
+      setIsClearingDay(false);
+      setIsClearConfirmOpen(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) return;
+    const lastAction = undoStack[undoStack.length - 1];
+    setIsClearingDay(true);
+    try {
+      if (lastAction.type === 'clear_day') {
+        await restoreDaySubmissions(challenge.id, lastAction.clearedLogs);
+      }
+      setUndoStack((prev) => prev.slice(0, -1));
+      setRedoStack((prev) => [...prev, lastAction]);
+      await fetchLogs();
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to undo clear:', err);
+    } finally {
+      setIsClearingDay(false);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (redoStack.length === 0) return;
+    const nextAction = redoStack[redoStack.length - 1];
+    setIsClearingDay(true);
+    try {
+      if (nextAction.type === 'clear_day') {
+        await clearDaySubmissions(challenge.id, nextAction.targetDateYmd);
+      }
+      setRedoStack((prev) => prev.slice(0, -1));
+      setUndoStack((prev) => [...prev, nextAction]);
+      await fetchLogs();
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to redo clear:', err);
+    } finally {
+      setIsClearingDay(false);
+    }
+  };
+
   const handleSoftDelete = () => {
     setShowDeleteConfirm(true);
   };
@@ -305,14 +393,51 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
           {canManageYptChallenges && (
             <>
-              <button
-                onClick={handleRecalculate}
-                disabled={recalculating}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-xl transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${recalculating ? 'animate-spin' : ''}`} />
-                Recalculate Points
-              </button>
+              {isChallengeCreatorOrOwner ? (
+                <button
+                  onClick={() => setIsClearConfirmOpen(true)}
+                  disabled={isClearingDay}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-colors disabled:opacity-50"
+                  title={`Clear points and screenshot submissions for ${selectedFilterDateYmd}`}
+                >
+                  <Eraser className={`w-3.5 h-3.5 text-rose-500 ${isClearingDay ? 'animate-spin' : ''}`} />
+                  Clear {selectedFilterDateYmd === getLocalYmd(new Date()) ? "Today's" : selectedFilterDateYmd} Points
+                </button>
+              ) : (
+                <button
+                  onClick={handleRecalculate}
+                  disabled={recalculating}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${recalculating ? 'animate-spin' : ''}`} />
+                  Recalculate Points
+                </button>
+              )}
+
+              {/* Undo & Redo Controls */}
+              <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={undoStack.length === 0 || isClearingDay}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Undo last cleared points action"
+                >
+                  <Undo2 className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="hidden sm:inline">Undo</span>
+                </button>
+                <div className="w-[1px] h-4 bg-slate-300 dark:bg-slate-700 my-auto" />
+                <button
+                  type="button"
+                  onClick={handleRedo}
+                  disabled={redoStack.length === 0 || isClearingDay}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Redo cleared points action"
+                >
+                  <Redo2 className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="hidden sm:inline">Redo</span>
+                </button>
+              </div>
 
               <button
                 onClick={() => setIsEditModalOpen(true)}
@@ -338,50 +463,84 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
       </div>
 
       {/* Challenge Hero Header */}
-      <div className="bg-gradient-to-r from-indigo-900/60 via-purple-900/50 to-slate-900/70 p-4 sm:p-6 rounded-2xl border border-indigo-500/20 space-y-3 sm:space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-5 sm:p-7 rounded-3xl border border-indigo-500/30 text-white shadow-xl space-y-4 sm:space-y-5">
+        {/* Subtle decorative glow */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider border shadow-sm ${
+                challenge.status === 'active'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${challenge.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-400'}`} />
                 {challenge.status} Challenge
               </span>
-              <span className="text-[11px] sm:text-xs text-slate-400 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                {new Date(challenge.startDate).toLocaleDateString()} — {new Date(challenge.endDate).toLocaleDateString()}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-slate-300 bg-white/10 backdrop-blur-md border border-white/10">
+                <Calendar className="w-3.5 h-3.5 text-indigo-300" />
+                {new Date(challenge.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} — {new Date(challenge.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white">{challenge.title}</h2>
+
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-xs">
+              {challenge.title}
+            </h2>
+
             {challenge.description && (
-              <p className="text-[11px] sm:text-xs text-slate-300 mt-1 max-w-xl">{challenge.description}</p>
+              <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed max-w-2xl">
+                {challenge.description}
+              </p>
             )}
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-900/60 backdrop-blur-sm p-2.5 sm:p-3 rounded-xl border border-slate-700/50">
-            <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400 shrink-0" />
-            <div>
-              <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider">Leader Team</p>
-              <p className="text-xs font-extrabold text-white">
-                {[...challenge.teams].sort((a, b) => b.totalPoints - a.totalPoints)[0]?.name || 'N/A'}
-              </p>
-            </div>
-          </div>
+
         </div>
 
-        {/* Rule Summary Bar */}
-        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1.5 pt-3 border-t border-indigo-500/20 text-[11px] sm:text-xs text-indigo-200">
-          <div>
-            <span className="opacity-70">Study Rate:</span> +{challenge.rules.pointsPerInterval ?? challenge.rules.pointsPerStudyHour} XP / {challenge.rules.studyIntervalValue ?? 1} {challenge.rules.studyIntervalUnit ?? 'hr'}
+        {/* Rule Summary Chips */}
+        <div className="relative z-10 flex flex-wrap items-center gap-2 pt-3.5 border-t border-white/10 text-xs">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 text-slate-200 font-medium">
+            <span className="text-indigo-300 font-bold">Study Rate:</span>
+            <span className="font-semibold text-white">+{challenge.rules.pointsPerInterval ?? challenge.rules.pointsPerStudyHour} XP</span>
+            <span className="text-slate-400">/ {challenge.rules.studyIntervalValue ?? 1} {challenge.rules.studyIntervalUnit ?? 'hr'}</span>
           </div>
-          <div>
-            <span className="opacity-70">Penalty:</span> -{challenge.rules.penaltyPoints} XP (&lt;{challenge.rules.penaltyThresholdValue ?? challenge.rules.noStudyPenaltyThresholdHours ?? 3} {challenge.rules.penaltyThresholdUnit ?? 'hrs'})
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 text-slate-200 font-medium">
+            <span className="text-rose-300 font-bold">Penalty:</span>
+            <span className="font-semibold text-rose-200">-{challenge.rules.penaltyPoints} XP</span>
+            <span className="text-slate-400">(&lt;{challenge.rules.penaltyThresholdValue ?? challenge.rules.noStudyPenaltyThresholdHours ?? 3} {challenge.rules.penaltyThresholdUnit ?? 'hrs'})</span>
           </div>
+
           {typeof challenge.rules.morningSnapBonus === 'number' && (
-            <div><span className="opacity-70">Snap Bonus:</span> +{challenge.rules.morningSnapBonus} XP</div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 backdrop-blur-md border border-amber-500/25 text-amber-200 font-medium">
+              <span>☀️</span>
+              <span className="font-bold text-amber-300">Morning Snap:</span>
+              <span className="font-semibold text-white">+{challenge.rules.morningSnapBonus} XP</span>
+            </div>
           )}
+
           {Array.isArray(challenge.rules.customRules) &&
             challenge.rules.customRules.map((cr) => (
-              <div key={cr.id} className="flex items-center gap-1">
-                <span className="opacity-70">{cr.emoji ? `${cr.emoji} ` : ''}{cr.name}:</span> {cr.type === 'bonus' ? '+' : '-'}{cr.points} XP
+              <div
+                key={cr.id}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl backdrop-blur-md border font-medium ${
+                  cr.scope === 'team_all'
+                    ? 'bg-purple-500/20 border-purple-500/35 text-purple-200'
+                    : 'bg-white/10 border-white/10 text-slate-200'
+                }`}
+              >
+                <span>{cr.emoji || (cr.type === 'bonus' ? '☀️' : '📱')}</span>
+                <span className="font-bold text-white">{cr.name}:</span>
+                <span className={`font-semibold ${cr.type === 'bonus' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  {cr.type === 'bonus' ? '+' : '-'}{cr.points} XP
+                </span>
+                {cr.scope === 'team_all' && (
+                  <span className="ml-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-purple-400/25 text-purple-100 border border-purple-300/30 uppercase tracking-wide">
+                    👥 Team Rule (100%)
+                  </span>
+                )}
               </div>
             ))}
         </div>
@@ -539,7 +698,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           }
 
           // Deduplicate submissions per member & date to ensure same-day replacements
-          const deduplicatedDailyStats = getDeduplicatedDailyMemberStats(submissions);
+          const deduplicatedDailyStats = getDeduplicatedDailyMemberStats(submissions, challenge);
 
           // Global top scorer candidate for period
           let globalTopScorerHandle: string | null = null;
@@ -554,10 +713,10 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               let cumulativeHours = 0;
               let cumulativePoints = 0;
 
-              const periodBadgeMap = new Map<string, { emoji: string; name: string; points: number; count: number }>();
+              const periodBadgeMap = new Map<string, { emoji: string; name: string; points: number; count: number; isTeamAll?: boolean }>();
 
               const memberDailyStats = deduplicatedDailyStats.filter(
-                (s) => s.memberHandle === cleanHandle || (s.matchedUid && cleanHandle.includes(s.matchedUid.replace(/^@/, '').trim().toLowerCase()))
+                (s) => areYptHandlesMatching(s.memberHandle, handleRaw, s.matchedUid, undefined)
               );
 
               memberDailyStats.forEach((stat) => {
@@ -584,6 +743,13 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                   if (Array.isArray(stat.detectedRules) && stat.detectedRules.length > 0) {
                     stat.detectedRules.forEach((dr) => {
                       const key = dr.ruleId || dr.ruleName || dr.emoji;
+                      const matchingCustomRule = Array.isArray(challenge.rules?.customRules)
+                        ? challenge.rules.customRules.find(
+                            (cr) => cr.id === dr.ruleId || cr.name === dr.ruleName || (cr.emoji && cr.emoji === dr.emoji)
+                          )
+                        : undefined;
+                      const isTeamAll = matchingCustomRule?.scope === 'team_all';
+
                       const existing = periodBadgeMap.get(key);
                       if (existing) {
                         existing.count += 1;
@@ -593,6 +759,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                           name: dr.ruleName,
                           points: dr.points || 0,
                           count: 1,
+                          isTeamAll: Boolean(isTeamAll),
                         });
                       }
                     });
@@ -665,8 +832,8 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
           return (
             <div className="space-y-5">
-              {/* Side-by-side Teams Grid */}
-              <div className={`grid grid-cols-1 ${rankedTeams.length > 1 ? 'md:grid-cols-2 lg:grid-cols-' + Math.min(rankedTeams.length, 3) : ''} gap-5`}>
+              {/* Side-by-side Teams Grid (2 columns on desktop) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {rankedTeams.map((team, teamIdx) => {
                   const teamPeriodGain = team.teamPeriodGain;
                   const teamPeriodHours = team.teamPeriodHours;
@@ -674,6 +841,45 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                   const pct = activeTotalPointsAllTeams > 0
                     ? Math.min(100, Math.round((teamScoreForBar / activeTotalPointsAllTeams) * 100))
                     : 0;
+
+                  const teamWideCustomRules = (challenge.rules?.customRules || []).filter((cr) => cr.scope === 'team_all');
+                  const unlockedTeamWideRules = teamWideCustomRules.filter((cr) => {
+                    return team.calculatedMembers.some((m) =>
+                      m.periodBadges.some((b) => (b.name === cr.name || b.emoji === cr.emoji) && b.points !== 0)
+                    );
+                  });
+
+                  // Aggregate team points breakdown by emoji / custom rules
+                  const teamEmojiBreakdownMap = new Map<string, { emoji: string; name: string; totalPoints: number; count: number; isTeamAll?: boolean }>();
+                  let totalEmojiPoints = 0;
+
+                  team.calculatedMembers.forEach((m) => {
+                    m.periodBadges.forEach((b) => {
+                      const key = b.name || b.emoji;
+                      const pts = (b.points || 0) * (b.count || 1);
+                      totalEmojiPoints += pts;
+
+                      const existing = teamEmojiBreakdownMap.get(key);
+                      if (existing) {
+                        existing.count += (b.count || 1);
+                        existing.totalPoints += pts;
+                      } else {
+                        teamEmojiBreakdownMap.set(key, {
+                          emoji: b.emoji || '✨',
+                          name: b.name || 'Rule',
+                          totalPoints: pts,
+                          count: b.count || 1,
+                          isTeamAll: Boolean(b.isTeamAll),
+                        });
+                      }
+                    });
+                  });
+
+                  const teamEmojiList = Array.from(teamEmojiBreakdownMap.values());
+                  const activeTeamScore = dateFilter === 'allTime' ? team.totalPoints : team.teamPeriodGain;
+                  const baseStudyPoints = Math.max(0, activeTeamScore - totalEmojiPoints);
+                  const teamKey = team.id || team.name;
+                  const isBreakdownExpanded = expandedTeamBreakdownId === teamKey;
 
                   return (
                     <div
@@ -708,17 +914,39 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                                 <span>•</span>
                                 <span>{filterTitleLabel}: <strong className="text-[10px] sm:text-[11px] font-bold font-mono" style={{ color: team.color || '#6366f1' }}>{formatStudyDuration(teamPeriodHours)}</strong></span>
                               </div>
+                              {unlockedTeamWideRules.length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                                  {unlockedTeamWideRules.map((tr, trIdx) => (
+                                    <span
+                                      key={trIdx}
+                                      className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 shadow-2xs"
+                                    >
+                                      <span>✨ Team Unlocked</span>
+                                      <span className="font-semibold">({tr.emoji} {tr.name}: {tr.type === 'bonus' ? '+' : '-'}{tr.points} XP Team Bonus)</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          <div className="text-right shrink-0 space-y-0.5">
-                            <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 font-mono block">
-                              {team.totalPoints} XP
-                            </span>
+                          {/* Tap target for Team Points Breakdown */}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedTeamBreakdownId(isBreakdownExpanded ? null : teamKey)}
+                            className="text-right shrink-0 p-1.5 -m-1.5 rounded-xl hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 active:scale-95 transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-indigo-500/30 border border-transparent hover:border-indigo-500/30"
+                            title="Tap to toggle Points Collection breakdown"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-xs sm:text-sm font-black text-indigo-600 dark:text-indigo-400 font-mono block group-hover:underline">
+                                {team.totalPoints} XP
+                              </span>
+                              <ChevronDown className={`w-3.5 h-3.5 text-indigo-500 transition-transform ${isBreakdownExpanded ? 'rotate-180' : ''}`} />
+                            </div>
                             <div className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                               +{teamPeriodGain} XP {filterPeriodLabel}
                             </div>
-                          </div>
+                          </button>
                         </div>
 
                         {/* Team Score Bar */}
@@ -731,6 +959,106 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                             }}
                           />
                         </div>
+
+                        {/* Expanded Team Points Collection Breakdown Box */}
+                        {isBreakdownExpanded && (
+                          <div className="p-3.5 bg-gradient-to-b from-indigo-50/90 to-white dark:from-indigo-950/40 dark:to-slate-900/90 border border-indigo-500/30 dark:border-indigo-500/40 rounded-2xl space-y-3 shadow-md text-xs animate-in fade-in duration-200">
+                            <div className="flex items-center justify-between border-b border-indigo-200/50 dark:border-indigo-800/50 pb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300">
+                                  <Trophy className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h5 className="font-extrabold text-slate-900 dark:text-white text-xs">
+                                    {team.name} Points Collection
+                                  </h5>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                    {filterTitleLabel} Breakdown
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTeamBreakdownId(null)}
+                                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded-lg hover:bg-indigo-500/20"
+                              >
+                                Close ✕
+                              </button>
+                            </div>
+
+                            {/* Stat Cards: Study Time & Points */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800">
+                                <span className="text-[10px] text-slate-400 font-medium block">⏱️ Team Study Hours</span>
+                                <span className="font-mono font-black text-slate-800 dark:text-slate-100 text-xs sm:text-sm">
+                                  {formatStudyDuration(teamPeriodHours)}
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800">
+                                <span className="text-[10px] text-slate-400 font-medium block">⭐ Points Collected</span>
+                                <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-xs sm:text-sm">
+                                  +{teamPeriodGain} XP
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Points Gains Through Emojis & Base Study */}
+                            <div className="space-y-1.5 pt-1">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                                <span>Points Source</span>
+                                <span>XP Earned</span>
+                              </div>
+
+                              {/* Base Study Hours XP */}
+                              <div className="flex items-center justify-between p-2 bg-white dark:bg-slate-950/80 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[11px]">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-sm">⏱️</span>
+                                  <div className="truncate">
+                                    <span className="font-bold text-slate-800 dark:text-slate-100 block">Base Study Duration</span>
+                                    <span className="text-[9px] text-slate-400 font-mono">{formatStudyDuration(teamPeriodHours)} studied</span>
+                                  </div>
+                                </div>
+                                <span className="font-mono font-extrabold text-indigo-600 dark:text-indigo-400 text-xs shrink-0">
+                                  +{baseStudyPoints} XP
+                                </span>
+                              </div>
+
+                              {/* Emoji & Rules breakdown */}
+                              {teamEmojiList.length > 0 ? (
+                                teamEmojiList.map((item, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center justify-between p-2 bg-white dark:bg-slate-950/80 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[11px]"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-base shrink-0">{item.emoji}</span>
+                                      <div className="truncate">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="font-bold text-slate-800 dark:text-slate-100">{item.name}</span>
+                                          {item.isTeamAll && (
+                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/20">
+                                              👥 Team Rule
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className="text-[9px] text-slate-400 font-mono block">Collected {item.count} time{item.count > 1 ? 's' : ''}</span>
+                                      </div>
+                                    </div>
+
+                                    <span className={`font-mono font-extrabold text-xs shrink-0 ${item.totalPoints >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                      {item.totalPoints >= 0 ? `+${item.totalPoints}` : item.totalPoints} XP
+                                    </span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="p-2 text-center text-[10px] text-slate-400 italic bg-white dark:bg-slate-950/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                                  No extra emoji rule bonuses collected in this period.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Vertical Member Cards List */}
                         <div className="space-y-2 pt-1">
@@ -822,27 +1150,22 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                                   {member.periodBadges.map((badge, bIdx) => (
                                     <span
                                       key={bIdx}
-                                      onClick={() => {
-                                        if (canEditThisMember) {
-                                          handleRemoveBadge(member.handleRaw, badge);
-                                        }
-                                      }}
-                                      className={`inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25 text-[9px] sm:text-[10px] font-bold shadow-2xs transition-all ${
-                                        canEditThisMember ? 'cursor-pointer hover:border-rose-400/80 hover:bg-rose-500/10' : ''
+                                      className={`inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-2xs transition-all ${
+                                        badge.isTeamAll
+                                          ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30'
+                                          : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25'
                                       }`}
                                       title={
-                                        canEditThisMember
-                                          ? `Click to remove rule "${badge.name}"`
+                                        badge.isTeamAll
+                                          ? `👥 Whole Team Bonus: ${badge.name} (${badge.points >= 0 ? '+' : ''}${badge.points} XP)`
                                           : `${badge.name} (${badge.points >= 0 ? '+' : ''}${badge.points} XP)`
                                       }
                                     >
+                                      {badge.isTeamAll && <span className="text-[10px]">👥</span>}
                                       <span className="text-[10px] sm:text-xs">{badge.emoji}</span>
-                                      <span className="font-mono text-amber-600 dark:text-amber-400">
+                                      <span className={`font-mono ${badge.isTeamAll ? 'text-purple-600 dark:text-purple-400 font-extrabold' : 'text-amber-600 dark:text-amber-400'}`}>
                                         {badge.points >= 0 ? `+${badge.points}` : badge.points}
                                       </span>
-                                      {canEditThisMember && (
-                                        <X className="w-2.5 h-2.5 text-rose-500 opacity-60 hover:opacity-100 ml-0.5 shrink-0" />
-                                      )}
                                     </span>
                                   ))}
 
@@ -949,97 +1272,133 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
       {/* Audit Log / Submissions */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-5 rounded-2xl space-y-3 sm:space-y-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 cursor-pointer select-none group"
+          onClick={() => setIsAuditLogsCollapsed(!isAuditLogsCollapsed)}
+        >
           <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
             <FileImage className="w-4 h-4 text-indigo-500 shrink-0" /> Screenshot Verification Audit Logs
           </h3>
-          <span className="text-[10px] sm:text-xs text-slate-500 font-semibold">{submissions.length} Uploaded Logs</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold">
+              {Math.min(submissions.length, 3)} Log{Math.min(submissions.length, 3) !== 1 ? 's' : ''} Shown
+            </span>
+            <div className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+              {isAuditLogsCollapsed ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronUp className="w-4 h-4" />
+              )}
+            </div>
+          </div>
         </div>
 
-        {loading ? (
-          <div className="py-8 text-center text-xs text-slate-500">Loading audit log entries...</div>
-        ) : submissions.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-            No study screenshots uploaded yet for this challenge.
-          </div>
-        ) : (
-          <div className="space-y-2.5 sm:space-y-3 max-h-80 overflow-y-auto pr-1">
-            {submissions.map((sub) => {
-              const targetYmd = sub.targetDateYmd || sub.dateYmd || getLocalYmd(sub.timestamp);
-              const formatShortDate = (ymdStr: string) => {
-                if (!ymdStr) return '';
-                const parts = ymdStr.split('-').map(Number);
-                if (parts.length !== 3 || isNaN(parts[0])) return ymdStr;
-                const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-                return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-              };
-              const studySessionDateStr = formatShortDate(targetYmd);
-              const uploadDateStr = new Date(sub.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        {!isAuditLogsCollapsed && (
+          loading ? (
+            <div className="py-8 text-center text-xs text-slate-500">Loading audit log entries...</div>
+          ) : submissions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+              No study screenshots uploaded yet for this challenge.
+            </div>
+          ) : (
+            <div className="space-y-2.5 sm:space-y-3 max-h-80 overflow-y-auto pr-1">
+              {submissions.slice(0, 3).map((sub) => {
+                const targetYmd = sub.targetDateYmd || sub.dateYmd || getLocalYmd(sub.timestamp);
+                const formatShortDate = (ymdStr: string) => {
+                  if (!ymdStr) return '';
+                  const parts = ymdStr.split('-').map(Number);
+                  if (parts.length !== 3 || isNaN(parts[0])) return ymdStr;
+                  const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+                  return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                };
+                const studySessionDateStr = formatShortDate(targetYmd);
+                const uploadDateStr = new Date(sub.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-              const sameDateSubs = submissions.filter(
-                (s) => (s.targetDateYmd || s.dateYmd || getLocalYmd(s.timestamp)) === targetYmd
-              );
-              const subTs = new Date(sub.timestamp).getTime();
-              const hasPreviousSubmission = sameDateSubs.some(
-                (s) => new Date(s.timestamp).getTime() < subTs
-              );
-              const isLatestForDate = !sameDateSubs.some(
-                (s) => new Date(s.timestamp).getTime() > subTs
-              );
+                const sameDateSubs = submissions.filter(
+                  (s) => (s.targetDateYmd || s.dateYmd || getLocalYmd(s.timestamp)) === targetYmd
+                );
+                const subTs = new Date(sub.timestamp).getTime();
+                const hasPreviousSubmission = sameDateSubs.some(
+                  (s) => new Date(s.timestamp).getTime() < subTs
+                );
+                const isLatestForDate = !sameDateSubs.some(
+                  (s) => new Date(s.timestamp).getTime() > subTs
+                );
 
-              return (
-                <div key={sub.id} className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between text-[11px] sm:text-xs flex-wrap gap-1">
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        {sub.status}
-                      </span>
-                      <span className="text-slate-700 dark:text-slate-300 font-medium text-[10px] sm:text-[11px]">
-                        Uploaded on <strong>{uploadDateStr}</strong> for <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{studySessionDateStr}</strong> study session
-                      </span>
-                      {hasPreviousSubmission && isLatestForDate && (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
-                          <RefreshCw className="w-3 h-3 shrink-0" />
-                          <span>Updated latest submission for {studySessionDateStr}</span>
+                return (
+                  <div key={sub.id} className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-[11px] sm:text-xs flex-wrap gap-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                          {sub.status}
                         </span>
-                      )}
-                    </div>
-                    <span className="font-extrabold text-xs sm:text-sm text-indigo-600 dark:text-indigo-400">
-                      +{sub.totalPointsAwarded} XP awarded
-                    </span>
-                  </div>
-
-                <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60 text-xs">
-                  {sub.extractedMembers.map((m, i) => {
-                    const emojis = Array.isArray(m.detectedEmojis) && m.detectedEmojis.length > 0
-                      ? m.detectedEmojis
-                      : m.morningSnap ? ['☀️'] : [];
-
-                    return (
-                      <div
-                        key={i}
-                        className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-white dark:bg-slate-900 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[10px] sm:text-[11px] font-medium text-slate-700 dark:text-slate-300 shadow-2xs max-w-full"
-                      >
-                        <span className="font-bold truncate max-w-[120px] sm:max-w-[180px]">{m.yptHandle}</span>
-                        <span className="text-indigo-600 dark:text-indigo-400 font-bold font-mono">
-                          {formatStudyDuration(m.hoursStudied)}
+                        <span className="text-slate-700 dark:text-slate-300 font-medium text-[10px] sm:text-[11px]">
+                          Uploaded on <strong>{uploadDateStr}</strong> for <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{studySessionDateStr}</strong> study session
                         </span>
-                        {emojis.length > 0 && (
-                          <span className="flex items-center gap-0.5 px-1 sm:px-1.5 py-0.2 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 rounded-md text-[9px] sm:text-[10px] font-bold">
-                            {emojis.join(' ')}
+                        {hasPreviousSubmission && isLatestForDate && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
+                            <RefreshCw className="w-3 h-3 shrink-0" />
+                            <span>Updated latest submission for {studySessionDateStr}</span>
                           </span>
                         )}
-                        <span className={m.pointsEarned >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>
-                          {m.pointsEarned >= 0 ? `+${m.pointsEarned}` : m.pointsEarned} XP
-                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                      <span className="font-extrabold text-xs sm:text-sm text-indigo-600 dark:text-indigo-400">
+                        +{sub.totalPointsAwarded} XP awarded
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60 text-xs">
+                      {sub.extractedMembers.map((m, i) => {
+                        const emojis = Array.isArray(m.detectedEmojis) && m.detectedEmojis.length > 0
+                          ? m.detectedEmojis
+                          : m.morningSnap ? ['☀️'] : [];
+
+                        return (
+                          <div
+                            key={i}
+                            className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-white dark:bg-slate-900 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[10px] sm:text-[11px] font-medium text-slate-700 dark:text-slate-300 shadow-2xs max-w-full"
+                          >
+                            <span className="font-bold truncate max-w-[120px] sm:max-w-[180px]">{m.yptHandle}</span>
+                            <span className="text-indigo-600 dark:text-indigo-400 font-bold font-mono">
+                              {formatStudyDuration(m.hoursStudied)}
+                            </span>
+                            {emojis.length > 0 && (
+                              <span className="flex items-center gap-0.5 px-1 sm:px-1.5 py-0.2 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 rounded-md text-[9px] sm:text-[10px] font-bold">
+                                {emojis.join(' ')}
+                              </span>
+                            )}
+                            {Array.isArray(m.detectedRules) &&
+                              m.detectedRules.map((dr, drIdx) => {
+                                const isTeamAll = challenge.rules?.customRules?.some(
+                                  (cr) => (cr.id === dr.ruleId || cr.name === dr.ruleName || cr.emoji === dr.emoji) && cr.scope === 'team_all'
+                                );
+                                return (
+                                  <span
+                                    key={drIdx}
+                                    className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold border flex items-center gap-0.5 ${
+                                      isTeamAll
+                                        ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                                        : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                                    }`}
+                                    title={`${dr.ruleName}${isTeamAll ? ' (Whole Team Rule)' : ''}`}
+                                  >
+                                    {isTeamAll && <span className="text-[9px]">👥</span>}
+                                    <span>{dr.emoji || dr.ruleName}</span>
+                                  </span>
+                                );
+                              })}
+                            <span className={m.pointsEarned >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>
+                              {m.pointsEarned >= 0 ? `+${m.pointsEarned}` : m.pointsEarned} XP
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
 
@@ -1093,6 +1452,67 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           }}
         />
       )}
+
+      {/* Clear Day Points Confirmation Modal */}
+      {isClearConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/20">
+                <Eraser className="w-6 h-6 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                  Clear {selectedFilterDateYmd === getLocalYmd(new Date()) ? "Today's" : selectedFilterDateYmd} Points?
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Challenge: <span className="font-bold text-slate-700 dark:text-slate-300">{challenge.title}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 rounded-2xl text-xs space-y-2 text-rose-800 dark:text-rose-200">
+              <p className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                This will delete screenshot submissions and clear points recorded for {selectedFilterDateYmd}.
+              </p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                If wrong days data was added by screenshot upload, clearing this date will reset all member and team points for {selectedFilterDateYmd}. You can undo this action immediately using the Undo button.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsClearConfirmOpen(false)}
+                disabled={isClearingDay}
+                className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleClearSelectedDayPoints}
+                disabled={isClearingDay}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors shadow-md disabled:opacity-50 cursor-pointer"
+              >
+                {isClearingDay ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Clearing Points...
+                  </>
+                ) : (
+                  <>
+                    <Eraser className="w-3.5 h-3.5" />
+                    Confirm Clear Points
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

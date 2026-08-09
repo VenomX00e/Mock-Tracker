@@ -12,7 +12,7 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
   const response = await fetch('/api/extract-mock', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ images, customApiKey: customKey || null, model })
+    body: JSON.stringify({ images, customApiKey: customKey || null, model, featureKey: 'mock_exam_generator' })
   });
   
   if (!response.ok) {
@@ -42,7 +42,7 @@ export async function generateBadge(promptText: string): Promise<{ name: string,
   const response = await fetch('/api/generate-badge', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ promptText, customApiKey: customKey || null })
+    body: JSON.stringify({ promptText, customApiKey: customKey || null, featureKey: 'general_chat' })
   });
   
   if (!response.ok) {
@@ -80,7 +80,7 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
   const response = await fetch('/api/extract-scorecard', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ images, customApiKey: customKey || null, subjects, model })
+    body: JSON.stringify({ images, customApiKey: customKey || null, subjects, model, featureKey: 'mock_exam_generator' })
   });
   
   if (!response.ok) {

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, Send, User, Sparkles, Paperclip, Image as ImageIcon, FileText, Settings, Trash2, Globe, Maximize2, Minimize2, Copy, Check } from 'lucide-react';
+import { Bot, Send, User, Sparkles, Paperclip, Image as ImageIcon, FileText, Settings, Trash2, Globe, Maximize2, Minimize2, Copy, Check, Lock, AlertCircle } from 'lucide-react';
+import { useGeminiResolution } from '../../hooks/useGeminiResolution';
 
 import Markdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -26,6 +27,7 @@ import { getActiveApiKey } from '../../utils/apiKeyManager';
 export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIAssistantProps) {
   const { setActiveTab } = useUIStore();
   const { isOwner } = useContext(AppStateCtx) || { isOwner: false };
+  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('ai_tutor');
   const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton, useCustomWebSearch, toggleCustomWebSearch, customSearchApi, setCustomSearchApi } = useChatStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -136,20 +138,19 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     setMessages(chatMode, chatHistory);
     setIsLoading(true);
 
-    const customKey = getActiveApiKey();
-    if (!customKey) {
+    if (!isFeatureAllowed) {
       setMessages(chatMode, [...chatHistory, { 
         role: 'model', 
-        text: 'Please set your Gemini API key in the settings (top right gear icon) to chat with the AI Tutor.' 
+        text: 'An API Key is required for AI Tutor. Please add your Gemini key in Settings or request access from your Administrator.' 
       }]);
       setIsLoading(false);
       return;
     }
 
     try {
-      const model = localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
+      const modelToUse = activeModel || localStorage.getItem('geminiModel') || 'gemini-2.5-flash';
       
-      const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, model, chatMode, customSearchApi, (text, citations) => {
+      const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, modelToUse, chatMode, customSearchApi, (text, citations) => {
         setIsLoading(false);
         setMessages(chatMode, [...chatHistory, { role: 'model', text: text, citations }]);
       });
@@ -178,6 +179,12 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
               <Sparkles className="w-3 h-3" />
               Powered by Gemini
             </p>
+            {isModelLocked && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-0.5">
+                <Lock className="w-2.5 h-2.5 shrink-0 text-amber-500" />
+                <span>🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -339,6 +346,17 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
       </div>
 
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+        {!isFeatureAllowed && (
+          <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs max-w-lg mx-auto my-4">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-sm text-amber-900 dark:text-amber-100">API Key Required</p>
+              <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
+                An API Key is required for AI Tutor. Please add your Gemini key in Settings or request access from your Administrator.
+              </p>
+            </div>
+          </div>
+        )}
         {currentModeMessages.length <= 1 && (
           <div className="pt-2 space-y-4">
             {chatMode === 'reasoning' && (

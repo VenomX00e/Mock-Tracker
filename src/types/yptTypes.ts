@@ -8,6 +8,7 @@ export interface YptCustomRule {
   type: 'bonus' | 'penalty';
   conditionType?: YptRuleConditionType; // Default 'emoji_only'
   minHoursNeeded?: number; // Minimum hours required for 'hours_only', 'both', or 'either'
+  scope?: 'individual' | 'team_all'; // 'individual' (default) vs 'team_all' (requires 100% team compliance)
 }
 
 export interface YptRuleConfig {
