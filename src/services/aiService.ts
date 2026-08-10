@@ -37,7 +37,7 @@ import { getActiveApiKey } from '../utils/apiKeyManager';
  */
 function getAiSettings() {
   const customApiKey = getActiveApiKey();
-  const model = localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
+  const model = localStorage.getItem('geminiModel_vocab') || localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
   return { customApiKey, model };
 }
 

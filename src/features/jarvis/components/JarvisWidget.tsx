@@ -41,7 +41,7 @@ export function JarvisWidget() {
       {isModelLocked && (
         <div className="px-3 py-1 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800/50 text-[10px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5 font-medium shrink-0">
           <Lock size={12} className="text-amber-500 shrink-0" />
-          <span className="truncate">🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
+          <span className="truncate">{activeModel} (Global Key) • Add personal key to switch model</span>
         </div>
       )}
 

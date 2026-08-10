@@ -182,6 +182,43 @@ async function getGlobalGeminiConfigRest(): Promise<any> {
   return null;
 }
 
+const normalizeGeminiModel = (rawModel?: string): string => {
+  if (!rawModel || typeof rawModel !== "string") return "gemini-2.5-flash";
+  const m = rawModel.trim().toLowerCase();
+
+  if (
+    m === "gemini-2.5-flash" ||
+    m === "gemini-2.5-flash-lite" ||
+    m === "gemini-2.5-pro" ||
+    m === "gemini-2.0-flash" ||
+    m === "gemini-2.0-flash-lite" ||
+    m === "gemini-1.5-flash" ||
+    m === "gemini-1.5-pro"
+  ) {
+    return m;
+  }
+
+  if (m.includes("lite") || m.includes("3.5-flash-lite") || m.includes("3.1-flash-lite")) return "gemini-2.5-flash-lite";
+  if (m.includes("pro")) return "gemini-2.5-pro";
+  if (m.includes("flash") || m.includes("3.6-flash") || m.includes("3.5-flash") || m.includes("3-flash")) return "gemini-2.5-flash";
+
+  return "gemini-2.5-flash";
+};
+
+const generateContentStreamWithFallback = async (aiClient: any, payload: any) => {
+  const primaryModel = payload.model || "gemini-2.5-flash";
+  try {
+    return await aiClient.models.generateContentStream(payload);
+  } catch (err: any) {
+    console.warn(`Primary model ${primaryModel} failed stream (${err?.message}), retrying fallback...`);
+    const fallbackModel = primaryModel === "gemini-2.5-flash" ? "gemini-2.5-flash-lite" : "gemini-2.5-flash";
+    return await aiClient.models.generateContentStream({
+      ...payload,
+      model: fallbackModel,
+    });
+  }
+};
+
 const resolveGeminiProxyConfig = async (
   reqBody: any = {},
   reqHeaders: any = {},
@@ -192,10 +229,10 @@ const resolveGeminiProxyConfig = async (
 
   // 1. If client API key attached
   if (clientApiKey && typeof clientApiKey === "string" && clientApiKey.trim().length > 0) {
-    const keyToUse = clientApiKey.trim();
+    const keyToUse = clientApiKey.trim().replace(/^["']|["']$/g, '');
     return {
       apiKey: keyToUse,
-      model: reqBody.model || "gemini-2.5-flash",
+      model: normalizeGeminiModel(reqBody.model),
       isGlobalKey: false,
       featureKey,
       aiClient: new GoogleGenAI({ apiKey: keyToUse }),
@@ -239,7 +276,7 @@ const resolveGeminiProxyConfig = async (
   }
 
   // Force model = features[featureKey].defaultModel (ignore any user-crafted model parameter in request payload)
-  const forcedModel = featureSetting.defaultModel || "gemini-2.5-flash";
+  const forcedModel = normalizeGeminiModel(featureSetting.defaultModel);
 
   return {
     apiKey: globalApiKey.trim(),
@@ -290,9 +327,13 @@ const formatGeminiError = (error: any) => {
     if (
       errStr.includes("503") ||
       errStr.includes("high demand") ||
-      errStr.includes("429")
+      errStr.includes("429") ||
+      errStr.includes("UNAVAILABLE") ||
+      errStr.includes("overloaded") ||
+      errStr.includes("resource exhausted") ||
+      errStr.includes("RESOURCE_EXHAUSTED")
     ) {
-      return "This AI model is currently experiencing high demand. Please try again in a few moments.";
+      return "This AI model is currently experiencing high demand or quota limits. Please try again in a few moments or switch models in Settings.";
     }
     const jsonMatch = errStr.match(/\{.*\}/s);
     if (jsonMatch) {
@@ -1751,7 +1792,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
     }
 
     try {
-      const responseStream = await aiClient.models.generateContentStream({
+      const responseStream = await generateContentStreamWithFallback(aiClient, {
         model: modelToUse,
         contents: contents,
         config: config,
@@ -1833,8 +1874,8 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
             }]
           });
 
-          const followUpStream = await aiClient.models.generateContentStream({
-            model: model || "gemini-3.1-flash-lite",
+          const followUpStream = await generateContentStreamWithFallback(aiClient, {
+            model: modelToUse || "gemini-2.5-flash-lite",
             contents: contents,
             config: config,
           });

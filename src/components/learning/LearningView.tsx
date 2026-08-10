@@ -23,7 +23,7 @@ const MODELS = [
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
   { value: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B IT' },
-  { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' }
+  { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT' },
 ];
 
 export function LearningView() {
@@ -95,10 +95,19 @@ export function LearningView() {
   }, [enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, activeTab, isAdmin, isOwner]);
 
   useEffect(() => {
-    setKeys(getApiKeys());
-    const savedModel = localStorage.getItem('geminiModel');
-    if (savedModel) setSelectedModel(savedModel);
-  }, []);
+    const syncKeys = () => setKeys(getApiKeys());
+    syncKeys();
+    window.addEventListener('gemini_keys_changed', syncKeys);
+    return () => window.removeEventListener('gemini_keys_changed', syncKeys);
+  }, [isPopoverOpen]);
+
+  // Sync selected model per learning subpage tab
+  useEffect(() => {
+    const subKey = `geminiModel_${activeTab}`;
+    const savedSubModel = localStorage.getItem(subKey);
+    const savedGlobalModel = localStorage.getItem('geminiModel');
+    setSelectedModel(savedSubModel || savedGlobalModel || MODELS[0].value);
+  }, [activeTab]);
 
   useEffect(() => {
     const handleJarvisAction = (action: JarvisActionEvent) => {
@@ -166,8 +175,30 @@ export function LearningView() {
   };
 
   const handleSaveSettings = () => {
+    if (newKeyInput.trim()) {
+      const newEntry: ApiKeyEntry = {
+        id: Date.now().toString(),
+        key: newKeyInput.trim(),
+        isActive: true,
+      };
+      const updatedKeys = [...keys, newEntry];
+      setKeys(updatedKeys);
+      saveApiKeys(updatedKeys);
+      setNewKeyInput('');
+    }
+    const subKey = `geminiModel_${activeTab}`;
+    localStorage.setItem(subKey, selectedModel);
     localStorage.setItem('geminiModel', selectedModel);
+    window.dispatchEvent(new Event('gemini_keys_changed'));
     setIsPopoverOpen(false);
+  };
+
+  const TAB_NAMES: Record<string, string> = {
+    ypt: 'YPT',
+    ai: 'AI Tutor',
+    vocab: 'Vocabulary',
+    math: 'Speed Math',
+    practice: 'Practice Library',
   };
 
   const maskKey = (key: string) => {
@@ -190,15 +221,24 @@ export function LearningView() {
                 className={`p-2.5 rounded-full transition-colors shadow-sm border ${
                   isPopoverOpen ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-800 dark:border-slate-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border-slate-200 dark:border-slate-700'
                 }`}
-                title="Configure AI Settings"
+                title={`Configure AI Settings for ${TAB_NAMES[activeTab] || 'Learning'}`}
               >
                 <Settings className="w-5 h-5" />
               </button>
 
               {isPopoverOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2">
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">AI Tutor Settings</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Set your Gemini API key to use the AI assistant.</p>
+                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl z-[100] animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      {TAB_NAMES[activeTab] || 'AI'} Settings
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+                      {TAB_NAMES[activeTab] || activeTab}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                    Configure Gemini model version & API keys for the <span className="font-semibold text-slate-700 dark:text-slate-300">{TAB_NAMES[activeTab] || 'current'}</span> tab.
+                  </p>
                   
                   <div className="space-y-4">
                     <div className="space-y-1.5 mb-2">
@@ -228,12 +268,12 @@ export function LearningView() {
                         {isAiTutorModelLocked && (
                           <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-1.5 font-medium">
                             <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                            <span>🔒 Model locked to [{MODELS.find(m => m.value === aiTutorActiveModel)?.label || aiTutorActiveModel}] (Using Admin Global Key)</span>
+                            <span>{MODELS.find(m => m.value === aiTutorActiveModel)?.label || aiTutorActiveModel} (Global Key) • Add personal key to switch model</span>
                           </div>
                         )}
 
                         {!isAiTutorModelLocked && isDropdownOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-1 shadow-lg z-[120] overflow-hidden">
+                          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-52 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-1 shadow-xl z-[120]">
                             {MODELS.map(m => (
                               <button
                                 key={m.value}
@@ -242,14 +282,14 @@ export function LearningView() {
                                   setSelectedModel(m.value);
                                   setIsDropdownOpen(false);
                                 }}
-                                className={`w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors ${
+                                className={`w-full flex items-center justify-between px-3 py-2 text-xs sm:text-sm transition-colors ${
                                   selectedModel === m.value 
                                     ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium' 
                                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                                 }`}
                               >
                                 <span className="truncate">{m.label}</span>
-                                {selectedModel === m.value && <Check className="w-4 h-4" />}
+                                {selectedModel === m.value && <Check className="w-4 h-4 shrink-0" />}
                               </button>
                             ))}
                           </div>

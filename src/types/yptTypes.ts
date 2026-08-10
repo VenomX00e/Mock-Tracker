@@ -89,6 +89,10 @@ export interface YptChallenge {
   teams: YptTeam[];
   createdAt: string | number;
   updatedAt?: string | number;
+  completedAt?: string;             // ISO timestamp when results were published
+  completedBy?: string;             // User UID or handle of the admin who declared results
+  winningTeamId?: string;           // Calculated top team ID at completion
+  finalMvpHandle?: string;          // MVP handle at completion
   isDeleted?: boolean;
   deletedAt?: string | number;
 }

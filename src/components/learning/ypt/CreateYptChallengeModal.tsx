@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, Award, Clock, Users, ShieldAlert, Sparkles, Crown, ChevronDown, Check } from 'lucide-react';
 import { YptRuleConfig, YptTeam, YptRuleConditionType } from '../../../types/yptTypes';
 import { createYptChallenge, updateYptChallenge, getAllKnownYptNames } from '../../../services/yptService';
+import { getYmdFromDateOrString } from '../../../utils/yptUtils';
 import { useAuthCtx } from '../../../context/AppContext';
 import { YptMemberPicker } from './YptMemberPicker';
 import { YptChallenge } from '../../../types/yptTypes';
@@ -239,19 +240,11 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
         let sYmd = getTodayYmd();
         if (challengeToEdit.startDate) {
-          try {
-            sYmd = new Date(challengeToEdit.startDate).toISOString().split('T')[0];
-          } catch (e) {
-            sYmd = getTodayYmd();
-          }
+          sYmd = getYmdFromDateOrString(challengeToEdit.startDate) || getTodayYmd();
         }
         let eYmd = addDaysToYmd(sYmd, 7);
         if (challengeToEdit.endDate) {
-          try {
-            eYmd = new Date(challengeToEdit.endDate).toISOString().split('T')[0];
-          } catch (e) {
-            eYmd = addDaysToYmd(sYmd, 7);
-          }
+          eYmd = getYmdFromDateOrString(challengeToEdit.endDate) || addDaysToYmd(sYmd, 7);
         }
         setStartDate(sYmd);
         setEndDate(eYmd);
@@ -408,8 +401,8 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
     setIsSubmitting(true);
 
     try {
-      const finalStartDate = startDate ? new Date(startDate + 'T00:00:00').toISOString() : new Date().toISOString();
-      const finalEndDate = endDate ? new Date(endDate + 'T23:59:59.999Z').toISOString() : new Date(Date.now() + 7 * 86400000).toISOString();
+      const finalStartDate = startDate || getTodayYmd();
+      const finalEndDate = endDate || addDaysToYmd(finalStartDate, 7);
 
       const intervalVal = parseFloat(studyIntervalValue) || 30;
       const ptsInterval = parseFloat(pointsPerInterval) || 1;
@@ -430,16 +423,23 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         penaltyPoints: parseFloat(penaltyPoints) || 5,
         customRules: customRules
           .filter((r) => r.name.trim().length > 0)
-          .map((r) => ({
-            id: r.id,
-            name: r.name.trim(),
-            emoji: r.emoji?.trim() || undefined,
-            points: parseFloat(r.points) || 0,
-            type: r.type,
-            conditionType: r.conditionType || 'emoji_only',
-            minHoursNeeded: r.conditionType && r.conditionType !== 'emoji_only' ? (parseFloat(r.minHoursNeeded || '10') || 0) : undefined,
-            scope: r.scope || 'individual',
-          })),
+          .map((r) => {
+            const ruleObj: any = {
+              id: r.id,
+              name: r.name.trim(),
+              points: parseFloat(r.points) || 0,
+              type: r.type,
+              conditionType: r.conditionType || 'emoji_only',
+              scope: r.scope || 'individual',
+            };
+            if (r.emoji && r.emoji.trim()) {
+              ruleObj.emoji = r.emoji.trim();
+            }
+            if (r.conditionType && r.conditionType !== 'emoji_only') {
+              ruleObj.minHoursNeeded = parseFloat(r.minHoursNeeded || '10') || 0;
+            }
+            return ruleObj;
+          }),
       };
 
       const finalTeams: YptTeam[] = teams.map((t, idx) => ({

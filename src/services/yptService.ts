@@ -16,6 +16,7 @@ import {
 import { db } from "./firebase";
 import { YptChallenge, YptCustomRule, YptExtractedMemberData, YptSubmissionLog, YptTeam } from "../types/yptTypes";
 import { getLocalYmd, areYptHandlesMatching, normalizeHandle, extractAlpha } from "../utils/yptUtils";
+import { useYptStore } from "../store/useYptStore";
 
 const CHALLENGES_COLLECTION = "yptChallenges";
 
@@ -369,6 +370,27 @@ export function getDeduplicatedDailyMemberStats(
   return evaluateAndApplyTeamWideRules(rawStats, challenge);
 }
 
+export function sanitizeForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof obj === "object" && !(obj instanceof Date) && !(obj instanceof Timestamp)) {
+    const newObj: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        newObj[key] = sanitizeForFirestore(value);
+      }
+    }
+    return newObj;
+  }
+  return obj;
+}
+
 /**
  * Creates a new YPT Challenge in Firestore.
  */
@@ -381,7 +403,11 @@ export async function createYptChallenge(
     id: challengeRef.id,
     createdAt: new Date().toISOString(),
   };
-  await setDoc(challengeRef, newChallenge);
+
+  // Optimistically update Zustand store (0ms UI latency)
+  useYptStore.getState().optimisticAddChallenge(newChallenge);
+
+  await setDoc(challengeRef, sanitizeForFirestore(newChallenge));
   return challengeRef.id;
 }
 
@@ -419,10 +445,14 @@ export async function getAllYptChallenges(): Promise<YptChallenge[]> {
 }
 
 /**
- * Real-time listener for all YPT Challenges.
+ * Real-time listener for all YPT Challenges with change delta tracking.
  */
 export function subscribeToYptChallenges(
-  callback: (challenges: YptChallenge[]) => void
+  callback: (
+    challenges: YptChallenge[],
+    docChanges?: { type: 'added' | 'modified' | 'removed'; item: YptChallenge }[],
+    metadata?: { hasPendingWrites: boolean; fromCache: boolean }
+  ) => void
 ): () => void {
   const colRef = collection(db, CHALLENGES_COLLECTION);
   
@@ -430,14 +460,22 @@ export function subscribeToYptChallenges(
     colRef,
     (snap) => {
       const challenges = snap.docs
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as YptChallenge))
-        .filter((c) => !c.isDeleted);
+        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as YptChallenge));
       challenges.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
       });
-      callback(challenges);
+
+      const changes = snap.docChanges().map((change) => ({
+        type: change.type as 'added' | 'modified' | 'removed',
+        item: { id: change.doc.id, ...change.doc.data() } as YptChallenge,
+      }));
+
+      callback(challenges, changes, {
+        hasPendingWrites: snap.metadata.hasPendingWrites,
+        fromCache: snap.metadata.fromCache,
+      });
     },
     (err) => {
       console.warn("Error listening to YPT challenges:", err);
@@ -452,13 +490,16 @@ export async function updateYptChallenge(
   challengeId: string,
   updates: Partial<YptChallenge>
 ): Promise<void> {
+  // Optimistically update Zustand store (0ms UI latency)
+  useYptStore.getState().optimisticUpdateChallenge(challengeId, updates);
+
   const docRef = doc(db, CHALLENGES_COLLECTION, challengeId);
   await setDoc(
     docRef,
-    {
+    sanitizeForFirestore({
       ...updates,
       updatedAt: new Date().toISOString(),
-    },
+    }),
     { merge: true }
   );
 }
@@ -471,6 +512,35 @@ export async function softDeleteYptChallenge(challengeId: string): Promise<void>
     isDeleted: true,
     status: 'deleted',
     deletedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Marks a YPT Challenge as completed and saves completion metadata.
+ */
+export async function completeYptChallenge(
+  challengeId: string,
+  summaryData?: {
+    completedBy?: string;
+    winningTeamId?: string;
+    finalMvpHandle?: string;
+  }
+): Promise<void> {
+  await updateYptChallenge(challengeId, {
+    status: 'completed',
+    completedAt: new Date().toISOString(),
+    completedBy: summaryData?.completedBy || '',
+    winningTeamId: summaryData?.winningTeamId || '',
+    finalMvpHandle: summaryData?.finalMvpHandle || '',
+  });
+}
+
+/**
+ * Re-opens a completed YPT Challenge back to active status.
+ */
+export async function reopenYptChallenge(challengeId: string): Promise<void> {
+  await updateYptChallenge(challengeId, {
+    status: 'active',
   });
 }
 
@@ -488,6 +558,9 @@ export async function restoreYptChallenge(challengeId: string): Promise<void> {
  * Permanently deletes a YPT Challenge from Firestore.
  */
 export async function deleteYptChallenge(challengeId: string): Promise<void> {
+  // Optimistically remove challenge from Zustand store
+  useYptStore.getState().optimisticRemoveChallenge(challengeId);
+
   const docRef = doc(db, CHALLENGES_COLLECTION, challengeId);
   await deleteDoc(docRef);
 }
@@ -518,7 +591,10 @@ export async function addYptSubmissionLog(
     timestamp: new Date().toISOString(),
   };
 
-  await setDoc(subDocRef, newSubmission);
+  // Optimistically update Zustand store (0ms UI latency)
+  useYptStore.getState().optimisticAddSubmissionLog(newSubmission);
+
+  await setDoc(subDocRef, sanitizeForFirestore(newSubmission));
 
   // Auto update team points upon adding submission
   await recalculateTeamPointsFromSubmissions(challengeId);
@@ -549,11 +625,15 @@ export async function getYptSubmissionLogs(
 }
 
 /**
- * Real-time listener for submission logs of a specific YPT Challenge.
+ * Real-time listener for submission logs of a specific YPT Challenge with change delta tracking.
  */
-export function subscribeToSubmissionLogs(
+export function subscribeToYptSubmissions(
   challengeId: string,
-  callback: (logs: YptSubmissionLog[]) => void
+  callback: (
+    logs: YptSubmissionLog[],
+    docChanges?: { type: 'added' | 'modified' | 'removed'; item: YptSubmissionLog }[],
+    metadata?: { hasPendingWrites: boolean; fromCache: boolean }
+  ) => void
 ): () => void {
   const subColRef = collection(db, CHALLENGES_COLLECTION, challengeId, "submissions");
   const q = query(subColRef, orderBy("timestamp", "desc"));
@@ -572,13 +652,37 @@ export function subscribeToSubmissionLogs(
           targetDateYmd,
         };
       });
-      callback(logs);
+
+      const changes = snap.docChanges().map((change) => {
+        const data = change.doc.data() as YptSubmissionLog;
+        const targetDateYmd = data.targetDateYmd || data.dateYmd || getLocalYmd(data.timestamp);
+        return {
+          type: change.type as 'added' | 'modified' | 'removed',
+          item: {
+            ...data,
+            id: change.doc.id,
+            challengeId: data.challengeId || challengeId,
+            dateYmd: targetDateYmd,
+            targetDateYmd,
+          },
+        };
+      });
+
+      callback(logs, changes, {
+        hasPendingWrites: snap.metadata.hasPendingWrites,
+        fromCache: snap.metadata.fromCache,
+      });
     },
     (err) => {
       console.warn("Error listening to submission logs:", err);
     }
   );
 }
+
+/**
+ * Alias for subscribeToYptSubmissions.
+ */
+export const subscribeToSubmissionLogs = subscribeToYptSubmissions;
 
 /**
  * Updates submission status (verified / rejected).
@@ -588,6 +692,9 @@ export async function updateYptSubmissionStatus(
   submissionId: string,
   status: "verified" | "rejected"
 ): Promise<void> {
+  // Optimistically update store immediately (0ms UI latency)
+  useYptStore.getState().optimisticUpdateSubmissionStatus(submissionId, status);
+
   const subDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "submissions", submissionId);
   await updateDoc(subDocRef, { status });
   await recalculateTeamPointsFromSubmissions(challengeId);
@@ -824,7 +931,7 @@ export async function batchUpdateMemberLogs(
 
   updates.forEach((update) => {
     const logRef = doc(collection(db, CHALLENGES_COLLECTION, challengeId, "submissions"));
-    batch.set(logRef, {
+    batch.set(logRef, sanitizeForFirestore({
       challengeId,
       dateYmd: update.dateYmd,
       targetDateYmd: update.dateYmd,
@@ -837,7 +944,7 @@ export async function batchUpdateMemberLogs(
       timestamp: new Date().toISOString(),
       rawOcrText: 'Admin Manual Batch Entry',
       submittedByUid: 'admin_batch',
-    });
+    }));
   });
 
   // Executes all writes in a single batch request
@@ -894,10 +1001,61 @@ export async function restoreDaySubmissions(
   const batch = writeBatch(db);
   logsToRestore.forEach((log) => {
     const subDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "submissions", log.id);
-    batch.set(subDocRef, log);
+    batch.set(subDocRef, sanitizeForFirestore(log));
   });
 
   await batch.commit();
   await recalculateTeamPointsFromSubmissions(challengeId);
+}
+
+/**
+ * Resets all global leaderboard data by permanently deleting submission logs across all YPT challenges
+ * and setting team total points back to 0. Available strictly to the application owner.
+ */
+export async function resetGlobalLeaderboardData(): Promise<void> {
+  const challengesCol = collection(db, CHALLENGES_COLLECTION);
+  const challengesSnap = await getDocs(challengesCol);
+
+  for (const challengeDoc of challengesSnap.docs) {
+    const challengeId = challengeDoc.id;
+    const challengeData = challengeDoc.data() as YptChallenge;
+
+    // Delete all submissions in subcollection
+    const subColRef = collection(db, CHALLENGES_COLLECTION, challengeId, "submissions");
+    const subSnap = await getDocs(subColRef);
+
+    if (!subSnap.empty) {
+      let batch = writeBatch(db);
+      let opCount = 0;
+
+      for (const subDoc of subSnap.docs) {
+        batch.delete(subDoc.ref);
+        opCount++;
+        if (opCount >= 450) {
+          await batch.commit();
+          batch = writeBatch(db);
+          opCount = 0;
+        }
+      }
+      if (opCount > 0) {
+        await batch.commit();
+      }
+    }
+
+    // Reset team scores to 0 for this challenge
+    if (Array.isArray(challengeData.teams) && challengeData.teams.length > 0) {
+      const resetTeams = challengeData.teams.map((team) => ({
+        ...team,
+        totalPoints: 0,
+      }));
+      await updateDoc(doc(db, CHALLENGES_COLLECTION, challengeId), {
+        teams: resetTeams,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Force refresh Zustand store
+  useYptStore.getState().forceRefresh();
 }
 

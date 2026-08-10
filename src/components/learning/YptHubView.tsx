@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap } from 'lucide-react';
+import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap, CheckCircle2, RotateCcw, Flag } from 'lucide-react';
 import { useAppStateCtx, useUserProfileCtx } from '../../context/AppContext';
 import { YptChallenge, YptSubmissionLog } from '../../types/yptTypes';
-import { getAllYptChallenges, getYptSubmissionLogs, softDeleteYptChallenge, getRegisteredUserYptList, YptUserEntry, getDeduplicatedDailyMemberStats } from '../../services/yptService';
+import { getAllYptChallenges, getYptSubmissionLogs, softDeleteYptChallenge, reopenYptChallenge, getRegisteredUserYptList, YptUserEntry, getDeduplicatedDailyMemberStats, subscribeToYptSubmissions } from '../../services/yptService';
 import { useYptStore } from '../../store/useYptStore';
 import { CreateYptChallengeModal } from './ypt/CreateYptChallengeModal';
 import { YptUploadModal } from './ypt/YptUploadModal';
 import { YptChallengeDetail } from './ypt/YptChallengeDetail';
 import { YptRecycleBinModal } from './ypt/YptRecycleBinModal';
 import { ConfirmDeleteModal } from './ypt/ConfirmDeleteModal';
-import { formatStudyDuration, areYptHandlesMatching, normalizeHandle, extractAlpha } from '../../utils/yptUtils';
+import { formatStudyDuration, areYptHandlesMatching, normalizeHandle, extractAlpha, formatDisplayYmd } from '../../utils/yptUtils';
 
-type SubViewTab = 'global' | 'challenges' | 'leaderboard';
+type SubViewTab = 'global' | 'challenges' | 'completed' | 'leaderboard';
 type GlobalDateFilter = 'date' | 'allTime';
 
 export interface GlobalMemberStat {
@@ -51,7 +51,26 @@ export function YptHubView() {
     userProfile?.role === 'admin' || 
     Boolean(userProfile?.permissions?.canManageYpt);
 
+  const { isSyncing, lastSyncedAt, isFromCache, forceRefresh } = useYptStore();
+
   const [challenges, setChallenges] = useState<YptChallenge[]>([]);
+  const [timeAgoStr, setTimeAgoStr] = useState<string>('Synced just now');
+
+  useEffect(() => {
+    if (!lastSyncedAt) return;
+    const updateTime = () => {
+      const elapsedSec = Math.floor((Date.now() - new Date(lastSyncedAt).getTime()) / 1000);
+      if (elapsedSec < 10) setTimeAgoStr('Synced just now');
+      else if (elapsedSec < 60) setTimeAgoStr(`Synced ${elapsedSec}s ago`);
+      else {
+        const mins = Math.floor(elapsedSec / 60);
+        setTimeAgoStr(`Synced ${mins}m ago`);
+      }
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 10000);
+    return () => clearInterval(interval);
+  }, [lastSyncedAt]);
   const [allSubmissions, setAllSubmissions] = useState<YptSubmissionLog[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<YptUserEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,38 +88,6 @@ export function YptHubView() {
   const [challengeToDelete, setChallengeToDelete] = useState<YptChallenge | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const fetchAllSubmissions = async (activeChs: YptChallenge[]) => {
-    setLoadingSubmissions(true);
-    try {
-      const subPromises = activeChs.map((c) => getYptSubmissionLogs(c.id));
-      const results = await Promise.all(subPromises);
-      const combined = results.flat();
-      setAllSubmissions(combined);
-    } catch (err) {
-      console.error('Failed to load global submissions:', err);
-    } finally {
-      setLoadingSubmissions(false);
-    }
-  };
-
-  const fetchChallenges = async () => {
-    setLoading(true);
-    try {
-      const [data, users] = await Promise.all([
-        getAllYptChallenges(),
-        getRegisteredUserYptList(),
-      ]);
-      setChallenges(data);
-      setRegisteredUsers(users);
-      const activeChs = data.filter((c) => !c.isDeleted && c.status !== 'deleted');
-      await fetchAllSubmissions(activeChs);
-    } catch (err) {
-      console.error('Failed to load YPT challenges:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const storeChallenges = useYptStore((s) => s.challenges);
   const storeLoading = useYptStore((s) => s.isLoading);
 
@@ -109,7 +96,8 @@ export function YptHubView() {
     const cleanup = useYptStore.getState().cleanupListeners;
 
     init(); // Starts Firestore onSnapshot listener
-    
+    getRegisteredUserYptList().then(setRegisteredUsers).catch(console.error);
+
     return () => {
       cleanup(); // Safely closes listener when leaving tab
     };
@@ -124,17 +112,44 @@ export function YptHubView() {
     }
   }, [storeChallenges, storeLoading]);
 
-  useEffect(() => {
-    fetchChallenges();
-  }, []);
-
-  const activeChallenges = challenges.filter((c) => !c.isDeleted && c.status !== 'deleted');
+  const activeChallenges = challenges.filter((c) => !c.isDeleted && c.status !== 'deleted' && c.status !== 'completed');
+  const completedChallenges = challenges.filter((c) => !c.isDeleted && c.status === 'completed');
   const deletedChallenges = challenges.filter((c) => c.isDeleted || c.status === 'deleted');
 
-  // Compute unique registered handles across all active challenges
+  const allVisibleChallenges = [...activeChallenges, ...completedChallenges];
+
+  // Real-time listener for submission logs across all active & completed challenges
+  const activeIdsKey = allVisibleChallenges.map((c) => c.id).sort().join(',');
+  useEffect(() => {
+    if (!allVisibleChallenges.length) {
+      setAllSubmissions([]);
+      setLoadingSubmissions(false);
+      return;
+    }
+
+    setLoadingSubmissions(true);
+    const unsubs: (() => void)[] = [];
+    const submissionsMap = new Map<string, YptSubmissionLog[]>();
+
+    allVisibleChallenges.forEach((ch) => {
+      const unsub = subscribeToYptSubmissions(ch.id, (logs) => {
+        submissionsMap.set(ch.id, logs);
+        const combined = Array.from(submissionsMap.values()).flat();
+        setAllSubmissions(combined);
+        setLoadingSubmissions(false);
+      });
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((unsub) => unsub());
+    };
+  }, [activeIdsKey]);
+
+  // Compute unique registered handles across all active & completed challenges
   const uniqueRegisteredHandles = Array.from(
     new Set(
-      activeChallenges.flatMap((c) =>
+      allVisibleChallenges.flatMap((c) =>
         c.teams.flatMap((t) => (t.memberUids || []).map((h) => h.replace(/^@/, '').trim().toLowerCase()))
       ).filter(Boolean)
     )
@@ -362,10 +377,9 @@ export function YptHubView() {
     );
     try {
       await softDeleteYptChallenge(targetId);
-      await fetchChallenges();
     } catch (err: any) {
       console.error('Failed to soft delete challenge:', err);
-      fetchChallenges();
+      forceRefresh();
     } finally {
       setIsDeleting(false);
       setChallengeToDelete(null);
@@ -378,13 +392,23 @@ export function YptHubView() {
     setIsCreateModalOpen(true);
   };
 
+  const handleReopenChallenge = async (e: React.MouseEvent, c: YptChallenge) => {
+    e.stopPropagation();
+    try {
+      await reopenYptChallenge(c.id);
+      forceRefresh();
+    } catch (err: any) {
+      console.error('Failed to reopen challenge:', err);
+    }
+  };
+
   if (selectedChallenge) {
     return (
       <YptChallengeDetail
         challenge={selectedChallenge}
         onBack={() => setSelectedChallenge(null)}
         onRefresh={() => {
-          fetchChallenges();
+          forceRefresh();
         }}
       />
     );
@@ -393,19 +417,37 @@ export function YptHubView() {
   return (
     <div data-jarvis-section="YPT Challenges" className="space-y-6">
       {/* Top Banner with Action Buttons */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 sm:p-6 rounded-2xl shadow-xl">
+      <div className="flex flex-row items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-xl">
         <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">YPT Group Challenges</h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-base sm:text-2xl font-extrabold text-white tracking-tight">YPT Group Challenges</h2>
+            
+            {/* Sync Badge */}
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 border border-slate-700 text-slate-300">
+              <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : isFromCache ? 'bg-indigo-400' : 'bg-emerald-400'}`} />
+              <span>{isSyncing ? 'Syncing...' : isFromCache ? 'Cached State' : timeAgoStr}</span>
+            </div>
+          </div>
+          <p className="hidden sm:block text-xs text-slate-400 mt-1">Track study time, complete group challenges, and upload daily logs</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            onClick={() => forceRefresh()}
+            disabled={isSyncing}
+            title="Force Server Sync"
+            className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-all border border-slate-700 flex items-center justify-center disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+          </button>
+
           {canManageYptChallenges && (
             <button
               onClick={() => {
                 setEditingChallenge(null);
                 setIsCreateModalOpen(true);
               }}
-              className="px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+              className="px-3 sm:px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
               <span>Create</span>
@@ -414,7 +456,7 @@ export function YptHubView() {
 
           <button
             onClick={() => setIsUploadModalOpen(true)}
-            className="px-4 py-2.5 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+            className="px-3.5 sm:px-4 py-2 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
           >
             <FileImage className="w-4 h-4" />
             <span>Upload</span>
@@ -444,24 +486,38 @@ export function YptHubView() {
 
           <button
             onClick={() => setActiveTab('challenges')}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'challenges'
                 ? 'bg-indigo-600 text-white shadow-md'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            Active Challenges ({activeChallenges.length})
+            <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Active Challenges ({activeChallenges.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('completed')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'completed'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Flag className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Completed Challenges ({completedChallenges.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('leaderboard')}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === 'leaderboard'
                 ? 'bg-indigo-600 text-white shadow-md'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            Team Rankings
+            <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span>Team Rankings</span>
           </button>
         </div>
 
@@ -483,11 +539,11 @@ export function YptHubView() {
           )}
 
           <button
-            onClick={fetchChallenges}
+            onClick={() => forceRefresh()}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
             title="Refresh List"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -702,16 +758,16 @@ export function YptHubView() {
                           </span>
 
                           {isRank1 ? (
-                            <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-700 dark:text-amber-300 font-extrabold border border-amber-400/30 shrink-0 flex items-center gap-1">
-                              👑 Gold Scholar
+                            <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-700 dark:text-amber-300 font-extrabold border border-amber-400/30 shrink-0 flex items-center justify-center">
+                              👑
                             </span>
                           ) : isRank2 ? (
-                            <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-300/60 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold border border-slate-400/30 shrink-0 flex items-center gap-1">
-                              🥈 Silver Scholar
+                            <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full bg-slate-300/60 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold border border-slate-400/30 shrink-0 flex items-center justify-center">
+                              🥈
                             </span>
                           ) : isRank3 ? (
-                            <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300 font-extrabold border border-orange-500/30 shrink-0 flex items-center gap-1">
-                              🥉 Bronze Scholar
+                            <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300 font-extrabold border border-orange-500/30 shrink-0 flex items-center justify-center">
+                              🥉
                             </span>
                           ) : null}
                         </div>
@@ -781,7 +837,7 @@ export function YptHubView() {
                     <div className="flex items-center gap-1.5 sm:gap-2">
                       <span className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1">
                         <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        {new Date(c.startDate).toLocaleDateString()}
+                        {formatDisplayYmd(c.startDate)}
                       </span>
                       {/* Action buttons on card */}
                       {canManageYptChallenges && (
@@ -833,6 +889,103 @@ export function YptHubView() {
             ))}
           </div>
         )
+      ) : activeTab === 'completed' ? (
+        completedChallenges.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-8 rounded-2xl text-center space-y-3">
+            <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-500/60 mx-auto" />
+            <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">No Completed Challenges Yet</h3>
+            <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto">
+              When an active challenge is concluded and results are published by an admin, it will appear here with final team standings and MVP awards.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            {completedChallenges.map((c) => {
+              const winningTeam = c.teams.find((t) => t.id === c.winningTeamId) || (c.teams.length > 0 ? c.teams.slice().sort((a, b) => b.totalPoints - a.totalPoints)[0] : null);
+              const mvpHandle = c.finalMvpHandle ? `@${c.finalMvpHandle.replace(/^@/, '')}` : null;
+
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => setSelectedChallenge(c)}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 p-3.5 sm:p-5 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group relative"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
+                        🏁 COMPLETED
+                      </span>
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <span className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1 font-mono">
+                          <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          {c.completedAt ? formatDisplayYmd(c.completedAt) : formatDisplayYmd(c.endDate)}
+                        </span>
+                        {canManageYptChallenges && (
+                          <>
+                            <button
+                              onClick={(e) => handleReopenChallenge(e, c)}
+                              className="p-1 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                              title="Re-open Challenge back to Active"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => handleCardDelete(e, c)}
+                              className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                              title="Move to Recycle Bin"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      {c.title}
+                    </h3>
+                    {c.description && (
+                      <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                        {c.description}
+                      </p>
+                    )}
+
+                    {/* Winner Summary Badges */}
+                    <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+                      {winningTeam && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] font-extrabold">
+                          <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Winner: {winningTeam.name} ({winningTeam.totalPoints} XP)</span>
+                        </div>
+                      )}
+                      {mvpHandle && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[11px] font-extrabold font-mono">
+                          <Crown className="w-3.5 h-3.5 text-amber-400" />
+                          <span>MVP: {mvpHandle}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] sm:text-xs">
+                    <div className="flex items-center gap-2.5 sm:gap-3 text-slate-600 dark:text-slate-400 font-medium">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {c.teams.length} Teams
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" /> Final Results Locked
+                      </span>
+                    </div>
+
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5 group-hover:translate-x-1 transition-transform">
+                      View Final Standings <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : (
         /* Team Rankings Tab */
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl space-y-4">
@@ -841,10 +994,10 @@ export function YptHubView() {
           </h3>
 
           <div className="space-y-3">
-            {activeChallenges.flatMap((c) => c.teams).length === 0 ? (
+            {allVisibleChallenges.flatMap((c) => c.teams).length === 0 ? (
               <div className="text-xs text-slate-500 py-4 text-center">No team records found.</div>
             ) : (
-              activeChallenges
+              allVisibleChallenges
                 .flatMap((c) => c.teams.map((t) => ({ ...t, challengeTitle: c.title })))
                 .sort((a, b) => b.totalPoints - a.totalPoints)
                 .map((team, idx) => (
@@ -879,21 +1032,21 @@ export function YptHubView() {
           setEditingChallenge(null);
         }}
         challengeToEdit={editingChallenge}
-        onSuccess={fetchChallenges}
+        onSuccess={() => forceRefresh()}
       />
 
       <YptUploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         challenges={activeChallenges}
-        onSuccess={fetchChallenges}
+        onSuccess={() => forceRefresh()}
       />
 
       <YptRecycleBinModal
         isOpen={isRecycleBinOpen}
         onClose={() => setIsRecycleBinOpen(false)}
         deletedChallenges={deletedChallenges}
-        onRefresh={fetchChallenges}
+        onRefresh={() => forceRefresh()}
       />
 
       <ConfirmDeleteModal

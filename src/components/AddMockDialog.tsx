@@ -268,7 +268,8 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
       }
 
       if (imagesPayload.length > 0) {
-        const modelToUse = activeModel || mockExtractionModel;
+        const subpageModel = localStorage.getItem('geminiModel_practice') || localStorage.getItem('geminiModel');
+        const modelToUse = isModelLocked ? activeModel : (subpageModel || activeModel || mockExtractionModel);
         const extractedData = await parseScorecardImage(imagesPayload, allSubjects, modelToUse);
         
         if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
@@ -448,12 +449,6 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
                 <ImageIcon className="w-5 h-5 text-indigo-500" />
                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">AI Scorecard Upload</h3>
               </div>
-              {isModelLocked && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] font-medium text-amber-800 dark:text-amber-300">
-                  <Lock className="w-3 h-3 text-amber-500 shrink-0" />
-                  <span>🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
-                </div>
-              )}
             </div>
 
             {!isFeatureAllowed ? (

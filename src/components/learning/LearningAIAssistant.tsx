@@ -148,7 +148,8 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     }
 
     try {
-      const modelToUse = activeModel || localStorage.getItem('geminiModel') || 'gemini-2.5-flash';
+      const subpageModel = localStorage.getItem('geminiModel_ai') || localStorage.getItem('geminiModel');
+      const modelToUse = isModelLocked ? activeModel : (subpageModel || activeModel || 'gemini-2.5-flash-lite');
       
       const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, modelToUse, chatMode, customSearchApi, (text, citations) => {
         setIsLoading(false);
@@ -182,7 +183,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
             {isModelLocked && (
               <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-0.5">
                 <Lock className="w-2.5 h-2.5 shrink-0 text-amber-500" />
-                <span>🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
+                <span>{activeModel} (Global Key) • Add personal key to switch model</span>
               </p>
             )}
           </div>

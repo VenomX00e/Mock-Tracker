@@ -80,7 +80,9 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
       }
 
       if (imagesPayload.length > 0) {
-        const extractedData = await parseMockAnnouncementImage(imagesPayload, mockExtractionModel);
+        const subpageModel = localStorage.getItem('geminiModel_practice') || localStorage.getItem('geminiModel');
+        const modelToUse = subpageModel || mockExtractionModel;
+        const extractedData = await parseMockAnnouncementImage(imagesPayload, modelToUse);
         
         if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
         if (extractedData.examRole && !ROLES.includes(extractedData.examRole)) setIsCustomRole(true);

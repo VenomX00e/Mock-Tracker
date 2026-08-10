@@ -42,14 +42,17 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
     } catch (e) {
       // Ignored
     }
-    if (msg.includes('No Gemini API key available') || msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
-       throw new Error("Your personal Gemini API key is missing or invalid. Please configure it in the AI Tutor Settings.");
+    if (msg.includes('No Gemini API key available')) {
+      throw new Error("Your personal Gemini API key is missing. Please configure it in the AI Tutor Settings.");
+    }
+    if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+      throw new Error("Your personal Gemini API key is invalid or rejected by Google. Please check your key in Settings.");
     }
     if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) {
       throw new Error("Quota exceeded for this model. Please check your Gemini API plan limits.");
     }
     if (msg.includes('NOT_FOUND') || msg.includes('404')) {
-      throw new Error(`Model not found or not supported. Please select a different model. Details: ${msg}`);
+      throw new Error(`Model not found or not supported. Details: ${msg}`);
     }
     throw new Error(msg);
   }
@@ -80,22 +83,25 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
       if (line.startsWith('data: ')) {
         const dataStr = line.replace('data: ', '').trim();
         if (dataStr) {
+          let data: any = null;
           try {
-            const data = JSON.parse(dataStr);
-            if (data.error) {
-              throw new Error(data.error);
-            }
-            if (data.text) {
-              fullText += data.text;
-            }
-            if (data.citations) {
-              finalCitations = data.citations;
-            }
-            if (onMessageUpdate) {
-              onMessageUpdate(fullText, finalCitations);
-            }
+            data = JSON.parse(dataStr);
           } catch (e) {
-            // Ignore parse errors from partial chunks if any, although event stream blocks are mostly complete JSON objects.
+            // Ignore parse errors from partial chunks if any
+            continue;
+          }
+
+          if (data?.error) {
+            throw new Error(data.error);
+          }
+          if (data?.text) {
+            fullText += data.text;
+          }
+          if (data?.citations) {
+            finalCitations = data.citations;
+          }
+          if (onMessageUpdate) {
+            onMessageUpdate(fullText, finalCitations);
           }
         }
       }

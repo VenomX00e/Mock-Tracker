@@ -5,7 +5,7 @@ import { YptChallenge, YptExtractedMemberData, YptRuleConfig } from '../../../ty
 import { parseYptScreenshot } from '../../../services/yptOcrService';
 import { addYptSubmissionLog, evaluatePointRule } from '../../../services/yptService';
 import { useAuthCtx } from '../../../context/AppContext';
-import { formatStudyDuration, getLocalYmd } from '../../../utils/yptUtils';
+import { formatStudyDuration, getLocalYmd, getChallengeStartDateYmd, getChallengeEndDateYmd } from '../../../utils/yptUtils';
 import { useGeminiResolution } from '../../../hooks/useGeminiResolution';
 
 interface YptUploadModalProps {
@@ -14,29 +14,48 @@ interface YptUploadModalProps {
   challenges: YptChallenge[];
   onSuccess: () => void;
   initialChallengeId?: string;
+  initialDateYmd?: string;
 }
 
-export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initialChallengeId }: YptUploadModalProps) {
+export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initialChallengeId, initialDateYmd }: YptUploadModalProps) {
   const { user } = useAuthCtx();
   const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('ypt_screenshot_parser');
+
+  // Filter available challenges when uploading from outside (only active and end date >= today)
+  const availableChallenges = React.useMemo(() => {
+    const todayStr = getLocalYmd(new Date());
+    return challenges.filter((c) => {
+      if (initialChallengeId && c.id === initialChallengeId) return true;
+      if (c.isDeleted || c.status === 'deleted' || c.status === 'completed') return false;
+      const endYmd = getChallengeEndDateYmd(c);
+      return todayStr <= endYmd;
+    });
+  }, [challenges, initialChallengeId]);
+
   const [selectedChallengeId, setSelectedChallengeId] = useState<string>(
-    initialChallengeId || challenges[0]?.id || ''
+    initialChallengeId || availableChallenges[0]?.id || ''
   );
-  const [selectedDateYmd, setSelectedDateYmd] = useState<string>(getLocalYmd(new Date()));
+  const [selectedDateYmd, setSelectedDateYmd] = useState<string>(
+    initialDateYmd || getLocalYmd(new Date())
+  );
 
   useEffect(() => {
     if (initialChallengeId) {
       setSelectedChallengeId(initialChallengeId);
-    } else if (challenges.length > 0 && (!selectedChallengeId || !challenges.some(c => c.id === selectedChallengeId))) {
-      setSelectedChallengeId(challenges[0].id);
+    } else if (availableChallenges.length > 0 && (!selectedChallengeId || !availableChallenges.some(c => c.id === selectedChallengeId))) {
+      setSelectedChallengeId(availableChallenges[0].id);
     }
-  }, [initialChallengeId, challenges, isOpen]);
+  }, [initialChallengeId, availableChallenges, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedDateYmd(getLocalYmd(new Date()));
+      if (initialDateYmd) {
+        setSelectedDateYmd(initialDateYmd);
+      } else {
+        setSelectedDateYmd(getLocalYmd(new Date()));
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialDateYmd]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -47,8 +66,6 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
   const [error, setError] = useState<string>('');
 
   const [extractedData, setExtractedData] = useState<YptExtractedMemberData[] | null>(null);
-
-  if (!isOpen) return null;
 
   const handleFileChange = (file: File) => {
     setError('');
@@ -100,10 +117,12 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
     setError('');
 
     try {
+      const subpageModel = localStorage.getItem('geminiModel_ypt') || localStorage.getItem('geminiModel');
+      const modelToUse = isModelLocked ? activeModel : (subpageModel || activeModel || 'gemini-2.5-flash-lite');
       const results = await parseYptScreenshot(
         { base64: imageBase64, mimeType },
         currentChallenge.rules,
-        activeModel
+        modelToUse
       );
       setExtractedData(results);
     } catch (err: any) {
@@ -129,13 +148,26 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
       penaltyPoints: 5,
     };
 
-    const pointsPerStudyHour = rules.pointsPerStudyHour ?? 2;
-    const noStudyThreshold = rules.noStudyPenaltyThresholdHours ?? 3;
-    const penaltyPoints = rules.penaltyPoints ?? 5;
+    let baseIntervalInHours = 1;
+    if (rules.studyIntervalValue && rules.studyIntervalValue > 0) {
+      baseIntervalInHours = rules.studyIntervalUnit === 'minutes'
+        ? rules.studyIntervalValue / 60
+        : rules.studyIntervalValue;
+    }
+    const intervalsCompleted = baseIntervalInHours > 0 ? Math.floor(member.hoursStudied / baseIntervalInHours) : Math.floor(member.hoursStudied);
+    const ptsPerInt = typeof rules.pointsPerInterval === 'number'
+      ? rules.pointsPerInterval
+      : (rules.pointsPerStudyHour ?? 2);
+    let points = intervalsCompleted * ptsPerInt;
 
-    let points = Math.floor(member.hoursStudied) * pointsPerStudyHour;
-    if (member.hoursStudied < noStudyThreshold) {
-      points -= penaltyPoints;
+    let penThreshHours = rules.noStudyPenaltyThresholdHours || 0;
+    if (rules.penaltyThresholdValue && rules.penaltyThresholdValue > 0) {
+      penThreshHours = rules.penaltyThresholdUnit === 'minutes'
+        ? rules.penaltyThresholdValue / 60
+        : rules.penaltyThresholdValue;
+    }
+    if (penThreshHours > 0 && member.hoursStudied < penThreshHours) {
+      points -= (rules.penaltyPoints || 5);
     }
 
     const detectedRules: Array<{ ruleId?: string; ruleName: string; emoji: string; points: number }> = [];
@@ -203,34 +235,27 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
   // Challenge Start Date & Date Navigation Helpers
   const currentChallenge = challenges.find((c) => c.id === selectedChallengeId);
 
-  const getChallengeStartDateYmd = (challenge?: YptChallenge | null): string => {
-    if (!challenge || !challenge.startDate) {
-      const d = new Date();
-      d.setDate(d.getDate() - 30);
-      return getLocalYmd(d);
-    }
-    const raw = String(challenge.startDate).trim();
-    if (raw.includes('T')) {
-      const ymd = raw.split('T')[0];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
-    }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      return raw;
-    }
-    const parsed = new Date(raw);
-    if (!isNaN(parsed.getTime())) {
-      return getLocalYmd(parsed);
-    }
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return getLocalYmd(d);
-  };
-
   const minAllowedDateYmd = getChallengeStartDateYmd(currentChallenge);
+  const maxAllowedDateYmd = getChallengeEndDateYmd(currentChallenge);
   const todayYmd = getLocalYmd(new Date());
+  const upperLimitDateYmd = maxAllowedDateYmd < todayYmd ? maxAllowedDateYmd : todayYmd;
+
+  useEffect(() => {
+    if (!currentChallenge) return;
+    const minD = getChallengeStartDateYmd(currentChallenge);
+    const maxD = getChallengeEndDateYmd(currentChallenge);
+    const today = getLocalYmd(new Date());
+    const limitD = maxD < today ? maxD : today;
+
+    if (selectedDateYmd > limitD) {
+      setSelectedDateYmd(limitD);
+    } else if (selectedDateYmd < minD) {
+      setSelectedDateYmd(minD);
+    }
+  }, [currentChallenge?.id, currentChallenge?.startDate, currentChallenge?.endDate]);
 
   const isPrevDisabled = selectedDateYmd <= minAllowedDateYmd;
-  const isNextDisabled = selectedDateYmd >= todayYmd;
+  const isNextDisabled = selectedDateYmd >= upperLimitDateYmd;
 
   const getDayOffset = (dateYmd: string): number => {
     const todayStr = getLocalYmd(new Date());
@@ -282,7 +307,7 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
       const dateObj = new Date(y, m - 1, d);
       dateObj.setDate(dateObj.getDate() + 1);
       const nextYmd = getLocalYmd(dateObj);
-      if (nextYmd <= todayYmd) {
+      if (nextYmd <= upperLimitDateYmd) {
         setSelectedDateYmd(nextYmd);
       }
     }
@@ -328,7 +353,7 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
       {/* Backdrop overlay */}
       <div 
         onClick={onClose}
@@ -336,11 +361,11 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
       />
 
       {/* Modal panel body */}
-      <div className="relative w-full max-w-3xl bg-white dark:bg-[#0F0F16] border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-2xl text-slate-800 dark:text-slate-100 max-h-[90vh] flex flex-col z-10 my-auto">
+      <div className="relative w-full max-w-3xl bg-white dark:bg-[#0F0F16] border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl text-slate-800 dark:text-slate-100 max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col min-h-0 z-10 my-auto">
         {/* Top Banner Header */}
-        <div className="relative p-5 sm:p-7 bg-gradient-to-b from-indigo-50/80 via-indigo-50/20 to-transparent dark:from-indigo-950/40 dark:via-indigo-950/10 dark:to-transparent border-b border-slate-100 dark:border-slate-800/80 shrink-0 select-none">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold text-[10px] uppercase tracking-widest rounded-full flex items-center gap-1.5">
+        <div className="relative p-3.5 sm:p-5 bg-gradient-to-b from-indigo-50/80 via-indigo-50/20 to-transparent dark:from-indigo-950/40 dark:via-indigo-950/10 dark:to-transparent border-b border-slate-100 dark:border-slate-800/80 shrink-0 select-none">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold text-[10px] uppercase tracking-widest rounded-full flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
               <span>YPT AI VERIFICATION</span>
             </span>
@@ -355,22 +380,22 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
             </button>
           </div>
 
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h3 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             AI YPT Screenshot Verification
           </h3>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Extract study duration and calculate points with Gemini Vision AI.
           </p>
           {isModelLocked && (
-            <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] font-medium text-amber-800 dark:text-amber-300">
               <Lock className="w-3 h-3 text-amber-500 shrink-0" />
-              <span>🔒 Model locked to [{activeModel}] (Using Admin Global Key)</span>
+              <span>{activeModel} (Global Key) • Add personal key to switch model</span>
             </div>
           )}
         </div>
 
         {/* Scrollable Modal Content */}
-        <div className="p-5 sm:p-7 space-y-5 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 min-h-0">
           {!isFeatureAllowed && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
               <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -419,12 +444,12 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
                 onChange={(e) => setSelectedChallengeId(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:text-white font-medium"
               >
-                {challenges.length === 0 ? (
-                  <option value="">No Active Challenges Found</option>
+                {availableChallenges.length === 0 ? (
+                  <option value="">No Active Challenges Available</option>
                 ) : (
-                  challenges.map((c) => (
+                  availableChallenges.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.title} ({c.status})
+                      {c.title}
                     </option>
                   ))
                 )}
@@ -666,16 +691,52 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
                       </div>
 
                       {/* Points Earned & Audit Breakdown */}
-                      <div className="col-span-2 text-right">
-                        <div className={`font-black text-sm ${m.pointsEarned >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                          {m.pointsEarned >= 0 ? `+${m.pointsEarned}` : m.pointsEarned} XP
-                        </div>
-                        {Array.isArray(m.detectedRules) && m.detectedRules.length > 0 && (
-                          <div className="text-[10px] text-slate-400 font-medium truncate" title={m.detectedRules.map((r) => `${r.emoji} ${r.ruleName}`).join(', ')}>
-                            {m.detectedRules.map((r) => r.emoji).join(' ')}
+                      {(() => {
+                        let baseIntervalInHours = 1;
+                        if (rules?.studyIntervalValue && rules.studyIntervalValue > 0) {
+                          baseIntervalInHours = rules.studyIntervalUnit === 'minutes'
+                            ? rules.studyIntervalValue / 60
+                            : rules.studyIntervalValue;
+                        }
+                        const intervalsCompleted = baseIntervalInHours > 0 ? Math.floor(m.hoursStudied / baseIntervalInHours) : Math.floor(m.hoursStudied);
+                        const ptsPerInt = typeof rules?.pointsPerInterval === 'number'
+                          ? rules.pointsPerInterval
+                          : (rules?.pointsPerStudyHour ?? 2);
+                        const baseStudyPts = intervalsCompleted * ptsPerInt;
+
+                        let penThreshHours = rules?.noStudyPenaltyThresholdHours || 0;
+                        if (rules?.penaltyThresholdValue && rules.penaltyThresholdValue > 0) {
+                          penThreshHours = rules.penaltyThresholdUnit === 'minutes'
+                            ? rules.penaltyThresholdValue / 60
+                            : rules.penaltyThresholdValue;
+                        }
+                        let penaltyPts = 0;
+                        if (penThreshHours > 0 && m.hoursStudied < penThreshHours) {
+                          penaltyPts = rules?.penaltyPoints ?? 5;
+                        }
+
+                        const ruleTerms = Array.isArray(m.detectedRules)
+                          ? m.detectedRules.map((r) => (r.points >= 0 ? `+${r.points}` : `${r.points}`))
+                          : [];
+                        const penaltyTerm = penaltyPts > 0 ? `-${penaltyPts}` : '';
+                        const breakdownExpr = `(${baseStudyPts}${penaltyTerm}${ruleTerms.join('')})`;
+
+                        return (
+                          <div className="col-span-2 text-right flex flex-col items-end justify-center gap-0.5">
+                            <div className={`font-black text-sm ${m.pointsEarned >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                              {m.pointsEarned >= 0 ? `+${m.pointsEarned}` : m.pointsEarned} XP
+                            </div>
+                            {Array.isArray(m.detectedRules) && m.detectedRules.length > 0 && (
+                              <div className="text-[11px] leading-tight text-slate-400 font-medium" title={m.detectedRules.map((r) => `${r.emoji} ${r.ruleName} (${r.points >= 0 ? '+' : ''}${r.points})`).join(', ')}>
+                                {m.detectedRules.map((r) => r.emoji).join(' ')}
+                              </div>
+                            )}
+                            <div className="font-mono text-[10px] text-slate-400 dark:text-slate-400 font-semibold leading-tight">
+                              {breakdownExpr}
+                            </div>
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -686,7 +747,7 @@ export function YptUploadModal({ isOpen, onClose, challenges, onSuccess, initial
         </div>
 
         {/* Sticky Submit Actions Footer */}
-        <div className="flex items-center justify-end gap-3 p-4 bg-slate-50/50 dark:bg-slate-950/50 border-t border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-center justify-end gap-3 p-4 sm:px-6 bg-slate-50 dark:bg-[#0B0B11] border-t border-slate-200 dark:border-slate-800/80 shrink-0 z-20">
           <button
             type="button"
             onClick={onClose}

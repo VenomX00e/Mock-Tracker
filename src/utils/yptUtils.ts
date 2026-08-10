@@ -15,12 +15,117 @@ export function formatStudyDuration(decimalHours: number): string {
  * Returns YYYY-MM-DD string for a local Date object.
  */
 export function getLocalYmd(dateInput: Date | string | number): string {
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      return match[1];
+    }
+  }
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return '';
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Safely extracts YYYY-MM-DD from any date, string, or Firestore timestamp object
+ * without suffering UTC midnight or timezone shift bugs.
+ */
+export function getYmdFromDateOrString(val: any): string {
+  if (!val) return getLocalYmd(new Date());
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  let d: Date | null = null;
+  let isoYmd = '';
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      isoYmd = match[1];
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      d = parsed;
+    }
+  } else if (typeof val === 'object' && val !== null) {
+    if (typeof val.toDate === 'function') {
+      d = val.toDate();
+    } else if (typeof val.seconds === 'number') {
+      d = new Date(val.seconds * 1000);
+    } else if (val instanceof Date) {
+      d = val;
+    }
+  } else if (typeof val === 'number') {
+    const parsed = new Date(val);
+    if (!isNaN(parsed.getTime())) {
+      d = parsed;
+    }
+  }
+
+  let localYmd = '';
+  if (d && !isNaN(d.getTime())) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    localYmd = `${year}-${month}-${day}`;
+  }
+
+  if (isoYmd && localYmd) {
+    // If localYmd shifted to previous day (e.g., UTC midnight in US) or isoYmd shifted back due to 18:30 UTC IST offset,
+    // take the maximum of isoYmd and localYmd so the end date is never truncated.
+    return localYmd > isoYmd ? localYmd : isoYmd;
+  }
+
+  if (localYmd) return localYmd;
+  if (isoYmd) return isoYmd;
+
+  return getLocalYmd(new Date());
+}
+
+/**
+ * Safely formats YYYY-MM-DD or date/timestamp into local display date string (e.g., "Aug 6, 2026")
+ * without suffering timezone shift bugs.
+ */
+export function formatDisplayYmd(val: any, options?: Intl.DateTimeFormatOptions): string {
+  if (!val) return '';
+  const ymd = getYmdFromDateOrString(val);
+  if (!ymd) return '';
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return String(val);
+  const dateObj = new Date(y, m - 1, d);
+  return dateObj.toLocaleDateString(undefined, options || { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function getChallengeStartDateYmd(ch?: { startDate?: any; createdAt?: any } | null): string {
+  if (!ch) {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return getLocalYmd(d);
+  }
+  const raw = ch.startDate || ch.createdAt;
+  if (!raw) {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return getLocalYmd(d);
+  }
+  return getYmdFromDateOrString(raw);
+}
+
+export function getChallengeEndDateYmd(ch?: { endDate?: any } | null): string {
+  if (!ch || !ch.endDate) {
+    return getLocalYmd(new Date());
+  }
+  return getYmdFromDateOrString(ch.endDate);
 }
 
 /**
