@@ -6,8 +6,58 @@ import { db } from '../services/firebase';
 export function AdminMigrationTool() {
   const [loading, setLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [yptCleanupLoading, setYptCleanupLoading] = useState(false);
   const [result, setResult] = useState('');
   const [activityResult, setActivityResult] = useState('');
+  const [yptCleanupResult, setYptCleanupResult] = useState('');
+
+  const runYptNamesCleanup = async () => {
+    if (!window.confirm("Are you sure you want to remove all saved YPT usernames from all user profiles in the database?")) return;
+    setYptCleanupLoading(true);
+    setYptCleanupResult('Starting cleanup... fetching user profiles...');
+    try {
+      const usersRef = collection(db, 'users');
+      const usersSnap = await getDocs(usersRef);
+      let batch = writeBatch(db);
+      let count = 0;
+      let cleanedUsers = 0;
+
+      for (const userDoc of usersSnap.docs) {
+        const data = userDoc.data();
+        const hasYptNames = data.yptNames !== undefined;
+        const hasYptName = data.yptName !== undefined;
+        const hasDefaultYpt = data.defaultYptHandle !== undefined;
+
+        if (hasYptNames || hasYptName || hasDefaultYpt) {
+          const updateData: any = {};
+          if (hasYptNames) updateData.yptNames = deleteField();
+          if (hasYptName) updateData.yptName = deleteField();
+          if (hasDefaultYpt) updateData.defaultYptHandle = deleteField();
+
+          batch.update(userDoc.ref, updateData);
+          cleanedUsers++;
+          count++;
+
+          if (count === 490) {
+            await batch.commit();
+            batch = writeBatch(db);
+            count = 0;
+          }
+        }
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      setYptCleanupResult(`Cleanup complete! Removed stored YPT usernames from ${cleanedUsers} user profile(s).`);
+    } catch (error: any) {
+      console.error(error);
+      setYptCleanupResult(`Error: ${error.message}`);
+    } finally {
+      setYptCleanupLoading(false);
+    }
+  };
 
   const runMigration = async () => {
     if (!window.confirm("Are you sure you want to run the dynamic subjects migration? This will affect all mock tests across all users. Make sure to back up data if necessary.")) return;
@@ -189,6 +239,37 @@ export function AdminMigrationTool() {
           </div>
       </div>
       
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mt-6">
+          <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-900/50 px-5 py-4">
+              <h3 className="text-[15px] font-semibold text-amber-700 dark:text-amber-400">YPT Profile Usernames Cleanup</h3>
+          </div>
+          <div className="p-5">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                  Since manual YPT usernames are no longer needed on profiles, this utility cleans up legacy <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-amber-600 dark:text-amber-400">yptNames</code> and <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-amber-600 dark:text-amber-400">defaultYptHandle</code> fields across all user profile documents.
+              </p>
+              
+              <button 
+                  onClick={runYptNamesCleanup} 
+                  disabled={yptCleanupLoading}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg shadow disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                  {yptCleanupLoading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                  )}
+                  {yptCleanupLoading ? "Cleaning Up..." : "Remove Stored YPT Usernames From Profiles"}
+              </button>
+
+              {yptCleanupResult && (
+                  <div className={`mt-5 p-4 rounded-lg text-sm border ${yptCleanupResult.startsWith('Error') ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-900/50 dark:text-emerald-400'}`}>
+                      {yptCleanupResult}
+                  </div>
+              )}
+          </div>
+      </div>
+
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mt-6">
           <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-900/50 px-5 py-4">
               <h3 className="text-[15px] font-semibold text-red-700 dark:text-red-400">Danger Zone: Legacy Data Migration</h3>

@@ -1,5 +1,5 @@
 import React from "react";
-import { Shield, Users, Radio, FileText, Timer, Settings, ArrowLeft, Search, GraduationCap, ToggleLeft, Sparkles } from "lucide-react";
+import { Shield, Users, Radio, FileText, Timer, Settings, ArrowLeft, Search, GraduationCap, ToggleLeft, Sparkles, Sliders } from "lucide-react";
 
 interface AdminSidebarNavProps {
   isOwner: boolean;
@@ -238,6 +238,19 @@ export function AdminSidebarNav({
                     className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "learning" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
                   >
                     <GraduationCap className="w-4 h-4" /> Learning
+                  </button>
+                )}
+                {(isOwner || adminPermissions?.canManageLearning || adminPermissions?.canManageSettings) && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("learning-settings");
+                      setAdminCategoryScope(
+                        isForcedCategory ? currentCategory || null : null,
+                      );
+                    }}
+                    className={`whitespace-nowrap shrink-0 md:shrink w-auto md:w-full flex items-center gap-2 md:gap-3 px-4 py-2 md:py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === "learning-settings" ? "bg-white dark:bg-slate-800 shadow-sm text-indigo-600 dark:text-indigo-400 border border-slate-100 dark:border-slate-700" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"}`}
+                  >
+                    <Sliders className="w-4 h-4 text-indigo-500" /> Learning Settings
                   </button>
                 )}
               </div>

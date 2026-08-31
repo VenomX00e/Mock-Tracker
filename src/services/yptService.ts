@@ -13,12 +13,272 @@ import {
   Timestamp,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "./firebase";
-import { YptChallenge, YptCustomRule, YptExtractedMemberData, YptSubmissionLog, YptTeam } from "../types/yptTypes";
-import { getLocalYmd, areYptHandlesMatching, normalizeHandle, extractAlpha } from "../utils/yptUtils";
+import { db, auth } from "./firebase";
+import { YptChallenge, YptCustomRule, YptExtractedMemberData, YptSubmissionLog, YptTeam, YptApiGroup, YptApiMember, YptApiNativeChallenge, YptDailyDaySnapshot } from "../types/yptTypes";
+import {
+  getLocalYmd,
+  getYptDayYmd,
+  getYesterdayYptDayYmd,
+  applyHighWaterMark,
+  isYptReconciliationWindow,
+  getIstDate,
+  areYptHandlesMatching,
+  normalizeHandle,
+  extractAlpha,
+  getChallengeStartDateYmd,
+  getChallengeEndDateYmd,
+  getMemberStudyHoursFromApi,
+} from "../utils/yptUtils";
 import { useYptStore } from "../store/useYptStore";
 
 const CHALLENGES_COLLECTION = "yptChallenges";
+
+export function getYptStoredCredentials() {
+  const email = localStorage.getItem("ypt_email") || "";
+  const password = localStorage.getItem("ypt_password") || "";
+  const token = localStorage.getItem("ypt_token") || "";
+  return { email, password, token };
+}
+
+export function saveYptCredentials(email: string, password?: string, token?: string) {
+  if (email !== undefined) localStorage.setItem("ypt_email", email.trim());
+  if (password !== undefined) localStorage.setItem("ypt_password", password);
+  if (token !== undefined) localStorage.setItem("ypt_token", token.trim());
+}
+
+export function clearYptCredentials() {
+  localStorage.removeItem("ypt_email");
+  localStorage.removeItem("ypt_password");
+  localStorage.removeItem("ypt_token");
+}
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const currentUser = auth.currentUser;
+  const headers: Record<string, string> = {};
+  if (currentUser) {
+    const token = await currentUser.getIdToken();
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const { email, password, token: yptToken } = getYptStoredCredentials();
+  if (email) headers["x-ypt-email"] = email;
+  if (password) headers["x-ypt-password"] = password;
+  if (yptToken) headers["x-ypt-token"] = yptToken;
+
+  return headers;
+}
+
+/**
+ * Fetches joined YPT groups from the server proxy (/api/ypt/live-sync?action=get-groups).
+ */
+export async function fetchYptGroups(customCreds?: { email?: string; password?: string; token?: string }): Promise<{ groups: YptApiGroup[]; isDemo?: boolean; message?: string }> {
+  const headers = await getAuthHeader();
+  if (customCreds?.email) headers["x-ypt-email"] = customCreds.email;
+  if (customCreds?.password) headers["x-ypt-password"] = customCreds.password;
+  if (customCreds?.token) headers["x-ypt-token"] = customCreds.token;
+
+  const res = await fetch("/api/ypt/live-sync?action=get-groups", { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Failed to fetch YPT groups (${res.status})`);
+  }
+  const data = await res.json();
+  return {
+    groups: data.groups || [],
+    isDemo: data.isDemo,
+    message: data.message,
+  };
+}
+
+/**
+ * Fetches member rosters, study logs, and native challenge states from the server proxy.
+ */
+export async function fetchYptRoster(groupIds?: (number | string)[]): Promise<{
+  roster: YptApiMember[];
+  groups: YptApiGroup[];
+  nativeChallenges: YptApiNativeChallenge[];
+}> {
+  const headers = await getAuthHeader();
+  const gidsParam = Array.isArray(groupIds) && groupIds.length > 0 ? `&groupIds=${groupIds.join(",")}` : "";
+  const res = await fetch(`/api/ypt/live-sync?action=get-roster${gidsParam}`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Failed to fetch YPT roster (${res.status})`);
+  }
+  const data = await res.json();
+  return {
+    roster: data.roster || data.members || [],
+    groups: data.groups || [],
+    nativeChallenges: data.nativeChallenges || [],
+  };
+}
+
+export interface YptDayLogSubject {
+  id: number | string;
+  name: string;
+  sm: number;
+  hours: number;
+  color?: string;
+}
+
+export interface YptDayLogResponse {
+  date: string;
+  totalMs: number;
+  studyHours: number;
+  subjects: YptDayLogSubject[];
+  isDemo?: boolean;
+  raw?: any;
+  error?: string;
+}
+
+/**
+ * Fetches real historical study logs from YPT for a given date (YYYY-MM-DD) via GET /logs/day?date=YYYY-MM-DD.
+ */
+export async function fetchYptDayLog(
+  dateYmd: string,
+  customCreds?: { email?: string; password?: string; token?: string }
+): Promise<YptDayLogResponse> {
+  const headers = await getAuthHeader();
+  if (customCreds?.email) headers["x-ypt-email"] = customCreds.email;
+  if (customCreds?.password) headers["x-ypt-password"] = customCreds.password;
+  if (customCreds?.token) headers["x-ypt-token"] = customCreds.token;
+
+  const res = await fetch(`/api/ypt/live-sync?action=get-day-log&date=${encodeURIComponent(dateYmd)}`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Failed to fetch YPT day log (${res.status})`);
+  }
+  const data = await res.json();
+  return {
+    date: data.date || dateYmd,
+    totalMs: data.totalMs || 0,
+    studyHours: data.studyHours || 0,
+    subjects: data.subjects || [],
+    isDemo: data.isDemo,
+    raw: data.raw,
+    error: data.error,
+  };
+}
+
+/**
+ * Fetches historical study logs from YPT for multiple dates in batch.
+ */
+export async function fetchYptDayLogs(
+  dateYmds: string[],
+  customCreds?: { email?: string; password?: string; token?: string }
+): Promise<YptDayLogResponse[]> {
+  if (!dateYmds || dateYmds.length === 0) return [];
+  const headers = await getAuthHeader();
+  if (customCreds?.email) headers["x-ypt-email"] = customCreds.email;
+  if (customCreds?.password) headers["x-ypt-password"] = customCreds.password;
+  if (customCreds?.token) headers["x-ypt-token"] = customCreds.token;
+
+  const datesParam = dateYmds.join(",");
+  const res = await fetch(`/api/ypt/live-sync?action=get-day-logs&dates=${encodeURIComponent(datesParam)}`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Failed to fetch YPT day logs (${res.status})`);
+  }
+  const data = await res.json();
+  return (data.dayLogs || []).map((d: any) => ({
+    date: d.date,
+    totalMs: d.totalMs || 0,
+    studyHours: d.studyHours || 0,
+    subjects: d.subjects || [],
+    isDemo: d.isDemo,
+    raw: d.raw,
+    error: d.error,
+  }));
+}
+
+/**
+ * Binds a user's Firebase account to their permanent YPT User ID (yptUd) in Firestore.
+ */
+export async function claimYptIdentity(
+  appUserId: string,
+  yptUd: number,
+  yptHandle: string
+): Promise<void> {
+  const userRef = doc(db, "users", appUserId);
+  const userSnap = await getDoc(userRef);
+
+  let existingNames: string[] = [];
+  if (userSnap.exists()) {
+    const data = userSnap.data();
+    if (Array.isArray(data.yptNames)) existingNames = data.yptNames;
+    else if (data.yptName) existingNames = [data.yptName];
+  }
+
+  const cleanHandle = yptHandle.trim();
+  const updatedNames = Array.from(new Set([...existingNames, cleanHandle]));
+
+  await setDoc(
+    userRef,
+    {
+      yptUd,
+      yptName: cleanHandle,
+      yptNames: updatedNames,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Matches YPT roster members against registered Firebase users in Firestore using yptUd first,
+ * falling back to handle matching.
+ */
+export async function linkYptRosterToAppUsers(rosterMembers: YptApiMember[]): Promise<
+  Array<{
+    yptMember: YptApiMember;
+    appUserId?: string;
+    matchedHandle: string;
+  }>
+> {
+  const usersRef = collection(db, "users");
+  const usersSnap = await getDocs(usersRef);
+
+  const appUsers: Array<{
+    uid: string;
+    yptUd?: number;
+    displayName?: string;
+    yptNames: string[];
+  }> = [];
+
+  usersSnap.forEach((docSnap) => {
+    const data = docSnap.data();
+    const names = new Set<string>();
+    if (Array.isArray(data.yptNames)) {
+      data.yptNames.forEach((n: string) => n && names.add(String(n).trim()));
+    }
+    if (data.yptName) names.add(String(data.yptName).trim());
+    if (data.displayName) names.add(String(data.displayName).trim());
+
+    appUsers.push({
+      uid: docSnap.id,
+      yptUd: typeof data.yptUd === "number" ? data.yptUd : undefined,
+      displayName: data.displayName,
+      yptNames: Array.from(names),
+    });
+  });
+
+  return rosterMembers.map((member) => {
+    let matchedUser = appUsers.find((u) => u.yptUd === member.ud);
+
+    if (!matchedUser) {
+      const handleLower = member.n.toLowerCase().trim();
+      matchedUser = appUsers.find((u) =>
+        u.yptNames.some((name) => name.toLowerCase().trim() === handleLower)
+      );
+    }
+
+    return {
+      yptMember: member,
+      appUserId: matchedUser?.uid,
+      matchedHandle: matchedUser?.displayName || member.n,
+    };
+  });
+}
 
 export interface DailyMemberStat {
   memberHandle: string;
@@ -26,6 +286,8 @@ export interface DailyMemberStat {
   dateYmd: string;
   challengeId: string;
   hoursStudied: number;
+  maxContinuousMs?: number;
+  isStudyingCurrently?: boolean;
   pointsEarned: number;
   detectedRules?: Array<{
     ruleId?: string;
@@ -39,20 +301,29 @@ export interface DailyMemberStat {
 }
 
 /**
- * Evaluates whether a custom point rule condition matches based on detected emojis, study hours, and morning snap status.
+ * Evaluates whether a custom point rule condition matches based on detected emojis, completed native YPT challenges, study hours, and morning snap status.
  */
 export function evaluatePointRule(
   rule: YptCustomRule,
   detectedEmojis: string[] = [],
   hoursStudied: number = 0,
-  hasSnap: boolean = false
+  hasSnap: boolean = false,
+  completedNativeChallengeIds: number[] = []
 ): boolean {
   if (!rule || !rule.name) return false;
 
   const ruleEmoji = rule.emoji ? String(rule.emoji).trim() : '';
   const nameLower = rule.name.toLowerCase();
 
+  const isNativeChallengeCompleted =
+    Boolean(
+      rule.nativeChallengeId &&
+      (completedNativeChallengeIds.includes(Number(rule.nativeChallengeId)) ||
+       completedNativeChallengeIds.map(String).includes(String(rule.nativeChallengeId)))
+    );
+
   const emojiMatched =
+    isNativeChallengeCompleted ||
     Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
     Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'));
 
@@ -76,37 +347,48 @@ export function evaluatePointRule(
 
 /**
  * Calculates base points, penalties, and custom rule evaluations for a member's daily study record.
+ * @param applyPenalty Set to false during active open live day to avoid premature penalties while studying.
+ * @param maxContinuousMs Maximum continuous study session duration in milliseconds (dl.mm).
  */
 export function calculatePointsFromRules(
   hoursStudied: number,
   rules: YptChallenge['rules'],
   detectedEmojis: string[] = [],
-  hasSnap: boolean = false
+  hasSnap: boolean = false,
+  completedNativeChallengeIds: number[] = [],
+  applyPenalty: boolean = true,
+  maxContinuousMs: number = 0
 ): { totalPoints: number; appliedRules: Array<{ ruleId?: string; ruleName: string; emoji: string; points: number }> } {
-  const intervalVal = rules.studyIntervalValue ?? 1;
-  const intervalUnit = rules.studyIntervalUnit ?? 'hours';
+  const intervalVal = rules?.studyIntervalValue ?? 1;
+  const intervalUnit = rules?.studyIntervalUnit ?? 'hours';
   const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
-  const ptsPerInterval = rules.pointsPerInterval ?? rules.pointsPerStudyHour ?? 1;
+  const ptsPerInterval = rules?.pointsPerInterval ?? rules?.pointsPerStudyHour ?? 1;
 
   const baseStudyPoints = Math.floor(hoursStudied / (intervalHours || 1)) * ptsPerInterval;
 
-  const penaltyThresholdVal = rules.penaltyThresholdValue ?? rules.noStudyPenaltyThresholdHours ?? 3;
-  const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
+  const penaltyThresholdVal = rules?.penaltyThresholdValue ?? rules?.noStudyPenaltyThresholdHours ?? 3;
+  const penaltyThresholdUnit = rules?.penaltyThresholdUnit ?? 'hours';
   const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
 
-  const isPenalized = hoursStudied < penaltyThresholdHours;
-  const penaltyDeduction = isPenalized ? (rules.penaltyPoints || 0) : 0;
+  // The Penalty Gatekeeper: apply penalty ONLY if applyPenalty is true AND hoursStudied < threshold
+  const isPenalized = applyPenalty && hoursStudied < penaltyThresholdHours;
+  const penaltyDeduction = isPenalized ? (rules?.penaltyPoints || 0) : 0;
 
   const appliedRules: Array<{ ruleId?: string; ruleName: string; emoji: string; points: number }> = [];
   let customRulePointsSum = 0;
 
-  if (Array.isArray(rules.customRules)) {
+  if (Array.isArray(rules?.customRules)) {
     for (const cr of rules.customRules) {
-      if (evaluatePointRule(cr, detectedEmojis, hoursStudied, hasSnap)) {
+      if (evaluatePointRule(cr, detectedEmojis, hoursStudied, hasSnap, completedNativeChallengeIds)) {
         const p = Number(cr.points) || 0;
         const awardedPts = cr.type === 'bonus' ? p : -p;
         const isTeamAll = cr.scope === 'team_all';
         const effectivePts = isTeamAll ? 0 : awardedPts;
+
+        // Custom penalties should also respect the applyPenalty gatekeeper
+        if (effectivePts < 0 && !applyPenalty) {
+          continue;
+        }
 
         customRulePointsSum += effectivePts;
 
@@ -120,7 +402,58 @@ export function calculatePointsFromRules(
     }
   }
 
-  const totalPoints = baseStudyPoints - penaltyDeduction + customRulePointsSum;
+  if (isPenalized && (rules?.penaltyPoints || 0) > 0) {
+    appliedRules.push({
+      ruleId: 'no_study_penalty',
+      ruleName: 'No Study Penalty',
+      emoji: '⚠️',
+      points: -(rules?.penaltyPoints || 0),
+    });
+  }
+
+  // Evaluate the Fake Session / Max Continuous Trap
+  let maxContinuousPenaltyDeduction = 0;
+  const maxContThreshold = rules?.maxContinuousHoursThreshold;
+  if (typeof maxContThreshold === 'number' && maxContThreshold > 0 && maxContinuousMs > 0) {
+    const maxContHours = maxContinuousMs / 3600000;
+    if (maxContHours > maxContThreshold) {
+      const penaltyType = rules?.maxContinuousPenaltyType || 'variable';
+
+      if (penaltyType === 'fixed') {
+        const fixedDeduction = typeof rules?.maxContinuousFixedPenalty === 'number' ? rules.maxContinuousFixedPenalty : 0;
+        if (fixedDeduction > 0) {
+          maxContinuousPenaltyDeduction = fixedDeduction;
+          appliedRules.push({
+            ruleId: 'max_continuous_fake_session_penalty',
+            ruleName: `Fake Session Penalty (>${maxContThreshold}hrs - Flat Deduction)`,
+            emoji: '🚨',
+            points: -fixedDeduction,
+          });
+        }
+      } else {
+        const mode = rules?.maxContinuousPenaltyMode || 'excess';
+        const targetHours = mode === 'whole' ? maxContHours : maxContHours - maxContThreshold;
+
+        if (targetHours > 0) {
+          const multiplier = rules?.maxContinuousPenaltyMultiplier ?? 1;
+          const baseTargetPoints = Math.floor(targetHours / (intervalHours || 1)) * ptsPerInterval;
+          const calculatedPenalty = Math.max(0, baseTargetPoints * multiplier);
+
+          if (calculatedPenalty > 0) {
+            maxContinuousPenaltyDeduction = calculatedPenalty;
+            appliedRules.push({
+              ruleId: 'max_continuous_fake_session_penalty',
+              ruleName: `Fake Session Penalty (>${maxContThreshold}hrs)`,
+              emoji: '🚨',
+              points: -calculatedPenalty,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const totalPoints = baseStudyPoints - penaltyDeduction + customRulePointsSum - maxContinuousPenaltyDeduction;
 
   return { totalPoints, appliedRules };
 }
@@ -128,23 +461,28 @@ export function calculatePointsFromRules(
 export function calculateMemberPointsForDate(
   hoursStudied: number,
   rules: YptChallenge['rules'],
-  appliedRules?: Array<{ points?: number }>
+  appliedRules?: Array<{ points?: number }>,
+  applyPenalty: boolean = true
 ): number {
-  const intervalVal = rules.studyIntervalValue ?? 1;
-  const intervalUnit = rules.studyIntervalUnit ?? 'hours';
+  const intervalVal = rules?.studyIntervalValue ?? 1;
+  const intervalUnit = rules?.studyIntervalUnit ?? 'hours';
   const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
-  const ptsPerInterval = rules.pointsPerInterval ?? rules.pointsPerStudyHour ?? 1;
+  const ptsPerInterval = rules?.pointsPerInterval ?? rules?.pointsPerStudyHour ?? 1;
 
   const baseStudyPoints = Math.floor(hoursStudied / (intervalHours || 1)) * ptsPerInterval;
 
-  const penaltyThresholdVal = rules.penaltyThresholdValue ?? rules.noStudyPenaltyThresholdHours ?? 3;
-  const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
+  const penaltyThresholdVal = rules?.penaltyThresholdValue ?? rules?.noStudyPenaltyThresholdHours ?? 3;
+  const penaltyThresholdUnit = rules?.penaltyThresholdUnit ?? 'hours';
   const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
 
-  const isPenalized = hoursStudied < penaltyThresholdHours;
-  const penaltyDeduction = isPenalized ? (rules.penaltyPoints || 0) : 0;
+  const isPenalized = applyPenalty && hoursStudied < penaltyThresholdHours;
+  const penaltyDeduction = isPenalized ? (rules?.penaltyPoints || 0) : 0;
 
-  const rulePointsSum = (appliedRules || []).reduce((sum, r) => sum + (r.points || 0), 0);
+  const rulePointsSum = (appliedRules || []).reduce((sum, r) => {
+    const pts = r.points || 0;
+    if (pts < 0 && !applyPenalty) return sum;
+    return sum + pts;
+  }, 0);
 
   return baseStudyPoints - penaltyDeduction + rulePointsSum;
 }
@@ -165,7 +503,9 @@ export async function updateMemberLogAndRecalculate(
   if (!challenge) throw new Error('Challenge not found');
 
   const cleanHandle = memberHandle.replace(/^@/, '').trim().toLowerCase();
-  const calculatedPoints = calculateMemberPointsForDate(hoursStudied, challenge.rules, appliedRules);
+  const isPastLockedDate = targetDateYmd < getYptDayYmd();
+  const applyPenalty = isPastLockedDate;
+  const calculatedPoints = calculateMemberPointsForDate(hoursStudied, challenge.rules, appliedRules, applyPenalty);
 
   const extractedData: YptExtractedMemberData = {
     yptHandle: cleanHandle,
@@ -334,6 +674,8 @@ export function getDeduplicatedDailyMemberStats(
 
       const hours = m.hoursStudied || 0;
       const pts = m.pointsEarned || 0;
+      const maxContinuousMs = m.maxContinuousMs || 0;
+      const isStudyingCurrently = m.isStudyingCurrently || false;
 
       if (!existing) {
         dailyMap.set(key, {
@@ -342,6 +684,8 @@ export function getDeduplicatedDailyMemberStats(
           dateYmd,
           challengeId: sub.challengeId || "",
           hoursStudied: hours,
+          maxContinuousMs,
+          isStudyingCurrently,
           pointsEarned: pts,
           detectedRules: m.detectedRules,
           submissionId: sub.id,
@@ -356,6 +700,8 @@ export function getDeduplicatedDailyMemberStats(
             dateYmd,
             challengeId: sub.challengeId || "",
             hoursStudied: hours,
+            maxContinuousMs: Math.max(existing.maxContinuousMs || 0, maxContinuousMs),
+            isStudyingCurrently,
             pointsEarned: pts,
             detectedRules: m.detectedRules,
             submissionId: sub.id,
@@ -710,41 +1056,57 @@ export async function recalculateTeamPointsFromSubmissions(
   const challenge = await getYptChallenge(challengeId);
   if (!challenge) return [];
 
-  const submissions = await getYptSubmissionLogs(challengeId);
-  const deduplicatedStats = getDeduplicatedDailyMemberStats(submissions);
+  const todayStr = getYptDayYmd();
 
-  // Map clean handle / UID -> accumulated total points across distinct days
-  const handlePointsMap = new Map<string, number>();
+  const [submissions, dailySnapshots] = await Promise.all([
+    getYptSubmissionLogs(challengeId),
+    getAllDailySnapshots(challengeId),
+  ]);
 
-  deduplicatedStats.forEach((stat) => {
-    const pts = stat.pointsEarned || 0;
-    if (stat.memberHandle) {
-      handlePointsMap.set(
-        stat.memberHandle,
-        (handlePointsMap.get(stat.memberHandle) || 0) + pts
-      );
-    }
-    if (stat.matchedUid) {
-      const cleanUid = stat.matchedUid.replace(/^@/, '').trim().toLowerCase();
-      handlePointsMap.set(
-        cleanUid,
-        (handlePointsMap.get(cleanUid) || 0) + pts
-      );
-    }
-  });
+  const deduplicatedStats = getDeduplicatedDailyMemberStats(submissions, challenge);
 
-  // Calculate team point totals using robust multi-tier handle matching
+  // Set of past dates covered by finalized daily snapshots
+  const closedSnapshotDates = new Set(
+    dailySnapshots
+      .filter((s) => s.targetDateYmd < todayStr)
+      .map((s) => s.targetDateYmd)
+  );
+
+  // Filter deduplicated submission stats for dates NOT covered by past closed snapshots (e.g. today or unclosed)
+  const unclosedStats = deduplicatedStats.filter(
+    (stat) => !closedSnapshotDates.has(stat.dateYmd)
+  );
+
+  // Calculate team point totals by combining past closed snapshots + today's unclosed stats
   const updatedTeams: YptTeam[] = challenge.teams.map((team) => {
     let teamTotal = 0;
+
+    // 1. Add points from all past finalized daily snapshots
+    dailySnapshots
+      .filter((s) => s.targetDateYmd < todayStr)
+      .forEach((snapshot) => {
+        if (snapshot.teamPointsMap && typeof snapshot.teamPointsMap[team.id] === 'number') {
+          teamTotal += snapshot.teamPointsMap[team.id];
+        } else if (Array.isArray(snapshot.memberRecords)) {
+          snapshot.memberRecords.forEach((rec) => {
+            if (rec.teamId === team.id || (team.memberUids || []).some((m) => areYptHandlesMatching(m, rec.yptHandle, rec.userId))) {
+              teamTotal += rec.netPoints || 0;
+            }
+          });
+        }
+      });
+
+    // 2. Add points from today's unclosed / live submissions
     (team.memberUids || []).forEach((handleOrUid) => {
       let memberPts = 0;
-      deduplicatedStats.forEach((stat) => {
+      unclosedStats.forEach((stat) => {
         if (areYptHandlesMatching(stat.memberHandle, handleOrUid, stat.matchedUid)) {
           memberPts += stat.pointsEarned || 0;
         }
       });
       teamTotal += memberPts;
     });
+
     return {
       ...team,
       totalPoints: teamTotal,
@@ -760,23 +1122,6 @@ export async function recalculateTeamPointsFromSubmissions(
  */
 export async function getAllKnownYptNames(): Promise<string[]> {
   const namesSet = new Set<string>();
-
-  try {
-    const usersCol = collection(db, 'users');
-    const usersSnap = await getDocs(usersCol);
-    usersSnap.docs.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (Array.isArray(data.yptNames)) {
-        data.yptNames.forEach((n: string) => {
-          if (n && typeof n === 'string' && n.trim()) {
-            namesSet.add(n.trim());
-          }
-        });
-      }
-    });
-  } catch (err) {
-    console.warn('Could not fetch user profiles for YPT names:', err);
-  }
 
   try {
     const challengesCol = collection(db, CHALLENGES_COLLECTION);
@@ -952,63 +1297,6 @@ export async function batchUpdateMemberLogs(
 }
 
 /**
- * Clears all submission logs for a specific challenge and date (targetDateYmd),
- * returning the removed logs so they can be restored via Undo/Redo.
- */
-export async function clearYptDayPoints(
-  challengeId: string,
-  selectedDateYmd: string
-): Promise<YptSubmissionLog[]> {
-  return clearDaySubmissions(challengeId, selectedDateYmd);
-}
-
-export async function clearDaySubmissions(
-  challengeId: string,
-  targetDateYmd: string
-): Promise<YptSubmissionLog[]> {
-  const subColRef = collection(db, CHALLENGES_COLLECTION, challengeId, "submissions");
-  const snap = await getDocs(subColRef);
-
-  const clearedLogs: YptSubmissionLog[] = [];
-  const batch = writeBatch(db);
-
-  snap.docs.forEach((docSnap) => {
-    const data = docSnap.data() as YptSubmissionLog;
-    const subDate = data.targetDateYmd || data.dateYmd || getLocalYmd(data.timestamp);
-    if (subDate === targetDateYmd) {
-      clearedLogs.push({ ...data, id: docSnap.id });
-      batch.delete(docSnap.ref);
-    }
-  });
-
-  if (clearedLogs.length > 0) {
-    await batch.commit();
-  }
-
-  await recalculateTeamPointsFromSubmissions(challengeId);
-  return clearedLogs;
-}
-
-/**
- * Restores a collection of submission logs into Firestore and recalculates team scores.
- */
-export async function restoreDaySubmissions(
-  challengeId: string,
-  logsToRestore: YptSubmissionLog[]
-): Promise<void> {
-  if (!logsToRestore || logsToRestore.length === 0) return;
-
-  const batch = writeBatch(db);
-  logsToRestore.forEach((log) => {
-    const subDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "submissions", log.id);
-    batch.set(subDocRef, sanitizeForFirestore(log));
-  });
-
-  await batch.commit();
-  await recalculateTeamPointsFromSubmissions(challengeId);
-}
-
-/**
  * Resets all global leaderboard data by permanently deleting submission logs across all YPT challenges
  * and setting team total points back to 0. Available strictly to the application owner.
  */
@@ -1058,4 +1346,860 @@ export async function resetGlobalLeaderboardData(): Promise<void> {
   // Force refresh Zustand store
   useYptStore.getState().forceRefresh();
 }
+
+/**
+ * Saves or updates a daily finalized snapshot for a challenge in Firestore.
+ * Stored at: yptChallenges/{challengeId}/dailySnapshots/{targetDateYmd}
+ * and mirrored to daily_snapshots/{targetDateYmd} for backwards compatibility.
+ */
+export async function saveDailySnapshot(
+  challengeId: string,
+  snapshot: YptDailyDaySnapshot
+): Promise<void> {
+  const dateYmd = snapshot.dateYmd || snapshot.targetDateYmd || getYptDayYmd();
+  const docId = dateYmd; // Canonical document ID: "YYYY-MM-DD"
+  
+  const dataToSave: YptDailyDaySnapshot = {
+    ...snapshot,
+    id: docId,
+    challengeId,
+    dateYmd,
+    targetDateYmd: dateYmd,
+  };
+
+  const cleanData = sanitizeForFirestore(dataToSave);
+
+  // 1. Write to canonical date-keyed subcollection: yptChallenges/{challengeId}/dailySnapshots/{YYYY-MM-DD}
+  const snapDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "dailySnapshots", docId);
+  await setDoc(snapDocRef, cleanData, { merge: true });
+
+  // 2. Also mirror to legacy daily_snapshots for complete backwards compatibility
+  try {
+    const legacyDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "daily_snapshots", `daily_${docId}`);
+    await setDoc(legacyDocRef, cleanData, { merge: true });
+  } catch {
+    // Ignore legacy mirror errors
+  }
+}
+
+/**
+ * Retrieves a single daily finalized snapshot for a given challenge and date.
+ */
+export async function getDailySnapshot(
+  challengeId: string,
+  targetDateYmd: string
+): Promise<YptDailyDaySnapshot | null> {
+  // 1. Check canonical subcollection yptChallenges/{challengeId}/dailySnapshots/{YYYY-MM-DD}
+  const canonicalDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "dailySnapshots", targetDateYmd);
+  const canonicalSnap = await getDoc(canonicalDocRef);
+  if (canonicalSnap.exists()) {
+    const d = canonicalSnap.data() as any;
+    return {
+      ...d,
+      id: canonicalSnap.id,
+      dateYmd: d.dateYmd || targetDateYmd,
+      targetDateYmd: d.targetDateYmd || d.dateYmd || targetDateYmd,
+    } as YptDailyDaySnapshot;
+  }
+
+  // 2. Fallback to legacy daily_snapshots/daily_YYYY-MM-DD
+  const legacyDocId = `daily_${targetDateYmd}`;
+  const legacyDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "daily_snapshots", legacyDocId);
+  const legacySnap = await getDoc(legacyDocRef);
+  if (legacySnap.exists()) {
+    const d = legacySnap.data() as any;
+    return {
+      ...d,
+      id: legacySnap.id,
+      dateYmd: d.dateYmd || targetDateYmd,
+      targetDateYmd: d.targetDateYmd || d.dateYmd || targetDateYmd,
+    } as YptDailyDaySnapshot;
+  }
+
+  // 3. Fallback to legacy daily_snapshots/YYYY-MM-DD
+  const altSnapDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "daily_snapshots", targetDateYmd);
+  const altSnap = await getDoc(altSnapDocRef);
+  if (altSnap.exists()) {
+    const d = altSnap.data() as any;
+    return {
+      ...d,
+      id: altSnap.id,
+      dateYmd: d.dateYmd || targetDateYmd,
+      targetDateYmd: d.targetDateYmd || d.dateYmd || targetDateYmd,
+    } as YptDailyDaySnapshot;
+  }
+
+  return null;
+}
+
+/**
+ * Retrieves all stored daily finalized snapshots for a given challenge.
+ */
+export async function getAllDailySnapshots(
+  challengeId: string
+): Promise<YptDailyDaySnapshot[]> {
+  const snapshotsMap = new Map<string, YptDailyDaySnapshot>();
+
+  // 1. Fetch from canonical dailySnapshots
+  try {
+    const colRef = collection(db, CHALLENGES_COLLECTION, challengeId, "dailySnapshots");
+    const snap = await getDocs(colRef);
+    snap.forEach((d) => {
+      const data = d.data() as any;
+      const dateYmd = data.dateYmd || data.targetDateYmd || d.id.replace(/^daily_/, '');
+      snapshotsMap.set(dateYmd, {
+        ...data,
+        id: d.id,
+        dateYmd,
+        targetDateYmd: dateYmd,
+      } as YptDailyDaySnapshot);
+    });
+  } catch (err) {
+    console.warn("Could not query dailySnapshots, falling back:", err);
+  }
+
+  // 2. Fetch from legacy daily_snapshots (fill any missing dates)
+  try {
+    const legacyColRef = collection(db, CHALLENGES_COLLECTION, challengeId, "daily_snapshots");
+    const legacySnap = await getDocs(legacyColRef);
+    legacySnap.forEach((d) => {
+      const data = d.data() as any;
+      const dateYmd = data.dateYmd || data.targetDateYmd || d.id.replace(/^daily_/, '');
+      if (!snapshotsMap.has(dateYmd)) {
+        snapshotsMap.set(dateYmd, {
+          ...data,
+          id: d.id,
+          dateYmd,
+          targetDateYmd: dateYmd,
+        } as YptDailyDaySnapshot);
+      }
+    });
+  } catch (err) {
+    console.warn("Could not query daily_snapshots:", err);
+  }
+
+  const snapshots = Array.from(snapshotsMap.values());
+  // Sort chronologically by dateYmd
+  return snapshots.sort((a, b) => (a.dateYmd || a.targetDateYmd || '').localeCompare(b.dateYmd || b.targetDateYmd || ''));
+}
+
+/**
+ * Deletes a daily snapshot for a challenge.
+ */
+export async function deleteDailySnapshot(
+  challengeId: string,
+  targetDateYmd: string
+): Promise<void> {
+  const docId = targetDateYmd;
+  const snapDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "dailySnapshots", docId);
+  await deleteDoc(snapDocRef);
+
+  try {
+    const legacyDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "daily_snapshots", `daily_${targetDateYmd}`);
+    await deleteDoc(legacyDocRef);
+  } catch {
+    // Ignore legacy delete errors
+  }
+}
+
+/**
+ * Auto-closes any missing past daily snapshots for a challenge.
+ * Evaluates from challenge startDate up to yesterday (or endDate), using IST day boundary (05:00 AM IST).
+ * If missing, it aggregates existing unclosed/manual submission logs or calculates point rules,
+ * writes the finalized snapshot, and updates team points.
+ */
+export async function autoCloseMissingDays(
+  challenge: YptChallenge
+): Promise<{ closedCount: number; newSnapshots: YptDailyDaySnapshot[] }> {
+  if (!challenge || !challenge.id) {
+    return { closedCount: 0, newSnapshots: [] };
+  }
+
+  const startDateYmd = getChallengeStartDateYmd(challenge);
+  const endDateYmd = getChallengeEndDateYmd(challenge);
+
+  // Yesterday in YPT IST day boundary
+  const currentYptDay = getYptDayYmd();
+  const yesterdayYmd = getYesterdayYptDayYmd();
+
+  // Upper boundary of past days that can be closed (cannot close today or future dates)
+  const maxCloseDateYmd = endDateYmd < yesterdayYmd ? endDateYmd : yesterdayYmd;
+
+  if (!startDateYmd || !maxCloseDateYmd || startDateYmd > maxCloseDateYmd) {
+    return { closedCount: 0, newSnapshots: [] };
+  }
+
+  // Generate all calendar dates in range [startDateYmd, maxCloseDateYmd]
+  const dateList: string[] = [];
+  const [startY, startM, startD] = startDateYmd.split('-').map(Number);
+  const [endY, endM, endD] = maxCloseDateYmd.split('-').map(Number);
+
+  if (!startY || !startM || !startD || !endY || !endM || !endD) {
+    return { closedCount: 0, newSnapshots: [] };
+  }
+
+  const curDate = new Date(startY, startM - 1, startD);
+  const finishDate = new Date(endY, endM - 1, endD);
+
+  while (curDate <= finishDate) {
+    dateList.push(getLocalYmd(curDate));
+    curDate.setDate(curDate.getDate() + 1);
+  }
+
+  if (dateList.length === 0) {
+    return { closedCount: 0, newSnapshots: [] };
+  }
+
+  // Query existing snapshots for this challenge
+  const existingSnapshots = await getAllDailySnapshots(challenge.id);
+  const existingDates = new Set(existingSnapshots.map((s) => s.targetDateYmd || s.dateYmd));
+
+  const missingDates = dateList.filter((d) => !existingDates.has(d));
+  if (missingDates.length === 0) {
+    return { closedCount: 0, newSnapshots: [] };
+  }
+
+  // Fetch all existing submission logs for the challenge to calculate daily points
+  const allSubmissions = await getYptSubmissionLogs(challenge.id);
+  const allDeduplicatedStats = getDeduplicatedDailyMemberStats(allSubmissions, challenge);
+
+  const newSnapshots: YptDailyDaySnapshot[] = [];
+
+  for (const dateYmd of missingDates) {
+    const statsForDate = allDeduplicatedStats.filter((s) => s.dateYmd === dateYmd);
+    const teamPointsMap: Record<string, number> = {};
+    const memberRecords: NonNullable<YptDailyDaySnapshot['memberRecords']> = [];
+    const memberSnapshots: YptDailyDaySnapshot['memberSnapshots'] = {};
+    const highWaterMarks: Record<string, number> = {};
+    const maxContinuousHighWaterMarks: Record<string, number> = {};
+    const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+    let dayTotalPoints = 0;
+    let dayTotalHours = 0;
+    let activeMemberCount = 0;
+
+    (challenge.teams || []).forEach((team) => {
+      let teamDailyPoints = 0;
+      let teamDailyHours = 0;
+
+      (team.memberUids || []).forEach((memberHandleOrUid) => {
+        const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+        const foundStat = statsForDate.find((s) =>
+          areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
+        );
+
+        if (foundStat) {
+          const hours = foundStat.hoursStudied || 0;
+          const net = foundStat.pointsEarned || 0;
+          const maxContMs = foundStat.maxContinuousMs || 0;
+          highWaterMarks[cleanHandle] = hours;
+          maxContinuousHighWaterMarks[cleanHandle] = maxContMs;
+          if (hours > 0) activeMemberCount++;
+          dayTotalHours += hours;
+          teamDailyHours += hours;
+
+          const appliedRules = foundStat.detectedRules
+            ? foundStat.detectedRules.map((r) => ({
+                ruleId: r.ruleId,
+                ruleName: r.ruleName,
+                emoji: r.emoji || '⭐',
+                points: r.points || 0,
+              }))
+            : [];
+
+          const intervalVal = challenge.rules?.studyIntervalValue ?? 1;
+          const intervalUnit = challenge.rules?.studyIntervalUnit ?? 'hours';
+          const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+          const ptsPerInterval = challenge.rules?.pointsPerInterval ?? challenge.rules?.pointsPerStudyHour ?? 1;
+          const basePoints = Math.floor(hours / (intervalHours || 1)) * ptsPerInterval;
+
+          const bonusPoints = appliedRules
+            .filter((r) => r.points > 0)
+            .reduce((acc, r) => acc + r.points, 0);
+          const penaltyPoints = appliedRules
+            .filter((r) => r.points < 0)
+            .reduce((acc, r) => acc + Math.abs(r.points), 0);
+
+          const appliedRuleBreakdown = appliedRules.map((r) => ({
+            ruleId: r.ruleId || '',
+            ruleName: r.ruleName,
+            emoji: r.emoji,
+            points: r.points,
+            type: (r.points < 0 ? 'penalty' : r.points > 0 ? 'bonus' : 'base') as 'bonus' | 'penalty' | 'base' | 'milestone',
+          }));
+
+          const memberDoc = {
+            handle: foundStat.memberHandle || memberHandleOrUid,
+            rawYptUd: undefined,
+            hoursStudied: hours,
+            studyMs: Math.round(hours * 3600000),
+            maxContinuousMs: maxContMs,
+            isCurrentlyStudying: false,
+            completedNativeChallengeIds: [],
+            basePoints,
+            bonusPoints,
+            penaltyPoints,
+            netPoints: net,
+            appliedRuleBreakdown,
+            status: 'active' as const,
+            lastSyncedAt: new Date().toISOString(),
+          };
+
+          memberSnapshots[cleanHandle] = memberDoc;
+
+          memberRecords.push({
+            yptHandle: foundStat.memberHandle || memberHandleOrUid,
+            userId: foundStat.matchedUid,
+            teamId: team.id,
+            hoursStudied: hours,
+            basePoints,
+            bonusPoints,
+            penaltyPoints,
+            netPoints: net,
+            appliedRules,
+          });
+
+          teamDailyPoints += net;
+        } else {
+          // Member had 0 study time recorded on this past date
+          highWaterMarks[cleanHandle] = 0;
+          maxContinuousHighWaterMarks[cleanHandle] = 0;
+          const penaltyThreshold =
+            challenge.rules?.penaltyThresholdValue ??
+            challenge.rules?.noStudyPenaltyThresholdHours ??
+            0;
+          const penaltyVal = challenge.rules?.penaltyPoints || 0;
+          const isPenalized = penaltyThreshold > 0 && penaltyVal > 0;
+          const penaltyPoints = isPenalized ? penaltyVal : 0;
+          const netPoints = -penaltyPoints;
+
+          const appliedRules = isPenalized
+            ? [
+                {
+                  ruleName: 'No Study Penalty',
+                  emoji: '⚠️',
+                  points: -penaltyVal,
+                },
+              ]
+            : [];
+
+          memberSnapshots[cleanHandle] = {
+            handle: cleanHandle,
+            rawYptUd: undefined,
+            hoursStudied: 0,
+            studyMs: 0,
+            maxContinuousMs: 0,
+            isCurrentlyStudying: false,
+            completedNativeChallengeIds: [],
+            basePoints: 0,
+            bonusPoints: 0,
+            penaltyPoints,
+            netPoints,
+            appliedRuleBreakdown: isPenalized
+              ? [
+                  {
+                    ruleId: 'no_study_penalty',
+                    ruleName: 'No Study Penalty',
+                    emoji: '⚠️',
+                    points: -penaltyVal,
+                    type: 'penalty',
+                  },
+                ]
+              : [],
+            status: 'active',
+            lastSyncedAt: new Date().toISOString(),
+          };
+
+          memberRecords.push({
+            yptHandle: cleanHandle,
+            teamId: team.id,
+            hoursStudied: 0,
+            basePoints: 0,
+            bonusPoints: 0,
+            penaltyPoints,
+            netPoints,
+            appliedRules,
+          });
+
+          teamDailyPoints += netPoints;
+        }
+      });
+
+      teamPointsMap[team.id] = teamDailyPoints;
+      dayTotalPoints += teamDailyPoints;
+
+      teamStandingsDraft.push({
+        teamId: team.id,
+        teamName: team.name || `Team ${team.id}`,
+        dayHours: teamDailyHours,
+        dayPoints: teamDailyPoints,
+      });
+    });
+
+    // Rank teams descending by dayPoints, then dayHours
+    teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+    const teamStandings = teamStandingsDraft.map((t, idx) => ({
+      ...t,
+      rank: idx + 1,
+    }));
+
+    const snapshot: YptDailyDaySnapshot = {
+      id: dateYmd,
+      challengeId: challenge.id,
+      dateYmd: dateYmd,
+      targetDateYmd: dateYmd,
+      isLocked: true,
+      lockedAt: new Date().toISOString(),
+      lockedBy: 'cron_system',
+      totalChallengeHours: dayTotalHours,
+      totalChallengePoints: dayTotalPoints,
+      activeMemberCount,
+      memberSnapshots,
+      teamStandings,
+      isAutoClosed: true,
+      closedAt: Date.now(),
+      totalPointsAwarded: dayTotalPoints,
+      teamPointsMap,
+      highWaterMarks,
+      maxContinuousHighWaterMarks,
+      memberRecords,
+    };
+
+    await saveDailySnapshot(challenge.id, snapshot);
+    newSnapshots.push(snapshot);
+  }
+
+  // Recalculate team points to aggregate newly closed historical days
+  if (newSnapshots.length > 0) {
+    await recalculateTeamPointsFromSubmissions(challenge.id);
+  }
+
+  return {
+    closedCount: newSnapshots.length,
+    newSnapshots,
+  };
+}
+
+/**
+ * Principle B: The "High-Water Mark" Continuous Live Sync
+ * Updates or creates the active snapshot for a challenge using non-destructive Math.max logic.
+ * When YPT wipes dl.sm to 0 at 5:00 AM IST, the peak accumulated hours from earlier in the night are retained.
+ * Furthermore, during the live open day, premature penalties are NOT applied so members are not penalized while studying.
+ */
+export async function syncChallengeDaySnapshotWithHighWaterMark(
+  challenge: YptChallenge,
+  liveRoster: YptApiMember[],
+  targetDateYmd?: string,
+  forceFinalLock: boolean = false
+): Promise<YptDailyDaySnapshot> {
+  if (!challenge || !challenge.id) {
+    throw new Error('Invalid challenge object');
+  }
+
+  const activeYmd = targetDateYmd || getYptDayYmd();
+  const endDateYmd = getChallengeEndDateYmd(challenge);
+
+  // Strict End Date Guard: Refuse to generate/sync an active open snapshot for dates beyond challenge.endDate
+  if (activeYmd > endDateYmd && !forceFinalLock) {
+    const existingSnap = await getDailySnapshot(challenge.id, activeYmd);
+    if (existingSnap) return existingSnap;
+    // Fall back to end date snapshot or return a dummy non-persisted snapshot
+    const lastValidSnap = await getDailySnapshot(challenge.id, endDateYmd);
+    if (lastValidSnap) return lastValidSnap;
+  }
+
+  // Load any existing snapshot for this date
+  const existingSnapshot = await getDailySnapshot(challenge.id, activeYmd);
+
+  // If already locked and not a force final lock, return existing without modification
+  if (existingSnapshot?.isLocked && !forceFinalLock) {
+    return existingSnapshot;
+  }
+
+  const existingHwms: Record<string, number> = existingSnapshot?.highWaterMarks || {};
+  const updatedHwms: Record<string, number> = { ...existingHwms };
+  const existingMaxContHwms: Record<string, number> = existingSnapshot?.maxContinuousHighWaterMarks || {};
+  const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
+
+  // Fetch all existing manual / OCR submission logs for this challenge & date
+  const allSubmissions = await getYptSubmissionLogs(challenge.id);
+  const allDeduplicatedStats = getDeduplicatedDailyMemberStats(allSubmissions, challenge);
+  const statsForDate = allDeduplicatedStats.filter((s) => s.dateYmd === activeYmd);
+
+  const teamPointsMap: Record<string, number> = {};
+  const memberRecords: NonNullable<YptDailyDaySnapshot['memberRecords']> = [];
+  const memberSnapshots: YptDailyDaySnapshot['memberSnapshots'] = {};
+  const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+  let dayTotalPoints = 0;
+  let dayTotalHours = 0;
+  let activeMemberCount = 0;
+
+  // Decide if penalty should be applied:
+  // We only apply the penalty if the target date is strictly older than the current YPT Day or forceFinalLock is true
+  const isPastLockedDate = activeYmd < getYptDayYmd();
+  const applyPenalty = isPastLockedDate || forceFinalLock;
+
+  (challenge.teams || []).forEach((team) => {
+    let teamDailyPoints = 0;
+    let teamDailyHours = 0;
+
+    (team.memberUids || []).forEach((memberHandleOrUid) => {
+      const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+
+      // Find manual submission stat (if any)
+      const foundStat = statsForDate.find((s) =>
+        areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
+      );
+
+      // Find member in live API roster
+      const liveMember = (liveRoster || []).find((m) => {
+        if (!m) return false;
+        const mHandle = (m.n || '').replace(/^@/, '').trim();
+        const mUid = m.ud ? String(m.ud) : undefined;
+        return areYptHandlesMatching(mHandle, memberHandleOrUid, mUid);
+      });
+
+      // 1. Calculate incoming hours from API
+      const apiLiveHours = liveMember ? getMemberStudyHoursFromApi(liveMember) : 0;
+      const manualHours = foundStat ? foundStat.hoursStudied || 0 : 0;
+
+      // 2. High-Water Mark for total hours: Math.max(previous recorded HWM, apiLiveHours, manualHours)
+      const prevHwm = existingHwms[cleanHandle] ?? 0;
+      const peakHours = applyHighWaterMark(prevHwm, Math.max(apiLiveHours, manualHours));
+      updatedHwms[cleanHandle] = peakHours;
+
+      // 2b. High-Water Mark for max continuous session (ms): Math.max(prev HWM, api live mm, manual mm)
+      const apiLiveMaxContMs = (liveMember?.dl && typeof liveMember.dl.mm === 'number') ? liveMember.dl.mm : 0;
+      const manualMaxContMs = foundStat?.maxContinuousMs || 0;
+      const prevMaxContHwm = existingMaxContHwms[cleanHandle] ?? 0;
+      const peakMaxContMs = Math.max(prevMaxContHwm, apiLiveMaxContMs, manualMaxContMs);
+      updatedMaxContHwms[cleanHandle] = peakMaxContMs;
+
+      if (peakHours > 0) activeMemberCount++;
+      dayTotalHours += peakHours;
+      teamDailyHours += peakHours;
+
+      // 3. Extract completed native challenges
+      const completedChallengeIds: number[] = [];
+      if (liveMember?.cls && typeof liveMember.cls === 'object') {
+        Object.entries(liveMember.cls).forEach(([cid, statusObj]) => {
+          if (statusObj && typeof statusObj === 'object' && (statusObj as any).st === 1) {
+            const numCid = Number(cid);
+            if (!isNaN(numCid)) completedChallengeIds.push(numCid);
+          }
+        });
+      }
+
+      // 4. Calculate points using challenge rules (with live penalty guard and max continuous trap)
+      const calculated = calculatePointsFromRules(
+        peakHours,
+        challenge.rules,
+        foundStat?.detectedRules?.map((r) => r.emoji || '') || [],
+        false,
+        completedChallengeIds,
+        applyPenalty,
+        peakMaxContMs
+      );
+
+      const appliedRules = (calculated.appliedRules || []).map((r) => ({
+        ruleId: r.ruleId,
+        ruleName: r.ruleName,
+        emoji: r.emoji || '⭐',
+        points: r.points || 0,
+      }));
+
+      const intervalVal = challenge.rules?.studyIntervalValue ?? 1;
+      const intervalUnit = challenge.rules?.studyIntervalUnit ?? 'hours';
+      const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+      const ptsPerInterval = challenge.rules?.pointsPerInterval ?? challenge.rules?.pointsPerStudyHour ?? 1;
+      const basePoints = Math.floor(peakHours / (intervalHours || 1)) * ptsPerInterval;
+
+      const bonusPoints = appliedRules
+        .filter((r) => r.points > 0)
+        .reduce((acc, r) => acc + r.points, 0);
+      const penaltyPoints = appliedRules
+        .filter((r) => r.points < 0)
+        .reduce((acc, r) => acc + Math.abs(r.points), 0);
+
+      const netPoints = calculated.totalPoints;
+
+      const appliedRuleBreakdown = appliedRules.map((r) => ({
+        ruleId: r.ruleId || '',
+        ruleName: r.ruleName,
+        emoji: r.emoji,
+        points: r.points,
+        type: (r.points < 0 ? 'penalty' : r.points > 0 ? 'bonus' : 'base') as 'bonus' | 'penalty' | 'base' | 'milestone',
+      }));
+
+      memberSnapshots[cleanHandle] = {
+        handle: foundStat?.memberHandle || cleanHandle,
+        rawYptUd: liveMember?.ud,
+        hoursStudied: peakHours,
+        studyMs: Math.round(peakHours * 3600000),
+        maxContinuousMs: peakMaxContMs,
+        isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+        completedNativeChallengeIds: completedChallengeIds,
+        basePoints,
+        bonusPoints,
+        penaltyPoints,
+        netPoints,
+        appliedRuleBreakdown,
+        status: 'active',
+        lastSyncedAt: new Date().toISOString(),
+      };
+
+      memberRecords.push({
+        yptHandle: foundStat?.memberHandle || cleanHandle,
+        userId: foundStat?.matchedUid || (liveMember?.ud ? String(liveMember.ud) : undefined),
+        teamId: team.id,
+        hoursStudied: peakHours,
+        basePoints,
+        bonusPoints,
+        penaltyPoints,
+        netPoints,
+        isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+        appliedRules,
+        completedChallengeIds,
+      });
+
+      teamDailyPoints += netPoints;
+    });
+
+    teamPointsMap[team.id] = teamDailyPoints;
+    dayTotalPoints += teamDailyPoints;
+
+    teamStandingsDraft.push({
+      teamId: team.id,
+      teamName: team.name || `Team ${team.id}`,
+      dayHours: teamDailyHours,
+      dayPoints: teamDailyPoints,
+    });
+  });
+
+  // Rank teams descending by dayPoints, then dayHours
+  teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+  const teamStandings = teamStandingsDraft.map((t, idx) => ({
+    ...t,
+    rank: idx + 1,
+  }));
+
+  const snapshot: YptDailyDaySnapshot = {
+    id: activeYmd,
+    challengeId: challenge.id,
+    dateYmd: activeYmd,
+    targetDateYmd: activeYmd,
+    isLocked: forceFinalLock,
+    lockedAt: forceFinalLock ? new Date().toISOString() : undefined,
+    lockedBy: forceFinalLock ? 'admin_manual' : undefined,
+    totalChallengeHours: dayTotalHours,
+    totalChallengePoints: dayTotalPoints,
+    activeMemberCount,
+    memberSnapshots,
+    teamStandings,
+    isAutoClosed: forceFinalLock,
+    closedAt: Date.now(),
+    totalPointsAwarded: dayTotalPoints,
+    teamPointsMap,
+    highWaterMarks: updatedHwms,
+    maxContinuousHighWaterMarks: updatedMaxContHwms,
+    memberRecords,
+  };
+
+  await saveDailySnapshot(challenge.id, snapshot);
+
+  if (forceFinalLock) {
+    await recalculateTeamPointsFromSubmissions(challenge.id);
+  }
+
+  return snapshot;
+}
+
+/**
+ * Manually locks and finalizes a day snapshot for a given challenge and date.
+ * Allows an admin or challenge creator to freeze scores on-demand.
+ */
+export async function lockDaySnapshot(
+  challenge: YptChallenge,
+  targetDateYmd: string,
+  liveRoster?: YptApiMember[]
+): Promise<YptDailyDaySnapshot> {
+  return syncChallengeDaySnapshotWithHighWaterMark(
+    challenge,
+    liveRoster || [],
+    targetDateYmd,
+    true
+  );
+}
+
+/**
+ * Synchronizes historical study logs from YPT (GET /logs/day?date=YYYY-MM-DD) into the challenge,
+ * creating/updating submission logs and refreshing snapshots so real study hours are preserved.
+ */
+export async function syncDayLogToChallenge(
+  challenge: YptChallenge,
+  dateYmd: string,
+  targetHandle?: string
+): Promise<{ success: boolean; hours: number; memberHandle: string; message: string; subjects?: any[] }> {
+  if (!challenge || !challenge.id) {
+    throw new Error('Invalid challenge object');
+  }
+
+  const dayLog = await fetchYptDayLog(dateYmd);
+  if (dayLog.error) {
+    throw new Error(dayLog.error);
+  }
+
+  const hours = dayLog.studyHours;
+  if (hours <= 0) {
+    return {
+      success: true,
+      hours: 0,
+      memberHandle: targetHandle || 'User',
+      message: `YPT returned 0:00 study time for ${dateYmd}.`,
+      subjects: dayLog.subjects,
+    };
+  }
+
+  // Determine which challenge member handle to associate
+  let matchedHandle = targetHandle ? targetHandle.replace(/^@/, '').trim() : '';
+  if (!matchedHandle && challenge.teams && challenge.teams.length > 0) {
+    for (const team of challenge.teams) {
+      if (team.memberUids && team.memberUids.length > 0) {
+        matchedHandle = team.memberUids[0].replace(/^@/, '').trim();
+        break;
+      }
+    }
+  }
+
+  const calculated = calculatePointsFromRules(hours, challenge.rules, [], false, [], true);
+
+  const appliedRulesList = (calculated.appliedRules || []).map((r) => ({
+    ruleId: r.ruleId || 'rule',
+    ruleName: r.ruleName,
+    emoji: r.emoji || '⭐',
+    points: r.points || 0,
+  }));
+
+  // Write the verified submission log for this date
+  await addYptSubmissionLog(challenge.id, {
+    dateYmd,
+    targetDateYmd: dateYmd,
+    uploaderUid: auth.currentUser?.uid || 'system',
+    imageUrl: '',
+    extractedMembers: [
+      {
+        yptHandle: matchedHandle || 'User',
+        hoursStudied: hours,
+        morningSnap: false,
+        pointsEarned: calculated.totalPoints,
+        detectedRules: appliedRulesList,
+      },
+    ],
+    totalPointsAwarded: calculated.totalPoints,
+    source: 'ypt_api',
+    status: 'verified',
+  });
+
+  // Re-lock or update the snapshot for this date
+  await lockDaySnapshot(challenge, dateYmd);
+
+  const formattedHours = `${Math.floor(hours)}h ${String(Math.round((hours % 1) * 60)).padStart(2, '0')}m`;
+  return {
+    success: true,
+    hours,
+    memberHandle: matchedHandle || 'User',
+    message: `Successfully synced ${formattedHours} (${calculated.totalPoints} XP) from YPT for ${dateYmd}!`,
+    subjects: dayLog.subjects,
+  };
+}
+
+/**
+ * Retrieves the configured continuous auto-sync interval in minutes (defaults to 15).
+ */
+export async function getYptSyncInterval(): Promise<number> {
+  try {
+    const { getDoc, doc } = await import('firebase/firestore');
+    const snap = await getDoc(doc(db, 'system', 'settings'));
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data?.yptSyncIntervalMinutes && !isNaN(Number(data.yptSyncIntervalMinutes))) {
+        return Number(data.yptSyncIntervalMinutes);
+      }
+    }
+    const hubSnap = await getDoc(doc(db, 'yptChallenges', 'hub_settings'));
+    if (hubSnap.exists()) {
+      const data = hubSnap.data();
+      if (data?.yptSyncIntervalMinutes && !isNaN(Number(data.yptSyncIntervalMinutes))) {
+        return Number(data.yptSyncIntervalMinutes);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch YPT sync interval from Firestore:', err);
+  }
+  return 15;
+}
+
+/**
+ * Saves the new YPT continuous auto-sync interval in minutes across Firestore settings.
+ */
+export async function saveYptSyncInterval(intervalMinutes: number): Promise<{ success: boolean; intervalMinutes: number }> {
+  const safeMinutes = Math.max(1, Math.min(1440, Number(intervalMinutes) || 15));
+  try {
+    const { doc, setDoc } = await import('firebase/firestore');
+    await Promise.allSettled([
+      setDoc(doc(db, 'system', 'settings'), { yptSyncIntervalMinutes: safeMinutes }, { merge: true }),
+      setDoc(doc(db, 'yptChallenges', 'hub_settings'), { yptSyncIntervalMinutes: safeMinutes }, { merge: true }),
+    ]);
+
+    // Also inform the backend API if running
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (idToken) {
+        await fetch('/api/admin/ypt/sync-interval', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ intervalMinutes: safeMinutes }),
+        });
+      }
+    } catch {}
+
+    return { success: true, intervalMinutes: safeMinutes };
+  } catch (err: any) {
+    console.error('Failed to save YPT sync interval:', err);
+    throw err;
+  }
+}
+
+/**
+ * Triggers an immediate execution of the background continuous High-Water Mark sync.
+ */
+export async function triggerContinuousYptSync(): Promise<{ success: boolean; message: string }> {
+  try {
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) throw new Error('Authentication required');
+
+    const res = await fetch('/api/admin/ypt/trigger-continuous-sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to trigger continuous sync');
+    }
+
+    return { success: true, message: 'Continuous YPT sync executed successfully!' };
+  } catch (err: any) {
+    console.error('Trigger continuous YPT sync error:', err);
+    throw err;
+  }
+}
+
+
+
 

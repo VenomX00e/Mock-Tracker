@@ -43,6 +43,7 @@ import { AdminWebhooksTab } from "./admin/AdminWebhooksTab";
 import { AdminSearchLogsTab } from "./admin/AdminSearchLogsTab";
 import { AdminAdminsTab } from "./admin/AdminAdminsTab";
 import { AdminLearningTab } from "./admin/AdminLearningTab";
+import { AdminLearningSettingsTab } from "./admin/AdminLearningSettingsTab";
 import { AdminSidebarNav } from "./admin/AdminSidebarNav";
 import { AdminMigrationTool } from "./AdminMigrationTool";
 import { useAdminUsers } from "../hooks/useAdminUsers";
@@ -69,6 +70,7 @@ interface AdminDialogProps {
     | "quotes"
     | "categories"
     | "learning"
+    | "learning-settings"
     | "keys"
     | "global-gemini"
     | "admins"
@@ -107,6 +109,7 @@ export default function AdminDialog({
     | "categories"
     | "admins"
     | "learning"
+    | "learning-settings"
     | "quotes"
     | "keys"
     | "global-gemini"
@@ -119,7 +122,7 @@ export default function AdminDialog({
   const isForcedCategory = !isOwner && currentCategory !== null;
 
   const { bannedUsers, mutedUsers, allAppUsers, allFirebaseUsers, loading, fetchUsers, recalculatingUserIds, handleUpdateUserRole, handleTogglePermission, handleUpdateUserStatus, handleRecalculateStats } = useAdminUsers(currentUser);
-  const { liveMocks, notices, countdowns, challenges, telegramLink, setTelegramLink, telegramText, setTelegramText, enableAiTutor, setEnableAiTutor, enableVocabulary, setEnableVocabulary, enableSpeedMath, setEnableSpeedMath, enablePracticeLibrary, setEnablePracticeLibrary, apdfKeys, setApdfKeys, ilovePdfKeys, setIlovePdfKeys, cloudinaryCloudName, setCloudinaryCloudName, cloudinaryUploadPreset, setCloudinaryUploadPreset, muteDurationDays, setMuteDurationDays, mockExtractionModel, setMockExtractionModel, fetchAnnouncement, savingSettings: savingAnnouncement, saveSettings } = useAdminSystem();
+  const { liveMocks, notices, countdowns, challenges, telegramLink, setTelegramLink, telegramText, setTelegramText, enableAiTutor, setEnableAiTutor, enableVocabulary, setEnableVocabulary, enableSpeedMath, setEnableSpeedMath, enablePracticeLibrary, setEnablePracticeLibrary, apdfKeys, setApdfKeys, ilovePdfKeys, setIlovePdfKeys, cloudinaryCloudName, setCloudinaryCloudName, cloudinaryUploadPreset, setCloudinaryUploadPreset, muteDurationDays, setMuteDurationDays, mockExtractionModel, setMockExtractionModel, yptSyncIntervalMinutes, setYptSyncIntervalMinutes, fetchAnnouncement, savingSettings: savingAnnouncement, saveSettings } = useAdminSystem();
   
   const [adminManagementCategoryFilter, setAdminManagementCategoryFilter] = useState<string | "all">("all");
   const [adminSearch, setAdminSearch] = useState("");
@@ -530,6 +533,11 @@ export default function AdminDialog({
               />
           )}
 
+          {activeTab === "learning-settings" &&
+            (isOwner || adminPermissions?.canManageLearning || adminPermissions?.canManageSettings) && (
+              <AdminLearningSettingsTab />
+          )}
+
           {activeTab === "features" &&
             (isOwner || adminPermissions?.canManageFeatures) && (
               <AdminFeaturesTab
@@ -555,6 +563,8 @@ export default function AdminDialog({
                 setTelegramText={setTelegramText}
                 mockExtractionModel={mockExtractionModel}
                 setMockExtractionModel={setMockExtractionModel}
+                yptSyncIntervalMinutes={yptSyncIntervalMinutes}
+                setYptSyncIntervalMinutes={setYptSyncIntervalMinutes}
                 savingSettings={savingAnnouncement}
                 saveSettings={saveSettings}
                 isOwner={!!isOwner}

@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 let firebaseConfig: any = null;
 try {
@@ -52,6 +53,868 @@ function calculateUserStats(mocks: any[]) {
     };
 }
 
+/**
+ * Returns Date object in Indian Standard Time (IST, UTC+5:30).
+ */
+function getIstDateNode(dateInput: Date | string | number = new Date()): Date {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return new Date();
+  const utcMs = d.getTime();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  return new Date(utcMs + istOffsetMs);
+}
+
+/**
+ * Returns current YPT calendar date string (YYYY-MM-DD) based on 05:00 AM IST boundary.
+ */
+function getYptDayYmdNode(dateInput: Date | string | number = new Date()): string {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return getYptDayYmdNode(new Date());
+
+  const utcMs = d.getTime();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const rolloverOffsetMs = -5 * 60 * 60 * 1000;
+  const shiftedMs = utcMs + istOffsetMs + rolloverOffsetMs;
+
+  const shiftedDate = new Date(shiftedMs);
+  const yyyy = shiftedDate.getUTCFullYear();
+  const mm = String(shiftedDate.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(shiftedDate.getUTCDate()).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Returns yesterday's YPT calendar date string relative to current YPT date.
+ */
+function getYesterdayYptDayYmdNode(dateInput: Date | string | number = new Date()): string {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return getYesterdayYptDayYmdNode(new Date());
+
+  const utcMs = d.getTime();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const rolloverOffsetMs = -5 * 60 * 60 * 1000;
+  const previousDayOffsetMs = -24 * 60 * 60 * 1000;
+  const shiftedMs = utcMs + istOffsetMs + rolloverOffsetMs + previousDayOffsetMs;
+
+  const shiftedDate = new Date(shiftedMs);
+  const yyyy = shiftedDate.getUTCFullYear();
+  const mm = String(shiftedDate.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(shiftedDate.getUTCDate()).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Safely extracts YYYY-MM-DD from any date, string, or Firestore timestamp object.
+ */
+function getYmdFromDateOrStringNode(val: any): string {
+  if (!val) return getYptDayYmdNode();
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+  if (typeof val === 'object' && val !== null) {
+    if (typeof val.toDate === 'function') {
+      const d = val.toDate();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    if (typeof val.seconds === 'number') {
+      const d = new Date(val.seconds * 1000);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return getYptDayYmdNode();
+}
+
+/**
+ * Returns challenge end date YYYY-MM-DD string.
+ */
+function getChallengeEndDateYmdNode(ch?: { endDate?: any } | null): string {
+  if (!ch || !ch.endDate) return getYptDayYmdNode();
+  return getYmdFromDateOrStringNode(ch.endDate);
+}
+
+/**
+ * Normalizes YPT username/handle for comparison.
+ */
+function normalizeHandleNode(str: string): string {
+  if (!str) return '';
+  return str
+    .trim()
+    .replace(/^@/, '')
+    .normalize('NFKC')
+    .replace(/[\uFE00-\uFE0F\u200B-\u200D]/g, '')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+/**
+ * Compares two handles with multi-tier matching.
+ */
+function areHandlesMatchingNode(handleA?: string, handleB?: string, uidA?: string, uidB?: string): boolean {
+  if (uidA && uidB && String(uidA).trim() === String(uidB).trim()) return true;
+  if (!handleA || !handleB) return false;
+  const normA = normalizeHandleNode(handleA);
+  const normB = normalizeHandleNode(handleB);
+  if (normA === normB) return true;
+  const noSpaceA = normA.replace(/\s+/g, '');
+  const noSpaceB = normB.replace(/\s+/g, '');
+  if (noSpaceA && noSpaceA === noSpaceB) return true;
+  return false;
+}
+
+// Token cache for background YPT cron requests
+let nodeYptTokenCache: { token: string; coid: string; expiresAt: number } | null = null;
+
+/**
+ * Authenticates with YPT API on backend using environment variables, system settings, or fallback.
+ */
+async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | null> {
+  const now = Date.now();
+  if (nodeYptTokenCache && nodeYptTokenCache.expiresAt > now) {
+    return { token: nodeYptTokenCache.token, coid: nodeYptTokenCache.coid };
+  }
+
+  const explicitJwt = process.env.YPT_JWT || process.env.YPT_TOKEN;
+  const explicitCoid = process.env.YPT_COID || "IN";
+  if (explicitJwt) {
+    nodeYptTokenCache = { token: explicitJwt, coid: explicitCoid, expiresAt: now + 60 * 60 * 1000 };
+    return nodeYptTokenCache;
+  }
+
+  const email = process.env.YPT_EMAIL;
+  const password = process.env.YPT_PASSWORD;
+  if (!email || !password) return null;
+
+  const md5Pass = crypto.createHash("md5").update(password).digest("hex");
+  const sha256Pass = crypto.createHash("sha256").update(password).digest("hex");
+  const passwordVariants = [password, md5Pass, sha256Pass];
+
+  for (const passVar of passwordVariants) {
+    try {
+      const loginRes = await fetch("https://pi.tgclab.com/user/sign-in-jwt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Dart/3.11 (dart:io)",
+          Accept: "application/json",
+          "Accept-Encoding": "gzip",
+        },
+        body: JSON.stringify({
+          email,
+          password: passVar,
+          loginProvider: "Email",
+          new: true,
+          getx: true,
+          language: "en",
+        }),
+      });
+
+      if (!loginRes.ok) continue;
+      const data: any = await loginRes.json();
+      if (!data || data.s === false) continue;
+
+      const token = data.jwt || data.access_token || data.token;
+      let coid = data.coid || data.country_id || "IN";
+
+      if (token) {
+        nodeYptTokenCache = { token, coid: String(coid), expiresAt: now + 50 * 60 * 1000 };
+        return nodeYptTokenCache;
+      }
+    } catch (_err) {}
+  }
+
+  return null;
+}
+
+/**
+ * Fetches group roster directly from YPT API for specified group IDs.
+ */
+async function fetchYptRosterForChallengeNode(groupIds: (string | number)[]): Promise<{ members: any[]; nativeChallenges: any[] }> {
+  const auth = await getYptAuthTokenNode();
+  if (!auth) {
+    // If no credentials, return empty
+    return { members: [], nativeChallenges: [] };
+  }
+
+  const yptHeaders = {
+    authorization: `JWT ${auth.token}`,
+    "User-Agent": "Dart/3.11 (dart:io)",
+    "Content-Type": "application/json",
+    coid: auth.coid,
+  };
+
+  let gids = groupIds.map(String).filter(Boolean);
+  if (gids.length === 0) {
+    try {
+      const gRes = await fetch("https://pi.tgclab.com/group/groups/v2", { headers: yptHeaders });
+      if (gRes.ok) {
+        const gData: any = await gRes.json();
+        const rawGroups = [...(gData.gs || []), ...(gData.ms || []), ...(gData.cs || []), ...(gData.ps || [])];
+        gids = rawGroups.map((g: any) => String(g.id)).filter(Boolean);
+      }
+    } catch {}
+  }
+
+  if (gids.length === 0) {
+    return { members: [], nativeChallenges: [] };
+  }
+
+  const allMembers: any[] = [];
+  const rawChallenges: any[] = [];
+
+  await Promise.all(
+    gids.map(async (gid) => {
+      try {
+        const mUrl = `https://pi.tgclab.com/logs/group/members/v2?groupID=${encodeURIComponent(gid)}&countryID=${encodeURIComponent(auth.coid)}&isLooking=true&version=810046`;
+        const mRes = await fetch(mUrl, { headers: yptHeaders });
+        if (mRes.ok) {
+          const mData: any = await mRes.json();
+          if (Array.isArray(mData.ms)) {
+            allMembers.push(...mData.ms);
+            for (const m of mData.ms) {
+              if (m?.cls) {
+                if (typeof m.cls === 'object' && !Array.isArray(m.cls)) {
+                  for (const [chIdStr, chItem] of Object.entries(m.cls)) {
+                    const chId = Number(chIdStr);
+                    if (chId && !isNaN(chId)) {
+                      rawChallenges.push({ id: chId, ...(typeof chItem === 'object' ? chItem : {}) });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[YPT Cron] Failed to fetch group members for ${gid}:`, err);
+      }
+    })
+  );
+
+  // Deduplicate members
+  const memberMap = new Map();
+  for (const m of allMembers) {
+    const key = m.ud || m.n;
+    if (key && !memberMap.has(key)) {
+      memberMap.set(key, m);
+    }
+  }
+
+  return {
+    members: Array.from(memberMap.values()),
+    nativeChallenges: rawChallenges,
+  };
+}
+
+/**
+ * Calculates study points and custom rule bonuses/penalties for a member.
+ */
+function calculatePointsFromRulesNode(
+  hoursStudied: number,
+  rules: any = {},
+  detectedEmojis: string[] = [],
+  completedNativeChallengeIds: number[] = [],
+  applyPenalty: boolean = true,
+  maxContinuousMs: number = 0
+): {
+  baseStudyPoints: number;
+  bonusPoints: number;
+  penaltyPoints: number;
+  netPoints: number;
+  appliedRules: Array<{ ruleId: string; ruleName: string; emoji: string; points: number; type: 'bonus' | 'penalty' | 'base' | 'milestone' }>;
+} {
+  const intervalVal = rules.studyIntervalValue ?? 1;
+  const intervalUnit = rules.studyIntervalUnit ?? 'hours';
+  const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+  const ptsPerInterval = rules.pointsPerInterval ?? rules.pointsPerStudyHour ?? 1;
+
+  const baseStudyPoints = Math.floor(hoursStudied / (intervalHours || 1)) * ptsPerInterval;
+
+  const penaltyThresholdVal = rules.penaltyThresholdValue ?? rules.noStudyPenaltyThresholdHours ?? 3;
+  const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
+  const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
+
+  const isPenalized = applyPenalty && hoursStudied < penaltyThresholdHours;
+  const penaltyPoints = isPenalized ? (rules.penaltyPoints || 0) : 0;
+
+  const appliedRules: Array<{ ruleId: string; ruleName: string; emoji: string; points: number; type: 'bonus' | 'penalty' | 'base' | 'milestone' }> = [];
+  let bonusPoints = 0;
+  let customPenaltySum = 0;
+
+  if (baseStudyPoints > 0) {
+    appliedRules.push({
+      ruleId: 'base_study',
+      ruleName: 'Study Interval Points',
+      emoji: '⏱️',
+      points: baseStudyPoints,
+      type: 'base',
+    });
+  }
+
+  if (Array.isArray(rules.customRules)) {
+    for (const cr of rules.customRules) {
+      let isMet = false;
+      const targetHours = Number(cr.targetHours || cr.hours) || 0;
+      const targetMins = Number(cr.targetMinutes || cr.minutes) || 0;
+      const effectiveTargetHours = targetHours + (targetMins / 60);
+
+      if (cr.type === 'milestone') {
+        isMet = effectiveTargetHours > 0 && hoursStudied >= effectiveTargetHours;
+      } else if (cr.criteriaType === 'study_hours' || cr.category === 'study_hours') {
+        isMet = effectiveTargetHours > 0 && hoursStudied >= effectiveTargetHours;
+      } else if (cr.criteriaType === 'native_challenge' || cr.category === 'native_challenge') {
+        const targetCid = Number(cr.nativeChallengeId || cr.challengeId);
+        isMet = targetCid > 0 && completedNativeChallengeIds.includes(targetCid);
+      } else if (cr.emoji) {
+        isMet = detectedEmojis.includes(cr.emoji);
+      }
+
+      if (isMet) {
+        const p = Number(cr.points) || 0;
+        if (cr.type === 'bonus' || cr.type === 'milestone') {
+          bonusPoints += p;
+          appliedRules.push({
+            ruleId: cr.id || '',
+            ruleName: cr.name || 'Bonus Rule',
+            emoji: cr.emoji || '⭐',
+            points: p,
+            type: cr.type === 'milestone' ? 'milestone' : 'bonus',
+          });
+        } else if (cr.type === 'penalty') {
+          customPenaltySum += p;
+          appliedRules.push({
+            ruleId: cr.id || '',
+            ruleName: cr.name || 'Penalty Rule',
+            emoji: cr.emoji || '⚠️',
+            points: -p,
+            type: 'penalty',
+          });
+        }
+      }
+    }
+  }
+
+  if (isPenalized && penaltyPoints > 0) {
+    appliedRules.push({
+      ruleId: 'min_hours_penalty',
+      ruleName: 'Threshold Penalty',
+      emoji: '⚠️',
+      points: -penaltyPoints,
+      type: 'penalty',
+    });
+  }
+
+  // Evaluate the Fake Session / Max Continuous Trap
+  let maxContinuousPenaltyDeduction = 0;
+  const maxContThreshold = rules.maxContinuousHoursThreshold;
+  if (typeof maxContThreshold === 'number' && maxContThreshold > 0 && maxContinuousMs > 0) {
+    const maxContHours = maxContinuousMs / 3600000;
+    if (maxContHours > maxContThreshold) {
+      const penaltyType = rules.maxContinuousPenaltyType || 'variable';
+
+      if (penaltyType === 'fixed') {
+        const fixedDeduction = typeof rules.maxContinuousFixedPenalty === 'number' ? rules.maxContinuousFixedPenalty : 0;
+        if (fixedDeduction > 0) {
+          maxContinuousPenaltyDeduction = fixedDeduction;
+          appliedRules.push({
+            ruleId: 'max_continuous_fake_session_penalty',
+            ruleName: `Fake Session Penalty (>${maxContThreshold}hrs - Flat Deduction)`,
+            emoji: '🚨',
+            points: -fixedDeduction,
+            type: 'penalty',
+          });
+        }
+      } else {
+        const mode = rules.maxContinuousPenaltyMode || 'excess';
+        const targetHours = mode === 'whole' ? maxContHours : maxContHours - maxContThreshold;
+
+        if (targetHours > 0) {
+          const multiplier = rules.maxContinuousPenaltyMultiplier ?? 1;
+          const baseTargetPoints = Math.floor(targetHours / (intervalHours || 1)) * ptsPerInterval;
+          const calculatedPenalty = Math.max(0, baseTargetPoints * multiplier);
+
+          if (calculatedPenalty > 0) {
+            maxContinuousPenaltyDeduction = calculatedPenalty;
+            appliedRules.push({
+              ruleId: 'max_continuous_fake_session_penalty',
+              ruleName: `Fake Session Penalty (>${maxContThreshold}hrs)`,
+              emoji: '🚨',
+              points: -calculatedPenalty,
+              type: 'penalty',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const totalPenalty = penaltyPoints + customPenaltySum + maxContinuousPenaltyDeduction;
+  const netPoints = baseStudyPoints + bonusPoints - totalPenalty;
+
+  return {
+    baseStudyPoints,
+    bonusPoints,
+    penaltyPoints: totalPenalty,
+    netPoints,
+    appliedRules,
+  };
+}
+
+/**
+ * Regular 15-Minute Continuous Sync logic:
+ * Updates the open snapshot with High-Water Mark peak hours.
+ */
+async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
+  try {
+    const activeYmd = getYptDayYmdNode();
+    console.log(`[YPT 15-MIN CRON] Starting live sync for active date: ${activeYmd}...`);
+
+    const challengesSnap = await adminDb.collection("yptChallenges").get();
+    const activeChallenges = challengesSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as any))
+      .filter((c) => !c.isDeleted && c.status !== 'completed');
+
+    if (activeChallenges.length === 0) {
+      return;
+    }
+
+    for (const challenge of activeChallenges) {
+      try {
+        const challengeEndDateYmd = getChallengeEndDateYmdNode(challenge);
+        if (activeYmd > challengeEndDateYmd) {
+          // Current live study date has passed the challenge end date, skip continuous sync
+          continue;
+        }
+
+        const groupIds = (challenge.groups || []).map((g: any) => g.id || g.gid || g)
+          .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
+          .concat(challenge.groupIds || []);
+
+        const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds);
+
+        // Fetch existing snapshot to preserve High-Water Marks
+        let existingHwms: Record<string, number> = {};
+        let existingMaxContHwms: Record<string, number> = {};
+        const snapDocRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("dailySnapshots").doc(activeYmd);
+        const existingSnap = await snapDocRef.get();
+
+        if (existingSnap.exists) {
+          const sData = existingSnap.data() as any;
+          if (sData.isLocked) {
+            // Already locked, do not overwrite
+            continue;
+          }
+          if (sData.highWaterMarks) {
+            existingHwms = { ...sData.highWaterMarks };
+          }
+          if (sData.maxContinuousHighWaterMarks) {
+            existingMaxContHwms = { ...sData.maxContinuousHighWaterMarks };
+          }
+          if (sData.memberSnapshots) {
+            for (const [h, m] of Object.entries(sData.memberSnapshots)) {
+              existingHwms[h] = Math.max(existingHwms[h] || 0, (m as any).hoursStudied || 0);
+              existingMaxContHwms[h] = Math.max(existingMaxContHwms[h] || 0, (m as any).maxContinuousMs || 0);
+            }
+          }
+        }
+
+        const updatedHwms: Record<string, number> = { ...existingHwms };
+        const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
+        const memberSnapshots: Record<string, any> = {};
+        const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+        let dayTotalHours = 0;
+        let dayTotalPoints = 0;
+        let activeMemberCount = 0;
+
+        (challenge.teams || []).forEach((team: any) => {
+          let teamDailyHours = 0;
+          let teamDailyPoints = 0;
+
+          (team.memberUids || []).forEach((memberHandleOrUid: string) => {
+            const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+            const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+
+            let apiLiveHours = 0;
+            let apiLiveMaxContMs = 0;
+            const completedChallengeIds: number[] = [];
+
+            if (liveMember) {
+              if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                apiLiveHours = liveMember.dl.sm / 3600000;
+              } else if (typeof liveMember.sm === 'number') {
+                apiLiveHours = liveMember.sm / 3600000;
+              }
+
+              if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
+                apiLiveMaxContMs = liveMember.dl.mm;
+              }
+
+              if (liveMember.cls && typeof liveMember.cls === 'object') {
+                for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
+                  if (cItem && (cItem as any).st === 1) {
+                    completedChallengeIds.push(Number(cIdStr));
+                  }
+                }
+              }
+            }
+
+            // Principle B: High-Water Mark Non-Destructive Update
+            const prevHwm = existingHwms[cleanHandle] || 0;
+            const peakHours = Math.round(Math.max(prevHwm, apiLiveHours) * 100) / 100;
+            updatedHwms[cleanHandle] = peakHours;
+
+            // Track max continuous study session (dl.mm) High-Water Mark
+            const prevMaxContHwm = existingMaxContHwms[cleanHandle] || 0;
+            const peakMaxContMs = Math.max(prevMaxContHwm, apiLiveMaxContMs);
+            updatedMaxContHwms[cleanHandle] = peakMaxContMs;
+
+            if (peakHours > 0) activeMemberCount++;
+            dayTotalHours += peakHours;
+            teamDailyHours += peakHours;
+
+            // Compute points without penalties during active open day
+            const calculated = calculatePointsFromRulesNode(
+              peakHours,
+              challenge.rules,
+              [],
+              completedChallengeIds,
+              false, // No penalty during live open day
+              peakMaxContMs
+            );
+
+            teamDailyPoints += calculated.netPoints;
+
+            memberSnapshots[cleanHandle] = {
+              handle: liveMember?.n || cleanHandle,
+              rawYptUd: liveMember?.ud,
+              hoursStudied: peakHours,
+              studyMs: Math.round(peakHours * 3600000),
+              maxContinuousMs: peakMaxContMs,
+              isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+              completedNativeChallengeIds: completedChallengeIds,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: 0,
+              netPoints: calculated.netPoints,
+              appliedRuleBreakdown: calculated.appliedRules,
+              status: 'active',
+              lastSyncedAt: new Date().toISOString(),
+            };
+          });
+
+          teamStandingsDraft.push({
+            teamId: team.id,
+            teamName: team.name || `Team ${team.id}`,
+            dayHours: Math.round(teamDailyHours * 100) / 100,
+            dayPoints: teamDailyPoints,
+          });
+
+          dayTotalPoints += teamDailyPoints;
+        });
+
+        // Rank teams
+        teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+        const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+        const snapshotData = {
+          id: activeYmd,
+          challengeId: challenge.id,
+          dateYmd: activeYmd,
+          targetDateYmd: activeYmd,
+          isLocked: false,
+          totalChallengeHours: Math.round(dayTotalHours * 100) / 100,
+          totalChallengePoints: dayTotalPoints,
+          activeMemberCount,
+          memberSnapshots,
+          teamStandings,
+          highWaterMarks: updatedHwms,
+          maxContinuousHighWaterMarks: updatedMaxContHwms,
+          lastSyncedAt: new Date().toISOString(),
+        };
+
+        // 1. Save to canonical dailySnapshots
+        await snapDocRef.set(snapshotData, { merge: true });
+
+        // 2. Mirror to legacy daily_snapshots
+        try {
+          const legacyRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${activeYmd}`);
+          await legacyRef.set(snapshotData, { merge: true });
+        } catch {}
+
+        console.log(`[YPT 15-MIN CRON] Successfully synced open snapshot for challenge: ${challenge.name || challenge.id} (${activeYmd}).`);
+      } catch (chErr) {
+        console.error(`[YPT 15-MIN CRON] Error syncing challenge ${challenge.id}:`, chErr);
+      }
+    }
+  } catch (err: any) {
+    if (err && err.code === 7) {
+      // Sandbox environment notice
+    } else {
+      console.error("[YPT 15-MIN CRON] Encountered unexpected error:", err);
+    }
+  }
+}
+
+/**
+ * 5:15 AM IST Daily Finalizer & Day Transition Protocol:
+ * - Runs daily at 5:15 AM IST (23:45 UTC).
+ * - Finalizes yesterday's snapshot with full penalties and sets isLocked: true, lockedBy: 'cron_system'.
+ * - Creates a fresh open snapshot for today.
+ */
+async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
+  try {
+    const yesterdayYmd = getYesterdayYptDayYmdNode();
+    const todayYmd = getYptDayYmdNode();
+    console.log(`[YPT 5:15 AM IST FINALIZER] Executing Day Transition. Concluded: ${yesterdayYmd}, Fresh: ${todayYmd}...`);
+
+    const challengesSnap = await adminDb.collection("yptChallenges").get();
+    const activeChallenges = challengesSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as any))
+      .filter((c) => !c.isDeleted && c.status !== 'completed');
+
+    if (activeChallenges.length === 0) return;
+
+    for (const challenge of activeChallenges) {
+      try {
+        const groupIds = (challenge.groups || []).map((g: any) => g.id || g.gid || g)
+          .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
+          .concat(challenge.groupIds || []);
+
+        const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds);
+
+        // STEP A: Lock & Finalize Yesterday's Snapshot
+        const yesterdaySnapRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("dailySnapshots").doc(yesterdayYmd);
+        const yesterdaySnap = await yesterdaySnapRef.get();
+        let existingHwms: Record<string, number> = {};
+        let existingMaxContHwms: Record<string, number> = {};
+
+        if (yesterdaySnap.exists) {
+          const sData = yesterdaySnap.data() as any;
+          if (sData.highWaterMarks) existingHwms = { ...sData.highWaterMarks };
+          if (sData.maxContinuousHighWaterMarks) existingMaxContHwms = { ...sData.maxContinuousHighWaterMarks };
+          if (sData.memberSnapshots) {
+            for (const [h, m] of Object.entries(sData.memberSnapshots)) {
+              existingHwms[h] = Math.max(existingHwms[h] || 0, (m as any).hoursStudied || 0);
+              existingMaxContHwms[h] = Math.max(existingMaxContHwms[h] || 0, (m as any).maxContinuousMs || 0);
+            }
+          }
+        }
+
+        const finalizedMemberSnapshots: Record<string, any> = {};
+        const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+        let dayTotalHours = 0;
+        let dayTotalPoints = 0;
+        let activeMemberCount = 0;
+
+        (challenge.teams || []).forEach((team: any) => {
+          let teamDailyHours = 0;
+          let teamDailyPoints = 0;
+
+          (team.memberUids || []).forEach((memberHandleOrUid: string) => {
+            const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+            const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+
+            let apiLiveHours = 0;
+            let apiLiveMaxContMs = 0;
+            const completedChallengeIds: number[] = [];
+
+            if (liveMember) {
+              if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                apiLiveHours = liveMember.dl.sm / 3600000;
+              }
+              if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
+                apiLiveMaxContMs = liveMember.dl.mm;
+              }
+              if (liveMember.cls && typeof liveMember.cls === 'object') {
+                for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
+                  if (cItem && (cItem as any).st === 1) completedChallengeIds.push(Number(cIdStr));
+                }
+              }
+            }
+
+            const peakHours = Math.round(Math.max(existingHwms[cleanHandle] || 0, apiLiveHours) * 100) / 100;
+            existingHwms[cleanHandle] = peakHours;
+
+            const peakMaxContMs = Math.max(existingMaxContHwms[cleanHandle] || 0, apiLiveMaxContMs);
+            existingMaxContHwms[cleanHandle] = peakMaxContMs;
+
+            if (peakHours > 0) activeMemberCount++;
+            dayTotalHours += peakHours;
+            teamDailyHours += peakHours;
+
+            // Final lock applies penalties!
+            const calculated = calculatePointsFromRulesNode(
+              peakHours,
+              challenge.rules,
+              [],
+              completedChallengeIds,
+              true, // Apply penalty on final lock
+              peakMaxContMs
+            );
+
+            teamDailyPoints += calculated.netPoints;
+
+            finalizedMemberSnapshots[cleanHandle] = {
+              handle: liveMember?.n || cleanHandle,
+              rawYptUd: liveMember?.ud,
+              hoursStudied: peakHours,
+              studyMs: Math.round(peakHours * 3600000),
+              maxContinuousMs: peakMaxContMs,
+              isCurrentlyStudying: false, // Day concluded
+              completedNativeChallengeIds: completedChallengeIds,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: calculated.penaltyPoints,
+              netPoints: calculated.netPoints,
+              appliedRuleBreakdown: calculated.appliedRules,
+              status: 'active',
+              lastSyncedAt: new Date().toISOString(),
+            };
+          });
+
+          teamStandingsDraft.push({
+            teamId: team.id,
+            teamName: team.name || `Team ${team.id}`,
+            dayHours: Math.round(teamDailyHours * 100) / 100,
+            dayPoints: teamDailyPoints,
+          });
+
+          dayTotalPoints += teamDailyPoints;
+        });
+
+        teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+        const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+        const lockedYesterdayData = {
+          id: yesterdayYmd,
+          challengeId: challenge.id,
+          dateYmd: yesterdayYmd,
+          targetDateYmd: yesterdayYmd,
+          isLocked: true,
+          lockedAt: new Date().toISOString(),
+          lockedBy: 'cron_system' as const,
+          totalChallengeHours: Math.round(dayTotalHours * 100) / 100,
+          totalChallengePoints: dayTotalPoints,
+          activeMemberCount,
+          memberSnapshots: finalizedMemberSnapshots,
+          teamStandings,
+          highWaterMarks: existingHwms,
+          maxContinuousHighWaterMarks: existingMaxContHwms,
+          isAutoClosed: true,
+          closedAt: Date.now(),
+        };
+
+        // Write locked snapshot for yesterday
+        await yesterdaySnapRef.set(lockedYesterdayData, { merge: true });
+        try {
+          await adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${yesterdayYmd}`).set(lockedYesterdayData, { merge: true });
+        } catch {}
+
+        // STEP B: Check if Challenge has reached its End Date
+        const challengeEndDateYmd = getChallengeEndDateYmdNode(challenge);
+        const isChallengeConcluded = yesterdayYmd >= challengeEndDateYmd;
+
+        if (isChallengeConcluded) {
+          // Finalize and mark challenge as completed in Firestore
+          await adminDb.collection("yptChallenges").doc(challenge.id).update({
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+            completedBy: 'cron_system',
+            autoCompletedReason: `Reached end date ${challengeEndDateYmd} and finalized last day ${yesterdayYmd}.`,
+          });
+          console.log(`[YPT 5:15 AM IST FINALIZER] Challenge ${challenge.id} reached end date (${challengeEndDateYmd}) and has been auto-completed.`);
+        } else {
+          // STEP C: Create Fresh Open Snapshot for Today (dateYmd = todayYmd) ONLY IF CHALLENGE IS STILL ACTIVE
+          const todaySnapRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("dailySnapshots").doc(todayYmd);
+          const todaySnap = await todaySnapRef.get();
+
+          if (!todaySnap.exists) {
+            const initialMemberSnapshots: Record<string, any> = {};
+            const initialTeamStandings: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number; rank: number }> = [];
+
+            (challenge.teams || []).forEach((team: any, idx: number) => {
+              (team.memberUids || []).forEach((mHandle: string) => {
+                const cleanHandle = mHandle.replace(/^@/, '').trim().toLowerCase();
+                initialMemberSnapshots[cleanHandle] = {
+                  handle: cleanHandle,
+                  hoursStudied: 0,
+                  studyMs: 0,
+                  maxContinuousMs: 0,
+                  isCurrentlyStudying: false,
+                  completedNativeChallengeIds: [],
+                  basePoints: 0,
+                  bonusPoints: 0,
+                  penaltyPoints: 0,
+                  netPoints: 0,
+                  appliedRuleBreakdown: [],
+                  status: 'active',
+                  lastSyncedAt: new Date().toISOString(),
+                };
+              });
+
+              initialTeamStandings.push({
+                teamId: team.id,
+                teamName: team.name || `Team ${team.id}`,
+                dayHours: 0,
+                dayPoints: 0,
+                rank: idx + 1,
+              });
+            });
+
+            const freshDayData = {
+              id: todayYmd,
+              challengeId: challenge.id,
+              dateYmd: todayYmd,
+              targetDateYmd: todayYmd,
+              isLocked: false,
+              totalChallengeHours: 0,
+              totalChallengePoints: 0,
+              activeMemberCount: 0,
+              memberSnapshots: initialMemberSnapshots,
+              teamStandings: initialTeamStandings,
+              highWaterMarks: {},
+              maxContinuousHighWaterMarks: {},
+              lastSyncedAt: new Date().toISOString(),
+            };
+
+            await todaySnapRef.set(freshDayData);
+            try {
+              await adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${todayYmd}`).set(freshDayData);
+            } catch {}
+          }
+
+          console.log(`[YPT 5:15 AM IST FINALIZER] Successfully finalized ${yesterdayYmd} and created open snapshot for ${todayYmd} in ${challenge.id}.`);
+        }
+      } catch (chErr) {
+        console.error(`[YPT 5:15 AM IST FINALIZER] Error processing challenge ${challenge.id}:`, chErr);
+      }
+    }
+  } catch (err: any) {
+    if (err && err.code === 7) {
+      // Sandbox environment notice
+    } else {
+      console.error("[YPT 5:15 AM IST FINALIZER] Encountered unexpected error:", err);
+    }
+  }
+}
+
 export function startCron() {
   if (!db) {
     console.warn("Cron not started: Admin DB is not initialized. Might be missing ADC credentials.");
@@ -69,7 +932,6 @@ export function startCron() {
       const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
       // 2. Fetch all mocks (using collectionGroup if possible, or individual queries)
-      // Node SDK has collectionGroup
       const mocksSnap = await db.collectionGroup("mocks").get();
       const allMocks = mocksSnap.docs.map(d => {
            const data = d.data();
@@ -92,23 +954,13 @@ export function startCron() {
           const mocks = userMocks[user.id] || [];
           if (mocks.length === 0) continue;
 
-          // Note: Full calculateStats logic can be duplicated here,
-          // but we just update minimal required fields like avgPercentile
-          // since the frontend calculates dynamic ones or runs the full fallback if needed.
-          // Wait, the user asked to "calculate leaderboard rank... and take necessary steps".
-          // The frontend relies on totalTests, avgPercentile inside user document.
           const { avgPercentile, totalTests } = calculateUserStats(mocks);
 
-          // We'll update the fields if they are mismatched. 
-          // Avoiding unnecessary writes.
           if (user.avgPercentile !== avgPercentile || user.totalTests !== totalTests) {
               const ref = db.collection("users").doc(user.id);
               batch.update(ref, { 
                   avgPercentile, 
                   totalTests, 
-                  // If we wanted to keep the rank, we could store it, 
-                  // but leaderboard is dynamically sorted on frontend.
-                  // By storing up-to-date avgPercentile, we ensure frontend sorting works.
               });
               updatesCount++;
           }
@@ -127,8 +979,6 @@ export function startCron() {
     } catch (error: any) {
       if (error && error.code === 7) {
         console.warn("\n[WARNING] Leaderboard Cron skipped due to PERMISSION_DENIED.");
-        console.warn("When running in the development sandbox, the default service account lacks Firestore access to your external Firebase project.");
-        console.warn("This cron will automatically work in the production deployed app.\n");
       } else {
         console.error("Leaderboard Cron failed:", error);
       }
@@ -140,18 +990,15 @@ export function startCron() {
   cron.schedule("0 0 * * *", async () => {
     console.log("Running nightly search API log auto-delete task...");
     try {
-      // 1. Fetch system settings
       const settingsDoc = await db.collection("system").doc("settings").get();
       const settings = settingsDoc.data();
       
       const searchLogAutoDeleteDays = settings?.searchLogAutoDeleteDays;
       
       if (typeof searchLogAutoDeleteDays === "number" && searchLogAutoDeleteDays > 0) {
-        // Calculate cutoff date
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - searchLogAutoDeleteDays);
         
-        // Query old logs
         const oldLogsSnap = await db
           .collection("search_api_logs")
           .where("createdAt", "<", admin.firestore.Timestamp.fromDate(cutoffDate))
@@ -160,7 +1007,6 @@ export function startCron() {
         if (!oldLogsSnap.empty) {
           console.log(`Found ${oldLogsSnap.size} search API logs to delete.`);
           
-          // Delete in batches
           let batch = db.batch();
           let deletesCount = 0;
           let totalDeleted = 0;
@@ -196,4 +1042,120 @@ export function startCron() {
       }
     }
   });
+
+  // Dynamic YPT Continuous Sync Cron Job Setup
+  if (db) {
+    initDynamicYptSync(db);
+  }
+
+  console.log("Registered 04:55 AM IST (23:25 UTC) YPT Pre-Reset Peak Capture cron job.");
+  // Runs daily at 23:25 UTC (04:55 AM IST): captures absolute peak study hours before YPT 05:00 AM IST reset
+  cron.schedule("25 23 * * *", async () => {
+    if (db) {
+      console.log("[YPT 4:55 AM IST PRE-RESET] Executing final pre-reset peak capture...");
+      await execute15MinYptSync(db);
+    }
+  });
+
+  console.log("Registered 05:15 AM IST (23:45 UTC) YPT Daily Finalizer & Day Transition cron job.");
+  // Runs daily at 23:45 UTC (05:15 AM IST): locks yesterday's snapshot and opens fresh today snapshot
+  cron.schedule("45 23 * * *", async () => {
+    if (db) {
+      await execute515AmYptFinalizer(db);
+    }
+  });
 }
+
+// Module-level dynamic task reference for YPT Continuous Sync
+let dynamicYptSyncTask: ReturnType<typeof cron.schedule> | null = null;
+let currentYptSyncIntervalMinutes = 15;
+let lastYptSyncExecutionTime: string | null = null;
+let isYptSyncRunning = false;
+
+export function getCronExpressionForMinutes(minutes: number): string {
+  const m = Math.max(1, Math.min(1440, Math.round(minutes)));
+  if (m === 1) return "* * * * *";
+  if (m < 60) {
+    return `*/${m} * * * *`;
+  }
+  if (m === 60) return "0 * * * *";
+  const hours = Math.floor(m / 60);
+  if (hours < 24) {
+    return `0 */${hours} * * *`;
+  }
+  return "0 0 * * *";
+}
+
+export function getYptSyncCronStatus() {
+  return {
+    intervalMinutes: currentYptSyncIntervalMinutes,
+    cronExpression: getCronExpressionForMinutes(currentYptSyncIntervalMinutes),
+    isRunning: isYptSyncRunning,
+    lastSyncedAt: lastYptSyncExecutionTime,
+    isScheduled: dynamicYptSyncTask !== null,
+  };
+}
+
+export function updateYptSyncCronSchedule(adminDb: admin.firestore.Firestore, minutes: number) {
+  const safeMinutes = Math.max(1, Math.min(1440, Number(minutes) || 15));
+  if (dynamicYptSyncTask && currentYptSyncIntervalMinutes === safeMinutes) {
+    return;
+  }
+
+  if (dynamicYptSyncTask) {
+    try {
+      dynamicYptSyncTask.stop();
+      dynamicYptSyncTask = null;
+    } catch (e) {
+      console.warn("Failed to stop previous YPT sync task:", e);
+    }
+  }
+
+  currentYptSyncIntervalMinutes = safeMinutes;
+  const cronExp = getCronExpressionForMinutes(safeMinutes);
+  console.log(`[YPT CRON SCHEDULER] Rescheduled continuous sync every ${safeMinutes} min(s) using expression: "${cronExp}"`);
+
+  dynamicYptSyncTask = cron.schedule(cronExp, async () => {
+    if (adminDb) {
+      isYptSyncRunning = true;
+      try {
+        await execute15MinYptSync(adminDb);
+        lastYptSyncExecutionTime = new Date().toISOString();
+      } finally {
+        isYptSyncRunning = false;
+      }
+    }
+  });
+}
+
+async function initDynamicYptSync(adminDb: admin.firestore.Firestore) {
+  try {
+    const settingsDoc = await adminDb.collection("system").doc("settings").get();
+    let initialMinutes = 15;
+    if (settingsDoc.exists) {
+      const data = settingsDoc.data();
+      if (data?.yptSyncIntervalMinutes && !isNaN(Number(data.yptSyncIntervalMinutes))) {
+        initialMinutes = Number(data.yptSyncIntervalMinutes);
+      }
+    }
+    updateYptSyncCronSchedule(adminDb, initialMinutes);
+
+    // Set up real-time listener so changes from UI are reflected instantly without server restart
+    adminDb.collection("system").doc("settings").onSnapshot((snap) => {
+      if (snap.exists) {
+        const val = snap.data()?.yptSyncIntervalMinutes;
+        if (val && !isNaN(Number(val))) {
+          updateYptSyncCronSchedule(adminDb, Number(val));
+        }
+      }
+    }, (err) => {
+      console.warn("[YPT CRON] Realtime settings listener note:", err.message);
+    });
+  } catch (err: any) {
+    console.warn("[YPT CRON] Initialization notice, falling back to 15m default:", err?.message || err);
+    updateYptSyncCronSchedule(adminDb, 15);
+  }
+}
+
+export { execute15MinYptSync as executeContinuousYptSync };
+

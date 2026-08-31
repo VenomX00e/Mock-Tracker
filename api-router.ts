@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import { GoogleGenAI, Type } from "@google/genai";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
@@ -1019,6 +1020,575 @@ app.post("/api/parse-ypt-screenshot", async (req, res) => {
   }
 });
 
+// YPT API Session Token Cache
+let yptTokenCache: {
+  token: string;
+  coid: string;
+  expiresAt: number;
+} | null = null;
+
+async function getYptAuthToken(req?: any) {
+  const reqEmail = req?.headers?.["x-ypt-email"] || req?.query?.yptEmail || req?.body?.yptEmail;
+  const reqPassword = req?.headers?.["x-ypt-password"] || req?.query?.yptPassword || req?.body?.yptPassword;
+  const rawDirectToken = req?.headers?.["x-ypt-token"] || req?.query?.yptToken || req?.body?.yptToken || process.env.YPT_TOKEN;
+
+  const directToken = rawDirectToken ? String(rawDirectToken).trim() : "";
+  if (directToken && directToken !== "null" && directToken !== "undefined" && directToken.length > 10) {
+    let coid = (req?.headers?.["x-ypt-coid"] as string) || "";
+    if (!coid || coid === "0") {
+      try {
+        const infoRes = await fetch("https://pi.tgclab.com/user/v2/reload/info", {
+          method: "POST",
+          headers: {
+            authorization: `JWT ${directToken}`,
+            "User-Agent": "Dart/3.11 (dart:io)",
+            "Content-Type": "application/json",
+            "Accept-Encoding": "gzip",
+          },
+          body: JSON.stringify({
+            pv: 0,
+            cd: { su: null, sbu: null, cu: null, eu: null, du: null, tu: null },
+          }),
+        });
+        if (infoRes.ok) {
+          const infoData = await infoRes.json();
+          if (infoData && (infoData.coid || infoData.country_id)) {
+            coid = String(infoData.coid || infoData.country_id);
+          }
+        }
+      } catch (_e) {}
+    }
+    return {
+      token: directToken,
+      coid: coid || "8",
+      expiresAt: Date.now() + 3600 * 1000,
+    };
+  }
+
+  const email = (reqEmail || process.env.YPT_EMAIL || "").trim();
+  const password = reqPassword || process.env.YPT_PASSWORD || "";
+
+  if (!email || !password || email === "bot@example.com" || password === "YOUR_YPT_PASSWORD" || !email.includes("@")) {
+    return null;
+  }
+
+  const now = Date.now();
+  if (yptTokenCache && yptTokenCache.expiresAt > now + 5 * 60 * 1000 && !reqEmail) {
+    return yptTokenCache;
+  }
+
+  // YPT auth accepts password or password hashes (MD5, SHA256)
+  const md5Pass = crypto.createHash("md5").update(password).digest("hex");
+  const sha256Pass = crypto.createHash("sha256").update(password).digest("hex");
+  const passwordVariants = [password, md5Pass, sha256Pass];
+
+  for (const passVar of passwordVariants) {
+    try {
+      const loginRes = await fetch("https://pi.tgclab.com/user/sign-in-jwt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Dart/3.11 (dart:io)",
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+        },
+        body: JSON.stringify({
+          email,
+          password: passVar,
+          loginProvider: "Email",
+          new: true,
+          getx: true,
+          language: "en",
+        }),
+      });
+
+      if (!loginRes.ok) continue;
+
+      const data = await loginRes.json();
+      if (!data || data.s === false) continue;
+
+      const token = data.jwt || data.access_token || data.token;
+      let coid = data.coid || data.country_id;
+
+      if (token) {
+        if (!coid || coid === "0" || coid === 0) {
+          try {
+            const infoRes = await fetch("https://pi.tgclab.com/user/v2/reload/info", {
+              method: "POST",
+              headers: {
+                authorization: `JWT ${token}`,
+                "User-Agent": "Dart/3.11 (dart:io)",
+                "Content-Type": "application/json",
+                "Accept-Encoding": "gzip",
+              },
+              body: JSON.stringify({
+                pv: 0,
+                cd: { su: null, sbu: null, cu: null, eu: null, du: null, tu: null },
+              }),
+            });
+            if (infoRes.ok) {
+              const infoData = await infoRes.json();
+              if (infoData && (infoData.coid || infoData.country_id)) {
+                coid = infoData.coid || infoData.country_id;
+              }
+            }
+          } catch (_e) {}
+        }
+
+        const result = {
+          token,
+          coid: String(coid || "8"),
+          expiresAt: now + 50 * 60 * 1000,
+        };
+
+        if (!reqEmail) {
+          yptTokenCache = result;
+        }
+
+        return result;
+      }
+    } catch (_err) {
+      // Continue trying next password variant
+    }
+  }
+
+  return null;
+}
+
+const DEMO_YPT_GROUPS = [
+  { id: 331805, t: "🍇 SBI PO & UPSC Sprint 2026", mc: 8, on: "Aarav Sharma" },
+  { id: 331806, t: "⚡ Tech & Code Study Guild", mc: 6, on: "Priya Patel" },
+];
+
+const DEMO_YPT_ROSTER = [
+  { ud: 1001, n: "Aarav_SBI", dl: { sm: 23400000 } }, // 6.5 hrs
+  { ud: 1002, n: "Priya_Code", dl: { sm: 38700000 } }, // 10.75 hrs
+  { ud: 1003, n: "Rohan_UPSC", dl: { sm: 19800000 } }, // 5.5 hrs
+  { ud: 1004, n: "Ananya_R", dl: { sm: 7200000 } },   // 2.0 hrs (under threshold)
+  { ud: 1005, n: "Vikram_K", dl: { sm: 32400000 } },  // 9.0 hrs
+  { ud: 1006, n: "Neha_Dev", dl: { sm: 14400000 } },  // 4.0 hrs
+  { ud: 1007, n: "Karan_S", dl: { sm: 28800000 } },   // 8.0 hrs
+  { ud: 1008, n: "Sneha_M", dl: { sm: 41400000 } },   // 11.5 hrs
+];
+
+// Server Proxy Endpoint for YPT Live Synchronization (/api/ypt/live-sync)
+app.all("/api/ypt/live-sync", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ") && authHeader !== "Bearer undefined" && authHeader !== "Bearer null" && authHeader.length > 15) {
+      const token = authHeader.split("Bearer ")[1];
+      try {
+        await admin.auth().verifyIdToken(token);
+      } catch (_authErr: any) {
+        // Continue silently if Firebase verification fails (e.g. guest or local dev mode)
+      }
+    }
+
+    const action = (req.query.action || req.body?.action || "get-groups") as string;
+    const groupIdsParam = req.query.groupIds || req.body?.groupIds;
+
+    let yptJwt = "";
+    let coid = "IN";
+    let isDemoMode = false;
+
+    const hasExplicitCreds = Boolean(
+      req.headers["x-ypt-email"] || req.headers["x-ypt-password"] || req.headers["x-ypt-token"] ||
+      req.query?.yptEmail || req.body?.yptEmail || req.query?.yptToken || req.body?.yptToken
+    );
+
+    const authData = await getYptAuthToken(req);
+    if (authData) {
+      yptJwt = authData.token;
+      coid = authData.coid;
+    } else if (hasExplicitCreds) {
+      return res.status(400).json({
+        success: false,
+        error: "YPT Auth Failed (Code 112): Invalid email/password or account uses Google/Apple sign-in on YPT app. Paste your YPT JWT Access Token or add your YPT Group ID manually below.",
+        isDemo: false,
+      });
+    } else {
+      isDemoMode = true;
+    }
+
+    if (isDemoMode) {
+      if (action === "get-groups") {
+        return res.json({
+          success: true,
+          groups: DEMO_YPT_GROUPS,
+          isDemo: true,
+          message: "Loaded demo YPT groups (YPT credentials unconfigured or server unavailable)",
+        });
+      }
+
+      if (action === "get-day-log" || action === "get-day-logs") {
+        const dateParam = (req.query.date || req.body?.date || "") as string;
+        const datesParam = (req.query.dates || req.body?.dates) as string | string[];
+        const dateList = datesParam
+          ? (Array.isArray(datesParam) ? datesParam : String(datesParam).split(","))
+          : (dateParam ? [dateParam] : []);
+
+        const demoHours = 6.25;
+        const demoMs = demoHours * 3600000;
+        const results = dateList.map((d) => ({
+          date: d.trim(),
+          totalMs: demoMs,
+          studyHours: demoHours,
+          subjects: [
+            { id: 1, name: "Quantitative Aptitude", sm: 9000000, color: "#3B82F6" },
+            { id: 2, name: "Reasoning", sm: 7200000, color: "#10B981" },
+            { id: 3, name: "English", sm: 6300000, color: "#8B5CF6" },
+          ],
+        }));
+
+        if (action === "get-day-logs" || dateList.length > 1) {
+          return res.json({ success: true, dayLogs: results, isDemo: true });
+        }
+
+        return res.json({
+          success: true,
+          date: dateParam || results[0]?.date || "today",
+          totalMs: demoMs,
+          studyHours: demoHours,
+          subjects: results[0]?.subjects || [],
+          isDemo: true,
+          message: "Loaded demo YPT day log (YPT credentials unconfigured or server unavailable)",
+        });
+      }
+
+      if (action === "get-roster" || action === "get-live-times") {
+        return res.json({
+          success: true,
+          roster: DEMO_YPT_ROSTER,
+          members: DEMO_YPT_ROSTER,
+          groups: DEMO_YPT_GROUPS,
+          nativeChallenges: [
+            { id: 331805, title: "🍇 test 3 (ID 331805)" }
+          ],
+          isDemo: true,
+          message: "Loaded demo YPT roster (YPT credentials unconfigured or server unavailable)",
+        });
+      }
+    }
+
+    const yptHeaders = {
+      authorization: `JWT ${yptJwt}`,
+      "User-Agent": "Dart/3.11 (dart:io)",
+      "Content-Type": "application/json",
+      coid: coid,
+    };
+
+    if (action === "get-groups") {
+      const gRes = await fetch("https://pi.tgclab.com/group/groups/v2", {
+        headers: yptHeaders,
+      });
+
+      if (!gRes.ok) {
+        const rawText = await gRes.text();
+        const cleanText = rawText.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim().substring(0, 150);
+        return res.status(gRes.status).json({ error: `YPT Groups API Error (${gRes.status}): ${cleanText || "Server Error"}` });
+      }
+
+      const gData = await gRes.json();
+      const rawGroups: any[] = [];
+      if (Array.isArray(gData.gs)) rawGroups.push(...gData.gs);
+      if (Array.isArray(gData.ms)) rawGroups.push(...gData.ms);
+      if (Array.isArray(gData.cs)) rawGroups.push(...gData.cs);
+      if (Array.isArray(gData.ps)) rawGroups.push(...gData.ps);
+      if (rawGroups.length === 0 && Array.isArray(gData)) rawGroups.push(...gData);
+
+      const map = new Map();
+      for (const g of rawGroups) {
+        if (g && g.id && !map.has(g.id)) map.set(g.id, g);
+      }
+
+      const groups = Array.from(map.values()).map((g: any) => ({
+        id: g.id || g.gid,
+        t: g.t || g.title || g.name || `Group ${g.id}`,
+        jc: g.jc !== undefined ? Number(g.jc) : (g.mc ? Number(g.mc) : 0),
+        mc: g.mc !== undefined ? Number(g.mc) : (g.jc ? Number(g.jc) : 0),
+        on: g.on || g.ownerNickname,
+      }));
+
+      return res.json({
+        success: true,
+        groups,
+        raw: gData,
+      });
+    }
+
+    if (action === "get-day-log" || action === "get-day-logs") {
+      const dateParam = (req.query.date || req.body?.date || "") as string;
+      const datesParam = (req.query.dates || req.body?.dates) as string | string[];
+      const dateList = datesParam
+        ? (Array.isArray(datesParam) ? datesParam : String(datesParam).split(",")).map((d) => String(d).trim()).filter(Boolean)
+        : (dateParam ? [dateParam.trim()] : []);
+
+      if (dateList.length === 0) {
+        return res.status(400).json({ error: "Missing required parameter 'date' or 'dates' (YYYY-MM-DD)" });
+      }
+
+      const fetchSingleDay = async (d: string) => {
+        try {
+          const logUrl = `https://pi.tgclab.com/logs/day?date=${encodeURIComponent(d)}&countryID=${encodeURIComponent(coid)}`;
+          const logRes = await fetch(logUrl, { headers: yptHeaders });
+          if (!logRes.ok) {
+            const rawText = await logRes.text();
+            const cleanText = rawText.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim().substring(0, 150);
+            return {
+              date: d,
+              totalMs: 0,
+              studyHours: 0,
+              subjects: [],
+              error: `YPT API Error (${logRes.status}): ${cleanText}`,
+            };
+          }
+
+          const logData = await logRes.json();
+          let totalMs = 0;
+          if (typeof logData.sm === "number") totalMs = logData.sm;
+          else if (typeof logData.total_sm === "number") totalMs = logData.total_sm;
+          else if (typeof logData.totalTime === "number") totalMs = logData.totalTime > 100000 ? logData.totalTime : logData.totalTime * 1000;
+
+          const subjects: any[] = [];
+          if (Array.isArray(logData.ss)) {
+            let subjectSumMs = 0;
+            for (const s of logData.ss) {
+              if (s) {
+                const sMs = typeof s.sm === "number" ? s.sm : (typeof s.st === "number" ? s.st * 1000 : 0);
+                subjectSumMs += sMs;
+                subjects.push({
+                  id: s.id || s.sid,
+                  name: s.n || s.name || s.t || s.title || "Subject",
+                  sm: sMs,
+                  hours: Math.round((sMs / 3600000) * 100) / 100,
+                  color: s.c || s.color,
+                });
+              }
+            }
+            if (totalMs === 0 && subjectSumMs > 0) {
+              totalMs = subjectSumMs;
+            }
+          }
+
+          const studyHours = Math.round((totalMs / 3600000) * 100) / 100;
+          return {
+            date: d,
+            totalMs,
+            studyHours,
+            subjects,
+            raw: logData,
+          };
+        } catch (err: any) {
+          return {
+            date: d,
+            totalMs: 0,
+            studyHours: 0,
+            subjects: [],
+            error: String(err?.message || err),
+          };
+        }
+      };
+
+      const dayLogs = await Promise.all(dateList.map(fetchSingleDay));
+
+      if (action === "get-day-logs" || dateList.length > 1) {
+        return res.json({
+          success: true,
+          dayLogs,
+        });
+      }
+
+      const single = dayLogs[0];
+      return res.json({
+        success: true,
+        date: single.date,
+        totalMs: single.totalMs,
+        studyHours: single.studyHours,
+        subjects: single.subjects,
+        raw: single.raw,
+        error: single.error,
+      });
+    }
+
+    if (action === "get-roster" || action === "get-live-times") {
+      let gids: string[] = [];
+      if (Array.isArray(groupIdsParam) && groupIdsParam.length > 0) {
+        gids = groupIdsParam.map((id: any) => String(id).trim()).filter(Boolean);
+      } else if (typeof groupIdsParam === "string" || typeof groupIdsParam === "number") {
+        gids = String(groupIdsParam).split(",").map((s) => s.trim()).filter(Boolean);
+      }
+
+      if (gids.length === 0) {
+        const gRes = await fetch("https://pi.tgclab.com/group/groups/v2", { headers: yptHeaders });
+        if (gRes.ok) {
+          const gData = await gRes.json();
+          let rawGroups: any[] = [];
+          if (Array.isArray(gData.gs)) rawGroups.push(...gData.gs);
+          if (Array.isArray(gData.ms)) rawGroups.push(...gData.ms);
+          if (Array.isArray(gData.cs)) rawGroups.push(...gData.cs);
+          if (Array.isArray(gData.ps)) rawGroups.push(...gData.ps);
+          gids = rawGroups.map((g: any) => String(g.id)).filter(Boolean);
+        }
+      }
+
+      if (gids.length === 0) {
+        return res.json({ success: true, roster: [], members: [], groups: [], nativeChallenges: [] });
+      }
+
+      const allMembers: any[] = [];
+      const rawChallenges: any[] = [];
+
+      await Promise.all(
+        gids.map(async (gid) => {
+          try {
+            const mUrl = `https://pi.tgclab.com/logs/group/members/v2?groupID=${encodeURIComponent(gid)}&countryID=${encodeURIComponent(coid)}&isLooking=true&version=810046`;
+            const mRes = await fetch(mUrl, { headers: yptHeaders });
+            if (mRes.ok) {
+              const mData = await mRes.json();
+              if (Array.isArray(mData.ms)) {
+                allMembers.push(...mData.ms);
+                // Extract active challenge objects from all members' cls/cs dictionaries
+                for (const m of mData.ms) {
+                  if (m && m.cls) {
+                    if (Array.isArray(m.cls)) {
+                      rawChallenges.push(...m.cls);
+                    } else if (typeof m.cls === 'object') {
+                      for (const [challengeIdStr, challengeItem] of Object.entries(m.cls)) {
+                        const chId = Number(challengeIdStr);
+                        if (chId && !isNaN(chId)) {
+                          rawChallenges.push({
+                            ...(typeof challengeItem === 'object' && challengeItem ? (challengeItem as object) : {}),
+                            id: chId,
+                          });
+                        }
+                      }
+                    }
+                  }
+                  if (m && m.cs) {
+                    if (Array.isArray(m.cs)) {
+                      rawChallenges.push(...m.cs);
+                    } else if (typeof m.cs === 'object') {
+                      for (const [csIdStr, csItem] of Object.entries(m.cs)) {
+                        const csId = Number(csIdStr);
+                        if (csId && !isNaN(csId)) {
+                          rawChallenges.push({
+                            ...(typeof csItem === 'object' && csItem ? (csItem as object) : {}),
+                            id: csId,
+                          });
+                        } else {
+                          rawChallenges.push(csItem);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Top level challenge properties in response
+              if (Array.isArray(mData.cs)) rawChallenges.push(...mData.cs);
+              if (Array.isArray(mData.cls)) rawChallenges.push(...mData.cls);
+              if (Array.isArray(mData.chs)) rawChallenges.push(...mData.chs);
+              if (Array.isArray(mData.challenges)) rawChallenges.push(...mData.challenges);
+              if (mData.group && Array.isArray(mData.group.challenges)) rawChallenges.push(...mData.group.challenges);
+              if (mData.group && Array.isArray(mData.group.cs)) rawChallenges.push(...mData.group.cs);
+              if (mData.g && Array.isArray(mData.g.cs)) rawChallenges.push(...mData.g.cs);
+              if (mData.g && Array.isArray(mData.g.cls)) rawChallenges.push(...mData.g.cls);
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch members for group ${gid}:`, err);
+          }
+
+          // Also attempt group challenges endpoint
+          try {
+            const chUrl = `https://pi.tgclab.com/group/challenges/v2?groupID=${encodeURIComponent(gid)}&countryID=${encodeURIComponent(coid)}&version=810046`;
+            const chRes = await fetch(chUrl, { headers: yptHeaders });
+            if (chRes.ok) {
+              const chData = await chRes.json();
+              if (Array.isArray(chData.cs)) rawChallenges.push(...chData.cs);
+              if (Array.isArray(chData.cls)) rawChallenges.push(...chData.cls);
+              if (Array.isArray(chData.challenges)) rawChallenges.push(...chData.challenges);
+              if (Array.isArray(chData.chs)) rawChallenges.push(...chData.chs);
+              if (Array.isArray(chData)) rawChallenges.push(...chData);
+            }
+          } catch (e) {
+            // Optional endpoint
+          }
+        })
+      );
+
+      // Deduplicate members by permanent User ID (ud) or Nickname (n)
+      const memberMap = new Map();
+      for (const m of allMembers) {
+        const key = m.ud || m.n;
+        if (key && !memberMap.has(key)) {
+          memberMap.set(key, m);
+        }
+      }
+      const members = Array.from(memberMap.values());
+
+      // Deduplicate and normalize native challenges by ID
+      const challengeMap = new Map<number, { id: number; t: string; title: string; e: string; emoji: string; st: number }>();
+      for (const c of rawChallenges) {
+        if (!c || typeof c !== 'object') continue;
+        const id = Number(c.id || c.cid || c.challengeID || c.challengeId);
+        if (!id || isNaN(id)) continue;
+
+        const rawTitle = String(c.t || c.title || c.name || c.subject || c.text || '').trim();
+        let title = rawTitle;
+        let emoji = String(c.e || c.emoji || c.icon || '').trim();
+
+        if (!emoji && title) {
+          const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation}|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|\uD83E[\uDD00-\uDDFF])/u;
+          const match = title.match(emojiRegex);
+          if (match) {
+            emoji = match[0];
+            title = title.replace(emojiRegex, '').trim();
+          }
+        }
+
+        const existing = challengeMap.get(id);
+        if (!existing) {
+          challengeMap.set(id, {
+            id,
+            t: title || `Mission #${id}`,
+            title: title || `Mission #${id}`,
+            e: emoji || '📸',
+            emoji: emoji || '📸',
+            st: c.st !== undefined ? Number(c.st) : 0,
+          });
+        } else {
+          // If existing entry has a fallback placeholder, upgrade it with real title/emoji metadata
+          if (title && (existing.title.startsWith('Mission #') || !existing.title)) {
+            existing.title = title;
+            existing.t = title;
+          }
+          if (emoji && (existing.emoji === '📸' || !existing.emoji)) {
+            existing.emoji = emoji;
+            existing.e = emoji;
+          }
+          if (c.st !== undefined && existing.st === 0) {
+            existing.st = Number(c.st);
+          }
+        }
+      }
+      const nativeChallenges = Array.from(challengeMap.values());
+
+      return res.json({
+        success: true,
+        roster: members,
+        members,
+        nativeChallenges,
+      });
+    }
+
+    return res.status(400).json({ error: `Unknown action '${action}'` });
+  } catch (error: any) {
+    console.error("YPT Proxy Error:", error);
+    const cleanMsg = String(error.message || error).replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim().substring(0, 150);
+    res.status(500).json({ error: cleanMsg || "Internal Server Error" });
+  }
+});
+
 app.post("/api/generate-badge", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -1124,6 +1694,138 @@ app.post("/api/generate-badge", async (req, res) => {
   }
 });
 
+// Shared Error Detection Protocol for Grammar & Competitive Exams
+const ERROR_DETECTION_PROTOCOL = `
+<error_detection_protocol>
+When a user asks to find an error, spot the error, check if a sentence is grammatically correct, identify incorrect parts (A/B/C/D), or asks for sentence correction / why a sentence is wrong, you MUST strictly adhere to the following 5-step response format:
+
+<response_format>
+1. **🎯 Error Located:**
+   - Clearly state the exact incorrect fragment or part (e.g., Part D: "...across most semi-urban and rural region...") and what makes it wrong.
+   - If the sentence is completely correct with no grammatical errors, clearly state: "No error found in this sentence." and briefly explain why.
+
+2. **🛠️ How to Fix It:**
+   - Provide at least 2 distinct ways to fix the sentence:
+     • **Standard / Grammatical Fix:** The direct correction of the erroneous word/phrase. *(Core Principle: If the error can be resolved by adjusting the right side / following element to match the preceding anchor, prefer adjusting the right side).*
+     • **Reworded / Alternative Version:** A natural alternative phrasing or rearrangement.
+
+3. **🕵️ Spotting Strategy (Trigger Words):**
+   - Give the student a mental shortcut / exam strategy focused strictly on the user's error.
+   - Explicitly call out the **Trigger Words / Patterns** to look out for during timed exams.
+   - NEGATIVE CONSTRAINT: Do NOT list other vocabulary words from the same broad grammar category. (e.g., If the error is 'cope with', do NOT say 'Many verbs like cope, comprise, and discuss...'). Listing extra words pollutes the context and confuses the student. Focus ONLY on the specific trigger word from the user's sentence.
+
+4. **Grammar Blueprint (JSON Block):**
+   - You MUST output the grammar rule blueprint strictly as a valid JSON code block enclosed in \`\`\`json ... \`\`\`.
+   - The JSON object MUST have the root key "grammarBlueprint" matching the exact schema below.
+
+<json_schema>
+\`\`\`json
+{
+  "grammarBlueprint": {
+    "ruleName": "string (Concise rule name for THIS sentence)",
+    "formulas": [
+      { "text": "string (Valid formula / rule structure)", "isValid": true },
+      { "text": "string (Forbidden trap / invalid structure)", "isValid": false }
+    ],
+    "examTrap": "string (1-2 short sentences explaining the specific deceptive trick examiners use)",
+    "quickSwap": "string (e.g. Change '...rural region' ➔ '...rural regions')",
+    "example": {
+      "incorrect": "string (A FRESH, CLEAR example sentence DIFFERENT from the user's input sentence, with [error fragment] in brackets)",
+      "correct": "string (The same fresh sentence with [corrected fragment] in brackets)"
+    }
+  }
+}
+\`\`\`
+</json_schema>
+
+CRITICAL MANDATES FOR STEP 4:
+- NEVER write markdown text, paragraphs, or ASCII flow arrows instead of JSON.
+- The JSON block MUST be strictly valid and parseable by standard JSON.parse().
+- Always include at least 1 valid formula ("isValid": true) and 1 invalid trap ("isValid": false).
+- Under "example", ALWAYS write a FRESH, NEW, DIFFERENT illustrative sentence (DO NOT repeat or copy the user's input sentence). Use [brackets] enclosing the target words.
+
+<examples>
+FEW-SHOT DEMONSTRATION 1 (Quantifier / Determiner Agreement):
+User Input: "...yet regulatory oversight remains shockingly lax across most semi-urban and rural region."
+
+1. **🎯 Error Located:** Part D: "...rural region". The word "most" is a plural quantifier and must be followed by a plural countable noun.
+2. **🛠️ How to Fix It:** 
+   - **Standard / Grammatical Fix:** "...across most semi-urban and rural regions."
+   - **Reworded / Alternative Version:** "...across a majority of semi-urban and rural regions."
+3. **🕵️ Spotting Strategy (Trigger Words):** 
+   - Trigger: Whenever you see the quantifier "most", immediately check if the countable noun following it is plural. (Notice: Do not list other quantifiers like some/all/many here).
+4. **Grammar Blueprint (JSON Block):**
+\`\`\`json
+{
+  "grammarBlueprint": {
+    "ruleName": "Quantifier-Noun Agreement (\"Most + Plural Countable Noun\")",
+    "formulas": [
+      { "text": "most + Plural Countable Noun (e.g., most regions)", "isValid": true },
+      { "text": "most + Singular Countable Noun (e.g., most region)", "isValid": false }
+    ],
+    "examTrap": "Long compound modifiers (e.g., 'semi-urban and rural') distract you from verifying that 'most' requires the plural noun 'regions'.",
+    "quickSwap": "Change: \"...rural region\" ➔ \"...rural regions\"",
+    "example": {
+      "incorrect": "Most modern [institution] require strict compliance with regulatory standards.",
+      "correct": "Most modern [institutions] require strict compliance with regulatory standards."
+    }
+  }
+}
+\`\`\`
+
+5. **⚡ Quick Test (Active Recall):**
+   Test your understanding of this rule:
+   *(A) Despite the recent / (B) economic downturn, / (C) most local business / (D) have managed to survive. / (E) No error*
+   [TEST_KEY: {"correct": "C", "explanation": "Replace 'business' with 'businesses' because the quantifier 'most' requires a plural countable noun.", "correctSentence": "Despite the recent economic downturn, most local businesses have managed to survive."}]
+
+FEW-SHOT DEMONSTRATION 2 (Inverted Conditional):
+\`\`\`json
+{
+  "grammarBlueprint": {
+    "ruleName": "Third Conditional (Past Unreal Inversion with \"Had\")",
+    "formulas": [
+      { "text": "Had + Subject + V3 ... Subject + would / could / might + have + V3", "isValid": true },
+      { "text": "Had + Subject + V3 ... will have / would + V1", "isValid": false }
+    ],
+    "examTrap": "Examiners pair the past unreal inversion ('Had anticipated') with future modal 'will not have' instead of the required past modal 'would not have'.",
+    "quickSwap": "Change: \"...will not have disbursed...\" ➔ \"...would not have disbursed...\"",
+    "example": {
+      "incorrect": "Had the authorities acted promptly, the crisis [will not have caused] such severe damage.",
+      "correct": "Had the authorities acted promptly, the crisis [would not have caused] such severe damage."
+    }
+  }
+}
+\`\`\`
+
+5. **⚡ Quick Test (Active Recall):**
+   Test your understanding of this rule:
+   *(A) Had the engineering team / (B) detected the structural flaw earlier, / (C) they will have halted / (D) the construction process immediately. / (E) No error*
+   [TEST_KEY: {"correct": "C", "explanation": "Replace 'will have halted' with 'would have halted' to match the past unreal conditional established by 'Had... detected'.", "correctSentence": "Had the engineering team detected the structural flaw earlier, they would have halted the construction process immediately."}]
+</examples>
+
+5. **⚡ Quick Test (Active Recall):**
+   - Generate exactly ONE new practice sentence to test the student's active recall of the rule you JUST taught.
+   - STRICT REQUIREMENT: The test sentence MUST test the exact same trigger word, idiom, or structural mechanic defined in the JSON blueprint above.
+   - NEGATIVE CONSTRAINT: Do NOT test a "similar" rule or a different word from the same broad category. (e.g., If the rule is about "cope with" vs "cope up with", the test MUST use "cope with". If the rule is "Hardly... when", the test MUST use "Hardly... when").
+   - Format the sentence divided into standard exam parts with (A), (B), (C), (D), and (E) No error, for example:
+     *(A) Each of the students / (B) are aware of / (C) the new policy / (D) announced yesterday. / (E) No error*
+   - MANDATORY: Always embed the exact answer key, short explanation, and the full corrected sentence in the [TEST_KEY: ...] metadata tag right after the question:
+     [TEST_KEY: {"correct": "B", "explanation": "Replace 'are' with 'is' because 'Each' takes a singular verb.", "correctSentence": "Each of the students is aware of the new policy announced yesterday."}]
+</response_format>
+
+=== QUICK TEST FOLLOW-UP HANDLING ===
+If the user's message is an answer, attempt, or query regarding a previously given '⚡ Quick Test':
+- **Do NOT re-print the grammarBlueprint JSON block** because this is a practice drill for the same rule already presented.
+- **Direct Answer / Option Selection (e.g. A/B/C/D, No Error, or typed explanation):**
+  • Evaluate their answer immediately and concisely without unnecessary conversational filler.
+  • If **Correct**: Give a brief validation, explain why it's right in 1 line, and ask if they'd like another hard challenge or to explore another topic.
+  • If **Incorrect**: Gently pinpoint where the reasoning failed, reinforce the **Spotting Strategy / Trigger Words**, and show the correct fix.
+- **Request for a Hint:** Give a subtle clue pointing to the trigger word / subject-verb agreement without giving away the full answer immediately.
+- **Request to Reveal / Explain:** Give the concise 1-2 line direct explanation of where the error lies and the corrected sentence.
+- **Request for Another Practice Question:** Output the **⚡ Quick Test:** header followed by the fresh test sentence divided into (A)/(B)/(C)/(D)/(E) and the [TEST_KEY: {"correct": "...", "explanation": "...", "correctSentence": "..."}] metadata tag. Do NOT print any rule box.
+</error_detection_protocol>
+`;
+
 // API route for Learning AI Tutor Chat
 app.post("/api/learning-chat", async (req, res) => {
   try {
@@ -1163,11 +1865,17 @@ You are an expert Math tutor for competitive exams. Do not give conversational w
 `;
     } else if (chatMode === "english") {
       modeInstruction = `
-You are an expert English tutor for competitive exams. Provide brief, rule-based explanations for grammar, vocabulary, or comprehension. Keep explanations concise, structured, and exam-focused.
+You are an expert English tutor for competitive exams (Bank PO/Clerk, SSC CGL/CHSL, CAT, GRE, etc.).
+Provide brief, rule-based, exam-focused explanations for grammar, vocabulary, idioms, sentence improvement, cloze tests, or comprehension. Keep explanations crisp, structured, and free of conversational fluff.
+${ERROR_DETECTION_PROTOCOL}
 `;
     } else if (chatMode === "reasoning") {
       modeInstruction = `
 You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do NOT immediately declare the final answer to puzzles. Instead, outline a detailed step-by-step approach to solve it. 2. For seating arrangements (circular, linear), always suggest applying the 'Thread Method' to unfold the problem. Include the traditional approach only if requested. 3. If the user provides an attempted answer, you must cross-check their answer against EVERY given condition in the problem. If their answer violates a condition, explicitly state which condition fails. If their answer satisfies ALL conditions, state 'Your arrangement satisfies all conditions and is correct'.
+`;
+    } else {
+      modeInstruction = `
+${ERROR_DETECTION_PROTOCOL}
 `;
     }
 
@@ -1410,11 +2118,83 @@ INSTRUCTIONS & RESPONSE TRACES:
 
     res.json({
       reply: response.text || "No response generated.",
+      text: response.text || "No response generated.",
       screenContextUsed: screenContextBlock
     });
   } catch (error: any) {
     console.error("Jarvis Chat API Error:", error);
     res.status(500).json({ error: error.message || "Failed to process Jarvis query." });
+  }
+});
+
+// API route for Jarvis Intent Determination (/api/jarvis/intent)
+app.post("/api/jarvis/intent", async (req, res) => {
+  try {
+    const { userInput, context, tools } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "jarvis");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
+    const functionDeclarations = (tools || []).map((action: any) => {
+      const properties: Record<string, any> = {};
+      const buildParam = (p: string) => {
+        if (p === 'options') return { type: 'ARRAY', items: { type: 'STRING' }, description: 'List of options' };
+        if (p === 'isMulti') return { type: 'BOOLEAN', description: 'Is multi select' };
+        if (p === 'optionIndex') return { type: 'NUMBER', description: 'Option index' };
+        return { type: 'STRING', description: `Parameter ${p}` };
+      };
+      (action.requiredParams || []).forEach((p: string) => { properties[p] = buildParam(p); });
+      (action.optionalParams || []).forEach((p: string) => { properties[p] = buildParam(p); });
+
+      return {
+        name: action.name,
+        description: action.description,
+        parameters: {
+          type: "OBJECT",
+          properties: Object.keys(properties).length > 0 ? properties : undefined,
+          required: action.requiredParams && action.requiredParams.length > 0 ? action.requiredParams : undefined
+        }
+      };
+    });
+
+    const activeTab = context?.location?.activeTab || 'Dashboard';
+    const systemInstruction = `You are the Jarvis UI Controller for an Exam Prep Application. Current active view: ${activeTab}.
+
+Guidelines:
+1. Call function tools ONLY when the user explicitly requests a UI action (e.g., "go to dashboard", "open settings", "change theme to dark", "create task", "start math drill").
+2. CRITICAL EXCEPTION: Do NOT call any function tool if the user is asking an informational, analytical, performance evaluation, data inquiry, or screen summary question (e.g., "Who is in the top of the leaderboard?", "Who is rank 1?", "How did I do on my last mock?", "What am I looking at?", "Can you summarize what I am looking at right now?", "How are my scores?", "Summarize my performance", "Explain this section"). For these queries, DO NOT invoke any tool or function call so that Jarvis can answer using the full screen context.`;
+
+    const response = await aiClient.models.generateContent({
+      model: modelToUse,
+      contents: userInput,
+      config: {
+        systemInstruction,
+        tools: functionDeclarations.length > 0 ? [{ functionDeclarations }] : undefined,
+        temperature: 0.1
+      }
+    });
+
+    const call = response.functionCalls?.[0];
+    if (call) {
+      return res.json({
+        intent: {
+          action: call.name,
+          parameters: call.args || {}
+        }
+      });
+    }
+
+    res.json({ intent: null });
+  } catch (error: any) {
+    console.error("Jarvis Intent API Error:", error);
+    res.json({ intent: null });
   }
 });
 
@@ -1689,11 +2469,17 @@ You are an expert Math tutor for competitive exams. Do not give conversational w
 `;
     } else if (chatMode === "english") {
       modeInstruction = `
-You are an expert English tutor for competitive exams. Provide brief, rule-based explanations for grammar, vocabulary, or comprehension. Keep explanations concise, structured, and exam-focused.
+You are an expert English tutor for competitive exams (Bank PO/Clerk, SSC CGL/CHSL, CAT, GRE, etc.).
+Provide brief, rule-based, exam-focused explanations for grammar, vocabulary, idioms, sentence improvement, cloze tests, or comprehension. Keep explanations crisp, structured, and free of conversational fluff.
+${ERROR_DETECTION_PROTOCOL}
 `;
     } else if (chatMode === "reasoning") {
       modeInstruction = `
 You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do NOT immediately declare the final answer to puzzles. Instead, outline a detailed step-by-step approach to solve it. 2. For seating arrangements (circular, linear), always suggest applying the 'Thread Method' to unfold the problem. Include the traditional approach only if requested. 3. If the user provides an attempted answer, you must cross-check their answer against EVERY given condition in the problem. If their answer violates a condition, explicitly state which condition fails. If their answer satisfies ALL conditions, state 'Your arrangement satisfies all conditions and is correct'.
+`;
+    } else {
+      modeInstruction = `
+${ERROR_DETECTION_PROTOCOL}
 `;
     }
 
@@ -2154,6 +2940,61 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
     console.log("Raw LLM text:", responseText);
     console.log("Parsed JSON:", finalJSON);
     res.json(JSON.parse(finalJSON));
+  } catch (error: any) {
+    res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
+app.post("/api/extract-raw-text", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+    const token = authHeader.split("Bearer ")[1];
+    await admin.auth().verifyIdToken(token);
+
+    const { documents, base64Data, mimeType } = req.body;
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "flashcards");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+    const prompt = `You are a verbatim OCR and document transcription engine.
+Transcribe and extract ALL visible textual content, editorial analysis, vocabulary words, idioms, sentences, and notes from the attached document/image exactly as written.
+Preserve readability, paragraphs, and list structure. Do not summarize or omit anything.`;
+
+    const parts: any[] = [{ text: prompt }];
+
+    if (documents && Array.isArray(documents)) {
+      parts.push(
+        ...documents.map((doc: any) => ({
+          inlineData: { data: doc.base64Data, mimeType: doc.mimeType },
+        })),
+      );
+    } else if (base64Data && mimeType) {
+      parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
+    } else {
+      return res.status(400).json({ error: "No document or image provided for OCR extraction." });
+    }
+
+    const response = await fetchWithRetry(() =>
+      aiClient.models.generateContent({
+        model: modelToUse,
+        contents: [
+          {
+            role: "user",
+            parts,
+          },
+        ],
+      })
+    );
+
+    const rawText = response.text || "";
+    res.json({ rawText });
   } catch (error: any) {
     res.status(500).json({ error: formatGeminiError(error) });
   }
@@ -2631,4 +3472,525 @@ app.post("/api/admin/settings/search-logs", requireAdminAuth, async (req, res) =
   }
 });
 
+// YPT Challenge Continuous Auto-Sync Management API
+app.get("/api/admin/ypt/sync-cron-status", requireAdminAuth, async (req, res) => {
+  try {
+    const { getYptSyncCronStatus } = await import("./cron.js");
+    const status = getYptSyncCronStatus();
+    res.json({ success: true, status });
+  } catch (error: any) {
+    console.error("Failed to get YPT sync cron status:", error);
+    res.status(500).json({ error: error.message || "Failed to get YPT sync status" });
+  }
+});
+
+app.post("/api/admin/ypt/sync-interval", requireAdminAuth, async (req, res) => {
+  try {
+    const { intervalMinutes } = req.body;
+    const numMinutes = Math.max(1, Math.min(1440, Number(intervalMinutes) || 15));
+
+    const adminDb = getAdminDb();
+    await Promise.allSettled([
+      adminDb.collection("system").doc("settings").set({
+        yptSyncIntervalMinutes: numMinutes
+      }, { merge: true }),
+      adminDb.collection("yptChallenges").doc("hub_settings").set({
+        yptSyncIntervalMinutes: numMinutes
+      }, { merge: true })
+    ]);
+
+    try {
+      const { updateYptSyncCronSchedule } = await import("./cron.js");
+      updateYptSyncCronSchedule(adminDb, numMinutes);
+    } catch (e: any) {
+      console.warn("Notice updating cron schedule:", e.message);
+    }
+
+    res.json({ success: true, intervalMinutes: numMinutes });
+  } catch (error: any) {
+    console.error("Failed to update YPT sync interval:", error);
+    res.status(500).json({ error: error.message || "Failed to update YPT sync interval" });
+  }
+});
+
+app.post("/api/admin/ypt/trigger-continuous-sync", requireAdminAuth, async (req, res) => {
+  try {
+    const adminDb = getAdminDb();
+    const { executeContinuousYptSync } = await import("./cron.js");
+    await executeContinuousYptSync(adminDb);
+    res.json({ success: true, message: "YPT continuous sync triggered successfully" });
+  } catch (error: any) {
+    console.error("Failed to trigger YPT continuous sync:", error);
+    res.status(500).json({ error: error.message || "Failed to trigger YPT continuous sync" });
+  }
+});
+
+// YouTube Transcript Extraction API via TranscriptAPI
+function extractYouTubeVideoId(input: string): string | null {
+  if (!input || typeof input !== "string") return null;
+  const trimmed = input.trim();
+  // Direct 11-char ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+    return trimmed;
+  }
+  // Regex for various YouTube URL patterns
+  const match = trimmed.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/i
+  );
+  return match ? match[1] : null;
+}
+
+app.post(["/api/youtube/transcript", "/api/youtube-transcript"], async (req, res) => {
+  try {
+    const rawUrl = req.body?.url || req.body?.videoUrl || req.body?.video_url;
+    const startTimeSec = req.body?.startTimeSec;
+    const endTimeSec = req.body?.endTimeSec;
+    const includeTimestamps = req.body?.includeTimestamps;
+
+    if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid YouTube URL or video is private/unlisted. Please check the link and try again.",
+      });
+    }
+
+    const videoId = extractYouTubeVideoId(rawUrl);
+    if (!videoId) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid YouTube URL or video is private/unlisted. Please provide a valid public YouTube link.",
+      });
+    }
+
+    const apiKey = process.env.TRANSCRIPT_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error: "TRANSCRIPT_API_KEY is not configured in environment variables. Please add it to your project settings.",
+      });
+    }
+
+    // Call TranscriptAPI
+    const apiUrl = `https://transcriptapi.com/api/v2/youtube/transcript?video_url=${encodeURIComponent(
+      videoId
+    )}&send_metadata=true`;
+
+    let response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+    });
+
+    // Fallback attempt to v1 if v2 returns 404 or path variant
+    if (!response.ok && response.status === 404) {
+      const fallbackUrl = `https://transcriptapi.com/api/v1/transcript?video_id=${encodeURIComponent(
+        videoId
+      )}&send_metadata=true`;
+      const fallbackRes = await fetch(fallbackUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json",
+        },
+      });
+      if (fallbackRes.ok) {
+        response = fallbackRes;
+      }
+    }
+
+    if (!response.ok) {
+      const status = response.status;
+      let errorData: any = {};
+      try {
+        const text = await response.text();
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { error: `HTTP ${status}` };
+      }
+
+      const errorMessage =
+        errorData?.message ||
+        errorData?.error ||
+        errorData?.detail ||
+        `TranscriptAPI responded with HTTP status ${status}`;
+
+      if (status === 401 || status === 403) {
+        return res.status(status).json({
+          success: false,
+          error: "Invalid or expired TRANSCRIPT_API_KEY. Please verify your API key in project settings.",
+          details: errorMessage,
+        });
+      }
+
+      if (status === 402 || status === 429) {
+        return res.status(429).json({
+          success: false,
+          error: "Transcript API credit limit reached. Check API key in settings or top up credits on TranscriptAPI.",
+          details: errorMessage,
+        });
+      }
+
+      if (status === 404) {
+        return res.status(404).json({
+          success: false,
+          error: "No transcript available for this video. Subtitles or auto-generated captions are not enabled for this video.",
+          allowManualInput: true,
+          details: errorMessage,
+        });
+      }
+
+      return res.status(status).json({
+        success: false,
+        error: `Failed to retrieve video transcript: ${errorMessage}`,
+        details: errorData,
+      });
+    }
+
+    let data: any = {};
+    try {
+      const rawBody = await response.text();
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch (parseErr) {
+      console.warn("Failed to parse TranscriptAPI response JSON:", parseErr);
+      data = {};
+    }
+
+    // Normalizing transcript segments across possible TranscriptAPI response shapes
+    let rawSegments: Array<{ start: number; duration: number; text: string }> = [];
+    if (Array.isArray(data?.transcript)) {
+      rawSegments = data.transcript;
+    } else if (Array.isArray(data?.segments)) {
+      rawSegments = data.segments;
+    } else if (Array.isArray(data?.data)) {
+      rawSegments = data.data;
+    } else if (Array.isArray(data)) {
+      rawSegments = data;
+    }
+
+    const parsedSegments = rawSegments
+      .map((seg: any) => ({
+        start: typeof seg.start === "number" ? seg.start : parseFloat(seg.start || "0") || 0,
+        duration: typeof seg.duration === "number" ? seg.duration : parseFloat(seg.duration || "0") || 0,
+        text: (seg.text || "").trim(),
+      }))
+      .filter((seg) => seg.text.length > 0);
+
+    if (parsedSegments.length === 0 && typeof data?.text === "string" && data.text.trim()) {
+      parsedSegments.push({
+        start: 0,
+        duration: 0,
+        text: data.text.trim(),
+      });
+    }
+
+    if (parsedSegments.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "No transcript available for this video. The returned captions were empty.",
+        allowManualInput: true,
+      });
+    }
+
+    const totalDurationSec = Math.max(...parsedSegments.map((s) => s.start + s.duration));
+
+    // Time-range filtering with automatic clamping
+    let startSec = typeof startTimeSec === "number" && !isNaN(startTimeSec) && startTimeSec >= 0
+      ? startTimeSec
+      : 0;
+    let endSec = typeof endTimeSec === "number" && !isNaN(endTimeSec) && endTimeSec > 0
+      ? endTimeSec
+      : totalDurationSec;
+
+    // Automatic clamping logic
+    let isClamped = false;
+    if (startSec >= totalDurationSec) {
+      startSec = 0;
+      isClamped = true;
+    }
+    if (endSec > totalDurationSec) {
+      endSec = totalDurationSec;
+      isClamped = true;
+    }
+
+    const filteredSegments = parsedSegments.filter((seg) => {
+      const segStart = seg.start;
+      return segStart >= startSec && segStart <= endSec;
+    });
+
+    const finalSegments = filteredSegments.length > 0 ? filteredSegments : parsedSegments;
+
+    let fullText = finalSegments
+      .map((s) => (includeTimestamps ? `[${Math.floor(s.start / 60)}:${Math.floor(s.start % 60).toString().padStart(2, "0")}] ${s.text}` : s.text))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Handling very long videos (> 30,000 words / ~150,000 chars)
+    let isTruncated = false;
+    const wordCount = fullText.split(/\s+/).length;
+    if (wordCount > 30000) {
+      const words = fullText.split(/\s+/).slice(0, 30000);
+      fullText = words.join(" ") + "... [Transcript truncated at 30,000 words for optimal AI analysis]";
+      isTruncated = true;
+    }
+
+    const extractedDurationSec = finalSegments.length > 0
+      ? Math.max(...finalSegments.map((s) => s.start + s.duration)) - Math.min(...finalSegments.map((s) => s.start))
+      : totalDurationSec;
+
+    const videoTitle = data?.metadata?.title || data?.title || `YouTube Video (${videoId})`;
+    const channelTitle = data?.metadata?.author || data?.metadata?.channel || data?.author || data?.channelTitle;
+
+    return res.json({
+      success: true,
+      videoId,
+      videoTitle,
+      channelTitle,
+      totalDurationSec: Math.round(totalDurationSec),
+      extractedDurationSec: Math.round(extractedDurationSec),
+      clampedStartSec: startSec,
+      clampedEndSec: endSec,
+      isClamped,
+      isTruncated,
+      wordCount,
+      segmentCount: finalSegments.length,
+      fullText,
+      segments: finalSegments,
+    });
+  } catch (error: any) {
+    console.error("Error in /api/youtube/transcript:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "An unexpected error occurred while extracting the YouTube transcript.",
+    });
+  }
+});
+
+// Endpoint for extracting structured editorial vocabulary from any source text/transcript using Gemini
+app.post("/api/extract-editorial-vocab", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: Missing or invalid token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+    await admin.auth().verifyIdToken(token);
+
+    const { textBody, transcript, customInstructions, context, videoContext, targetLevel, wordCount, nativeLanguage } = req.body;
+    const sourceText = (typeof textBody === "string" && textBody.trim()) 
+      ? textBody.trim() 
+      : (typeof transcript === "string" && transcript.trim()) 
+      ? transcript.trim() 
+      : "";
+
+    if (!sourceText) {
+      return res.status(400).json({ error: "Text content (textBody or transcript) is required for vocabulary extraction." });
+    }
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "flashcards");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
+    // Standardized context resolution (supports string context or object context)
+    let contextStr = "";
+    if (typeof context === "string" && context.trim()) {
+      contextStr = `\nSource Context / Metadata: ${context.trim()}`;
+    } else if (context && typeof context === "object") {
+      contextStr = `\nSource Context: ${JSON.stringify(context)}`;
+    } else if (videoContext && typeof videoContext === "object") {
+      const titleContext = videoContext.title ? `Title: "${videoContext.title}" ` : "";
+      const channelContext = videoContext.channel ? `Channel/Author: "${videoContext.channel}"` : "";
+      contextStr = `\nSource Context: ${titleContext}${channelContext}`.trim();
+    }
+
+    let systemPrompt = "";
+    const isCustomInstruction = Boolean(customInstructions && typeof customInstructions === "string" && customInstructions.trim());
+
+    if (isCustomInstruction) {
+      systemPrompt = `${customInstructions.trim()}${contextStr ? `\n\nSOURCE CONTEXT METADATA:\n${contextStr}` : ""}`;
+    } else {
+      const targetLevelStr = typeof targetLevel === "string" && targetLevel.trim() ? targetLevel.trim() : "B2";
+      const wordCountNum = typeof wordCount === "number" && wordCount > 0 ? wordCount : 15;
+      const nativeLangStr = typeof nativeLanguage === "string" && nativeLanguage.trim() ? nativeLanguage.trim() : "English";
+
+      systemPrompt = `You are a specialized Vocabulary and Language Extraction Assistant.
+Extract core high-value vocabulary words from the provided source content at a ${targetLevelStr} level (${wordCountNum} words).
+Provide clear definitions and contextual meanings in English.
+
+Structure every response exactly according to the following layout guide:
+
+#### **Core Vocabularies & Additional Words**
+
+* **[Word] ([Part of Speech in Title Case])**
+    * **Meaning:** [Core meaning / definition]
+    * **Synonyms:** [Comma-separated synonyms]
+    * **Antonyms:** [Comma-separated antonyms]
+    * **Additional:**
+        ([theme descriptor]): [Comma-separated list of related terms, idioms, or phrasal verbs]
+    * **Example:** [Example sentence]`;
+    }
+
+    const contents = [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${systemPrompt}\n\nTRANSCRIPT / SOURCE CONTENT:\n${sourceText}`,
+          },
+        ],
+      },
+    ];
+
+    const response = await fetchWithRetry(() =>
+      aiClient.models.generateContent({
+        model: modelToUse,
+        contents,
+      })
+    );
+
+    const rawOutputText = response.text || "";
+    const cleanText = rawOutputText
+      .replace(/^```markdown\s*/gi, "")
+      .replace(/^```\s*/gi, "")
+      .replace(/\s*```$/gi, "")
+      .trim();
+
+    // Parse the Markdown into structured words
+    const lines = cleanText.split("\n");
+    const words: Array<any> = [];
+    let headerTitle = "Core Vocabularies & Additional Words";
+
+    let currentWord: any = null;
+    let currentField: "meaning" | "synonyms" | "antonyms" | "additional" | "example" | null = null;
+    const additionalLines: string[] = [];
+
+    const finalizeWord = () => {
+      if (currentWord && currentWord.word) {
+        if (additionalLines.length > 0) {
+          currentWord.additional = additionalLines.join("\n").trim();
+          currentWord.editorialContext = currentWord.additional;
+        }
+        words.push({
+          word: currentWord.word.trim(),
+          pos: currentWord.pos?.trim() || "Noun",
+          meaning: currentWord.meaning?.trim() || "",
+          synonyms: currentWord.synonyms || [],
+          antonyms: currentWord.antonyms || [],
+          additional: currentWord.additional || "",
+          editorialContext: currentWord.editorialContext || "",
+          example: currentWord.example?.trim() || "",
+          mnemonic: "",
+        });
+      }
+      currentWord = null;
+      currentField = null;
+      additionalLines.length = 0;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (!trimmed) continue;
+
+      if (/^#+\s*(\*\*)?Core Vocabularies/i.test(trimmed) || /^Core Vocabularies/i.test(trimmed)) {
+        headerTitle = trimmed.replace(/^[#*\s]+|[#*\s]+$/g, "").trim();
+        continue;
+      }
+
+      // Match Word Header: e.g. "* **Debilitating (Adjective)**" or "**Debilitating (Adjective)**" or "Debilitating (Adjective)"
+      const wordHeaderMatch = trimmed.match(
+        /^(?:\*|\-)?\s*(?:\*\*)?([A-Za-z\s\-']+?)\s*\(([^)]+)\)(?:\*\*)?\s*$/
+      );
+      const isFieldStart = /^(?:\*|\-)?\s*(?:\*\*)?(Meaning|Synonyms|Antonyms|Additional|Example):/i.test(trimmed);
+
+      if (wordHeaderMatch && !isFieldStart && !/^\s*\([^)]+\):/.test(trimmed)) {
+        finalizeWord();
+        currentWord = {
+          word: wordHeaderMatch[1].replace(/\*\*/g, "").trim(),
+          pos: wordHeaderMatch[2].replace(/\*\*/g, "").trim(),
+          synonyms: [],
+          antonyms: [],
+        };
+        continue;
+      }
+
+      if (currentWord) {
+        const meaningMatch = trimmed.match(/^(?:\*|\-)?\s*(?:\*\*)?Meaning(?:\*\*)?\s*:\s*(.+)$/i);
+        if (meaningMatch) {
+          currentField = "meaning";
+          currentWord.meaning = meaningMatch[1].replace(/^\*\*|\*\*$/g, "").trim();
+          continue;
+        }
+
+        const synMatch = trimmed.match(/^(?:\*|\-)?\s*(?:\*\*)?Synonyms(?:\*\*)?\s*:\s*(.*)$/i);
+        if (synMatch) {
+          currentField = "synonyms";
+          const synStr = synMatch[1].replace(/^\*\*|\*\*$/g, "").trim();
+          currentWord.synonyms = synStr ? synStr.split(",").map((s: string) => s.trim().replace(/^\*\*|\*\*$/g, "")).filter(Boolean) : [];
+          continue;
+        }
+
+        const antMatch = trimmed.match(/^(?:\*|\-)?\s*(?:\*\*)?Antonyms(?:\*\*)?\s*:\s*(.*)$/i);
+        if (antMatch) {
+          currentField = "antonyms";
+          const antStr = antMatch[1].replace(/^\*\*|\*\*$/g, "").trim();
+          currentWord.antonyms = antStr ? antStr.split(",").map((s: string) => s.trim().replace(/^\*\*|\*\*$/g, "")).filter(Boolean) : [];
+          continue;
+        }
+
+        const addMatch = trimmed.match(/^(?:\*|\-)?\s*(?:\*\*)?Additional(?:\*\*)?\s*:\s*(.*)$/i);
+        if (addMatch) {
+          currentField = "additional";
+          const inlineContent = addMatch[1].replace(/^\*\*|\*\*$/g, "").trim();
+          if (inlineContent) additionalLines.push(inlineContent);
+          continue;
+        }
+
+        const exMatch = trimmed.match(/^(?:\*|\-)?\s*(?:\*\*)?Example(?:\*\*)?\s*:\s*(.+)$/i);
+        if (exMatch) {
+          currentField = "example";
+          currentWord.example = exMatch[1].replace(/^\*\*|\*\*$/g, "").trim();
+          continue;
+        }
+
+        if (currentField === "additional" || /^\s*\([^)]+\):/.test(trimmed)) {
+          additionalLines.push(trimmed);
+          continue;
+        }
+
+        if (currentField === "meaning" && currentWord.meaning) {
+          currentWord.meaning += " " + trimmed;
+          continue;
+        }
+
+        if (currentField === "example" && currentWord.example) {
+          currentWord.example += " " + trimmed;
+          continue;
+        }
+      }
+    }
+
+    finalizeWord();
+
+    return res.json({
+      title: headerTitle || "Core Vocabularies & Additional Words",
+      topic: "English & Editorial Analysis",
+      rawMarkdown: cleanText,
+      words: words,
+      idiomsAndPhrases: [],
+    });
+  } catch (error: any) {
+    console.error("Error in /api/extract-editorial-vocab:", error);
+    return res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
 export default app;
+

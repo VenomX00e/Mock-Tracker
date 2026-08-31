@@ -196,6 +196,43 @@
         "status": { "type": "string", "enum": ["pending", "verified", "rejected"] }
       },
       "required": ["id", "challengeId", "uploaderUid", "status"]
+    },
+    "PlatformLearningSettings": {
+      "title": "PlatformLearningSettings",
+      "description": "Global learning section and vocabulary extraction default configuration",
+      "type": "object",
+      "properties": {
+        "vocabExtraction": {
+          "type": "object",
+          "properties": {
+            "defaultCustomInstructions": { "type": "string" },
+            "defaultTargetLevel": { "type": "string" },
+            "defaultWordCount": { "type": "number" },
+            "defaultNativeLanguage": { "type": "string" }
+          }
+        },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      }
+    },
+    "YptDailyDaySnapshot": {
+      "title": "YptDailyDaySnapshot",
+      "description": "Daily finalized score and study hours snapshot for YPT challenge",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "challengeId": { "type": "string" },
+        "dateYmd": { "type": "string" },
+        "isLocked": { "type": "boolean" },
+        "lockedAt": { "type": "string" },
+        "lockedBy": { "type": "string", "enum": ["cron_system", "admin_manual"] },
+        "totalChallengeHours": { "type": "number" },
+        "totalChallengePoints": { "type": "number" },
+        "activeMemberCount": { "type": "number" },
+        "memberSnapshots": { "type": "object" },
+        "teamStandings": { "type": "array" }
+      },
+      "required": ["id", "challengeId", "dateYmd", "isLocked", "totalChallengeHours", "totalChallengePoints", "activeMemberCount", "memberSnapshots", "teamStandings"]
     }
   },
   "firestore": {
@@ -206,6 +243,14 @@
     "yptChallenges/{challengeId}/submissions/{submissionId}": {
       "schema": { "$ref": "#/entities/YptSubmissionLog" },
       "description": "OCR submission logs for a YPT challenge"
+    },
+    "yptChallenges/{challengeId}/dailySnapshots/{snapshotId}": {
+      "schema": { "$ref": "#/entities/YptDailyDaySnapshot" },
+      "description": "Permanent date-keyed daily snapshots for a YPT challenge"
+    },
+    "yptChallenges/{challengeId}/daily_snapshots/{snapshotId}": {
+      "schema": { "$ref": "#/entities/YptDailyDaySnapshot" },
+      "description": "Finalized daily snapshots for a YPT challenge"
     },
     "users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
@@ -234,6 +279,10 @@
     "system/settings": {
       "schema": { "$ref": "#/entities/SystemSettings" },
       "description": "Global settings for the application"
+    },
+    "platform_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/PlatformLearningSettings" },
+      "description": "Platform settings for learning and vocabulary extraction"
     }
   }
 }

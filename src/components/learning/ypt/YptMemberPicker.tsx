@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, Search, UserCheck, Crown } from 'lucide-react';
+import { X, Plus, Search, UserCheck, Crown, Shield, Users, RefreshCw } from 'lucide-react';
+import { YptApiMember } from '../../../types/yptTypes';
 
 interface YptMemberPickerProps {
   members: string[];
@@ -9,6 +10,10 @@ interface YptMemberPickerProps {
   badgeStyle?: string;
   badgeIcon?: React.ReactNode;
   leaderHandles?: string[];
+  liveRoster?: YptApiMember[];
+  teams?: Array<{ name: string; color: string; memberUids: string[] }>;
+  onAssignToTeam?: (handle: string, teamIndex: number) => void;
+  onAutoSplitTeams?: () => void;
 }
 
 export function YptMemberPicker({
@@ -19,12 +24,22 @@ export function YptMemberPicker({
   badgeStyle,
   badgeIcon,
   leaderHandles,
+  liveRoster = [],
+  teams,
+  onAssignToTeam,
+  onAutoSplitTeams,
 }: YptMemberPickerProps) {
   const [inputValue, setInputValue] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Prefer names directly from the live group roster
+  const rosterNames = liveRoster.map((m) => m.n);
+  const allAvailableNames = rosterNames.length > 0 
+    ? rosterNames 
+    : Array.from(new Set(knownYptNames));
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -40,14 +55,10 @@ export function YptMemberPicker({
   const query = inputValue.trim().toLowerCase();
 
   // Filter out names that are already added to this team
-  const availableNames = knownYptNames.filter(
+  const availableNames = allAvailableNames.filter(
     (name) => !members.some((m) => m.toLowerCase() === name.toLowerCase())
   );
 
-  // Sort matched suggestions by relevance as user types:
-  // 1. Prefix / startsWith match
-  // 2. Earliest match index
-  // 3. Alphabetical order
   const suggestions = query
     ? availableNames
         .filter((name) => name.toLowerCase().includes(query))
@@ -67,10 +78,10 @@ export function YptMemberPicker({
 
           return a.localeCompare(b);
         })
-    : availableNames.slice(0, 8); // Default suggestions when input focused and query is empty
+    : availableNames.slice(0, 10);
 
   const exactMatchExists =
-    knownYptNames.some((name) => name.toLowerCase() === query) ||
+    allAvailableNames.some((name) => name.toLowerCase() === query) ||
     members.some((m) => m.toLowerCase() === query);
 
   const canAddCustom = query.length > 0 && !exactMatchExists;
@@ -93,6 +104,7 @@ export function YptMemberPicker({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
+      e.stopPropagation();
       if (isOpen && suggestions.length > 0 && highlightedIndex < suggestions.length) {
         handleAddMember(suggestions[highlightedIndex]);
       } else if (inputValue.trim()) {
@@ -100,11 +112,13 @@ export function YptMemberPicker({
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
+      e.stopPropagation();
       if (!isOpen) setIsOpen(true);
       const maxIndex = suggestions.length + (canAddCustom ? 1 : 0) - 1;
       setHighlightedIndex((prev) => (prev < maxIndex ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      e.stopPropagation();
       const maxIndex = suggestions.length + (canAddCustom ? 1 : 0) - 1;
       setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : maxIndex));
     } else if (e.key === 'Backspace' && !inputValue && members.length > 0) {
@@ -116,6 +130,26 @@ export function YptMemberPicker({
 
   return (
     <div ref={containerRef} className="relative w-full space-y-2">
+      {/* Auto Split Header Action if provided */}
+      {onAutoSplitTeams && (
+        <div className="flex items-center justify-between pb-1">
+          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+            Live Group Roster ({liveRoster.length} members)
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onAutoSplitTeams();
+            }}
+            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20 transition-all cursor-pointer"
+          >
+            <RefreshCw className="w-3 h-3" /> Auto-Balance / Group Split
+          </button>
+        </div>
+      )}
+
       {/* Container for Pill-Shaped Tags and Input */}
       <div
         onClick={() => inputRef.current?.focus()}
@@ -124,13 +158,15 @@ export function YptMemberPicker({
         {/* Added Members Pills */}
         {members.map((handle, idx) => {
           const isLeader = leaderHandles?.some((l) => l.toLowerCase() === handle.toLowerCase());
+          const liveInfo = liveRoster.find((m) => m.n.toLowerCase() === handle.toLowerCase());
+
           return (
             <span
               key={idx}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-sm transition-all animate-in fade-in zoom-in-95 duration-150 ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-xs transition-all animate-in fade-in zoom-in-95 duration-150 ${
                 badgeStyle
                   ? badgeStyle
-                  : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:border-indigo-300 dark:hover:border-indigo-700'
+                  : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80 hover:border-indigo-300 dark:hover:border-indigo-700'
               }`}
             >
               {badgeIcon ? (
@@ -141,13 +177,18 @@ export function YptMemberPicker({
                 </span>
               ) : null}
               <span>@{handle.replace(/^@/, '')}</span>
+              {liveInfo?.ud && (
+                <span className="text-[9px] font-mono text-slate-400 bg-slate-200/50 dark:bg-slate-800 px-1 rounded-md">
+                  ID: {liveInfo.ud}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleRemoveMember(handle);
                 }}
-                className="opacity-70 hover:opacity-100 hover:bg-rose-500/20 p-0.5 rounded-full transition-colors"
+                className="opacity-70 hover:opacity-100 hover:bg-rose-500/20 p-0.5 rounded-full transition-colors cursor-pointer"
                 title={`Remove ${handle}`}
               >
                 <X className="w-3 h-3" />
@@ -182,22 +223,29 @@ export function YptMemberPicker({
             <div className="py-1">
               <div className="px-3 py-1 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center justify-between">
                 <span className="flex items-center gap-1">
-                  <UserCheck className="w-3 h-3 text-indigo-500" /> Existing YPT Members
+                  <UserCheck className="w-3 h-3 text-indigo-500" /> Live YPT Roster Members
                 </span>
-                <span className="text-[9px] font-semibold text-indigo-500/80">Sorted by match</span>
+                <span className="text-[9px] font-semibold text-indigo-500/80">Select member</span>
               </div>
               {suggestions.map((name, index) => {
                 const isHighlighted = index === highlightedIndex;
+                const liveMember = liveRoster.find((m) => m.n.toLowerCase() === name.toLowerCase());
+
                 return (
                   <button
                     key={name}
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       handleAddMember(name);
                     }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
                     onMouseEnter={() => setHighlightedIndex(index)}
-                    className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                    className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors cursor-pointer ${
                       isHighlighted
                         ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-bold'
                         : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60'
@@ -208,6 +256,11 @@ export function YptMemberPicker({
                         @
                       </div>
                       <span className="font-semibold">{name}</span>
+                      {liveMember?.ud && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          (ud: {liveMember.ud})
+                        </span>
+                      )}
                     </div>
                     <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
                       + Select
@@ -224,10 +277,15 @@ export function YptMemberPicker({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   handleAddMember(inputValue);
                 }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
                 onMouseEnter={() => setHighlightedIndex(suggestions.length)}
-                className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors cursor-pointer ${
                   highlightedIndex === suggestions.length
                     ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold'
                     : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60'
@@ -250,3 +308,4 @@ export function YptMemberPicker({
     </div>
   );
 }
+

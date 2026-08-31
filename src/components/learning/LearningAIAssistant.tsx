@@ -384,7 +384,14 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
           </div>
         )}
         {currentModeMessages.map((msg, idx) => (
-          <ChatMessageBubble key={idx} msg={msg} idx={idx} setActiveTab={setActiveTab} />
+          <ChatMessageBubble 
+            key={idx} 
+            msg={msg} 
+            idx={idx} 
+            setActiveTab={setActiveTab}
+            onSendAnswer={(ans) => handleSend({ input: ans, attachment: null, pdfPagesInput: '', useWebSearch: false })}
+            isLoading={isLoading}
+          />
         ))}
         {isLoading && (
           <div className="flex justify-start">

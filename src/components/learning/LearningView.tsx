@@ -31,17 +31,13 @@ export function LearningView() {
   const { profile: userProfile } = useUserProfileCtx();
   const { enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary } = usePublicSettingsCtx();
 
-  const hasYptHandle = Boolean(
-    (userProfile?.yptNames && userProfile.yptNames.length > 0) ||
-    userProfile?.defaultYptHandle?.trim()
-  );
   const isYptAdmin = Boolean(
     isOwner ||
     isAdmin ||
     userProfile?.role === 'admin' ||
     userProfile?.permissions?.canManageYpt
   );
-  const canSeeYptTab = hasYptHandle || isYptAdmin;
+  const canSeeYptTab = true;
   const { isFeatureAllowed: isAiTutorAllowed, isModelLocked: isAiTutorModelLocked, activeModel: aiTutorActiveModel } = useGeminiResolution('ai_tutor');
   const activeTab = useUIStore(state => state.learningTab);
   const setActiveTab = useUIStore(state => state.setLearningTab);

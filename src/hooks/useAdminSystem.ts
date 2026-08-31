@@ -19,6 +19,7 @@ export function useAdminSystem() {
   const [enableSpeedMath, setEnableSpeedMath] = useState(true);
   const [enablePracticeLibrary, setEnablePracticeLibrary] = useState(true);
   const [mockExtractionModel, setMockExtractionModel] = useState('gemini-3.1-flash-lite');
+  const [yptSyncIntervalMinutes, setYptSyncIntervalMinutes] = useState<number>(15);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const fetchAnnouncement = useCallback(async () => {
@@ -45,6 +46,9 @@ export function useAdminSystem() {
           setEnableSpeedMath(data.enableSpeedMath ?? true);
           setEnablePracticeLibrary(data.enablePracticeLibrary ?? true);
           setMockExtractionModel(data.mockExtractionModel || 'gemini-3.1-flash-lite');
+          if (data.yptSyncIntervalMinutes && !isNaN(Number(data.yptSyncIntervalMinutes))) {
+            setYptSyncIntervalMinutes(Number(data.yptSyncIntervalMinutes));
+          }
         } else if (data.type === "notice") {
           tempNotices.push({ id: d.id, ...data });
         } else if (data.type === "liveMock") {
@@ -89,6 +93,7 @@ export function useAdminSystem() {
           enableSpeedMath,
           enablePracticeLibrary,
           mockExtractionModel,
+          yptSyncIntervalMinutes: Number(yptSyncIntervalMinutes) || 15,
         },
         { merge: true },
       );
@@ -129,6 +134,8 @@ export function useAdminSystem() {
     setEnablePracticeLibrary,
     mockExtractionModel,
     setMockExtractionModel,
+    yptSyncIntervalMinutes,
+    setYptSyncIntervalMinutes,
     fetchAnnouncement,
     savingSettings,
     saveSettings

@@ -9,13 +9,15 @@ export function usePublicSettings() {
   const [enableSpeedMath, setEnableSpeedMath] = useState<boolean>(true);
   const [enablePracticeLibrary, setEnablePracticeLibrary] = useState<boolean>(true);
   const [mockExtractionModel, setMockExtractionModel] = useState<string>('gemini-3.1-flash-lite');
+  const [hiddenYptTabs, setHiddenYptTabs] = useState<string[]>([]);
 
   useEffect(() => {
-    let unsubscribe: any;
+    let unsubscribe1: any;
+    let unsubscribe2: any;
     const fetchPublicSettings = async () => {
       try {
         const { onSnapshot, doc } = await import('firebase/firestore');
-        unsubscribe = onSnapshot(doc(db, 'system', 'settings'), (snap) => {
+        unsubscribe1 = onSnapshot(doc(db, 'system', 'settings'), (snap) => {
           if (snap.exists()) {
             const data = snap.data();
             setTelegramLink(data.telegramLink || '');
@@ -25,10 +27,26 @@ export function usePublicSettings() {
             setEnableSpeedMath(data.enableSpeedMath ?? true);
             setEnablePracticeLibrary(data.enablePracticeLibrary ?? true);
             setMockExtractionModel(data.mockExtractionModel || 'gemini-3.1-flash-lite');
+            if (Array.isArray(data.hiddenYptTabs)) {
+              setHiddenYptTabs(data.hiddenYptTabs);
+            }
           }
         }, (error: any) => {
           if (error.code !== 'permission-denied') {
              console.warn("Public settings subscription error:", error);
+          }
+        });
+
+        unsubscribe2 = onSnapshot(doc(db, 'yptChallenges', 'hub_settings'), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.hiddenYptTabs)) {
+              setHiddenYptTabs(data.hiddenYptTabs);
+            }
+          }
+        }, (error: any) => {
+          if (error.code !== 'permission-denied') {
+             console.warn("YPT config subscription error:", error);
           }
         });
       } catch (e) {
@@ -37,9 +55,10 @@ export function usePublicSettings() {
     };
     fetchPublicSettings();
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (unsubscribe1) unsubscribe1();
+      if (unsubscribe2) unsubscribe2();
     };
   }, []);
 
-  return useMemo(() => ({ telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, mockExtractionModel }), [telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, mockExtractionModel]);
+  return useMemo(() => ({ telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, mockExtractionModel, hiddenYptTabs }), [telegramLink, telegramText, enableAiTutor, enableVocabulary, enableSpeedMath, enablePracticeLibrary, mockExtractionModel, hiddenYptTabs]);
 }

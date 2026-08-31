@@ -10,9 +10,6 @@ import {
   Moon,
   Calendar,
   Gamepad2,
-  Plus,
-  Star,
-  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useUserProfile } from "../hooks/useUserProfile";
@@ -86,11 +83,6 @@ export default function ProfileDialog({
   const [targetedExam, setTargetedExam] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [bio, setBio] = useState("");
-  const [yptNames, setYptNames] = useState<string[]>([]);
-  const [defaultYptHandle, setDefaultYptHandle] = useState<string | undefined>(undefined);
-  const [editingYptIdx, setEditingYptIdx] = useState<number | null>(null);
-  const [editingYptText, setEditingYptText] = useState<string>("");
-  const [newYptInput, setNewYptInput] = useState("");
   const [isCustomExam, setIsCustomExam] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingAvatar, setIsPickingAvatar] = useState(false);
@@ -214,9 +206,6 @@ export default function ProfileDialog({
       setTargetedExam(profile.targetedExam || "SBI PO");
       setCategoryId(profile.categoryId || "banking");
       setBio(profile.bio || "");
-      const loadedNames = Array.isArray(profile.yptNames) ? profile.yptNames : [];
-      setYptNames(loadedNames);
-      setDefaultYptHandle(profile.defaultYptHandle || (loadedNames.length > 0 ? loadedNames[0] : undefined));
 
       const currentCat = categories.find(
         (c) => c.id === (profile.categoryId || "banking"),
@@ -229,72 +218,6 @@ export default function ProfileDialog({
       );
     }
   }, [profile, categories]);
-
-  const handleAddYptName = () => {
-    const trimmed = newYptInput.trim();
-    if (!trimmed) return;
-    if (trimmed.length > 50) {
-      alert("YPT Username must be 50 characters or less.");
-      return;
-    }
-    if (!yptNames.includes(trimmed)) {
-      setYptNames((prev) => [...prev, trimmed]);
-      if (!defaultYptHandle) {
-        setDefaultYptHandle(trimmed);
-      }
-    }
-    setNewYptInput("");
-  };
-
-  const handleToggleDefaultYpt = (handle: string) => {
-    if (defaultYptHandle === handle) {
-      setDefaultYptHandle(undefined);
-    } else {
-      setDefaultYptHandle(handle);
-    }
-  };
-
-  const handleStartEditYpt = (idx: number, handle: string) => {
-    setEditingYptIdx(idx);
-    setEditingYptText(handle);
-  };
-
-  const handleSaveEditYpt = (idx: number, oldHandle: string) => {
-    const trimmed = editingYptText.trim();
-    if (!trimmed) {
-      setEditingYptIdx(null);
-      return;
-    }
-    if (trimmed.length > 50) {
-      alert("YPT Username must be 50 characters or less.");
-      return;
-    }
-    setYptNames((prev) => {
-      const updated = [...prev];
-      updated[idx] = trimmed;
-      return updated;
-    });
-    if (defaultYptHandle === oldHandle) {
-      setDefaultYptHandle(trimmed);
-    }
-    setEditingYptIdx(null);
-    setEditingYptText("");
-  };
-
-  const handleCancelEditYpt = () => {
-    setEditingYptIdx(null);
-    setEditingYptText("");
-  };
-
-  const handleRemoveYptName = (nameToRemove: string) => {
-    setYptNames((prev) => {
-      const updated = prev.filter((name) => name !== nameToRemove);
-      if (defaultYptHandle === nameToRemove) {
-        setDefaultYptHandle(updated.length > 0 ? updated[0] : undefined);
-      }
-      return updated;
-    });
-  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -313,8 +236,8 @@ export default function ProfileDialog({
         targetedExam,
         categoryId,
         bio,
-        yptNames,
-        defaultYptHandle: defaultYptHandle || (yptNames.length > 0 ? yptNames[0] : ''),
+        yptNames: [],
+        defaultYptHandle: '',
       });
       onClose();
     } catch (e: any) {
@@ -587,142 +510,6 @@ export default function ProfileDialog({
                           className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
                           placeholder="Tell us a bit about yourself"
                         />
-                      </div>
-
-                      {/* YPT Usernames Section */}
-                      <div data-jarvis-item={`YPT Usernames: ${yptNames.join(', ') || 'None'}`}>
-                        <label className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 sm:mb-2 block">
-                          YPT Usernames
-                        </label>
-                        <div className="flex gap-2 items-center">
-                          <input
-                            data-jarvis-target="profile-ypt-input"
-                            type="text"
-                            value={newYptInput}
-                            onChange={(e) => setNewYptInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                handleAddYptName();
-                              }
-                            }}
-                            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 dark:text-slate-100 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-medium"
-                            placeholder="Enter YPT handle (optional)"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddYptName}
-                            disabled={!newYptInput.trim()}
-                            className="p-2 sm:p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg sm:rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
-                            title="Add YPT username"
-                          >
-                            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                          </button>
-                        </div>
-
-                        {/* YPT Chip / Tag List */}
-                        {yptNames.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {yptNames.map((handle, idx) => {
-                              const hasDefault = Boolean(defaultYptHandle);
-                              const isDefault = defaultYptHandle === handle;
-                              const isEditing = editingYptIdx === idx;
-
-                              if (isEditing) {
-                                return (
-                                  <div
-                                    key={idx}
-                                    className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-indigo-500/60 px-2.5 py-1 rounded-full text-xs shadow-xs"
-                                  >
-                                    <input
-                                      type="text"
-                                      value={editingYptText}
-                                      onChange={(e) => setEditingYptText(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault();
-                                          handleSaveEditYpt(idx, handle);
-                                        } else if (e.key === "Escape") {
-                                          handleCancelEditYpt();
-                                        }
-                                      }}
-                                      autoFocus
-                                      className="w-28 sm:w-36 px-1.5 py-0.5 text-xs bg-transparent border-b border-indigo-400 focus:outline-none font-mono text-slate-900 dark:text-white"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveEditYpt(idx, handle)}
-                                      className="p-1 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full transition-colors"
-                                      title="Save handle"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleCancelEditYpt}
-                                      className="p-1 hover:bg-rose-500/20 text-rose-500 rounded-full transition-colors"
-                                      title="Cancel edit"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div
-                                  key={idx}
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                                    isDefault
-                                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-400/50 shadow-2xs ring-1 ring-amber-400/20"
-                                      : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
-                                  }`}
-                                >
-                                  {/* [ ⭐ Star Icon ] */}
-                                  {(!hasDefault || isDefault) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleDefaultYpt(handle)}
-                                      className="p-0.5 hover:scale-110 transition-transform focus:outline-none shrink-0"
-                                      title={
-                                        isDefault
-                                          ? "Default Handle (Click to un-select)"
-                                          : "Set as Default Handle"
-                                      }
-                                    >
-                                      <Star
-                                        className={`w-3.5 h-3.5 ${
-                                          isDefault
-                                            ? "text-amber-400 fill-amber-400"
-                                            : "text-slate-400 hover:text-amber-400 transition-colors"
-                                        }`}
-                                      />
-                                    </button>
-                                  )}
-
-                                  {/* [ @Handle Name (Tap to Edit) ] */}
-                                  <span
-                                    onClick={() => handleStartEditYpt(idx, handle)}
-                                    className="cursor-pointer hover:underline font-mono"
-                                    title="Tap to edit handle name"
-                                  >
-                                    {handle}
-                                  </span>
-
-                                  {/* [ ✖ Delete ] */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveYptName(handle)}
-                                    className="p-0.5 hover:bg-indigo-500/20 rounded-full transition-colors text-slate-400 hover:text-rose-500 ml-0.5 shrink-0"
-                                    title={`Remove ${handle}`}
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     </div>
 

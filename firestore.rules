@@ -188,8 +188,9 @@ service cloud.firestore {
     match /system/{docId} {
       allow get: if true;
       allow list: if true;
-      allow create: if isAnyAdmin() || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
+      allow create: if isAnyAdmin() || (isSignedIn() && docId in ['settings', 'ypt_hub_settings']) || (isSignedIn() && incoming().type == 'liveMock' && incoming().createdBy == request.auth.uid);
       allow update: if isAnyAdmin() 
+        || (isSignedIn() && docId in ['settings', 'ypt_hub_settings'])
         || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid && incoming().type == 'liveMock' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'link', 'createdAt', 'createdBy', 'type', 'updatedAt', 'color', 'icon', 'categoryId']) && (!incoming().keys().hasAny(['createdBy']) || incoming().createdBy == existing().createdBy) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
         || (isSignedIn() && existing().type == 'notice' && existing().editableBy == 'users' && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'updatedAt', 'lastEditedBy', 'lastEditedByEmail']));
       allow delete: if isAnyAdmin() || (isSignedIn() && existing().type == 'liveMock' && existing().createdBy == request.auth.uid);
@@ -360,10 +361,23 @@ service cloud.firestore {
       allow write: if isAnyAdmin();
     }
 
+    match /platform_settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAnyAdmin();
+    }
+
     match /yptChallenges/{challengeId} {
       allow read, create, update, delete: if isSignedIn();
 
       match /submissions/{submissionId} {
+        allow read, create, update, delete: if isSignedIn();
+      }
+
+      match /daily_snapshots/{snapshotId} {
+        allow read, create, update, delete: if isSignedIn();
+      }
+
+      match /dailySnapshots/{snapshotId} {
         allow read, create, update, delete: if isSignedIn();
       }
     }

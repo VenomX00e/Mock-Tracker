@@ -11,6 +11,7 @@ import {
   FileText,
   Loader2,
   X,
+  Youtube,
 } from "lucide-react";
 import { AppStateCtx } from "../../context/AppContext";
 import { useVocabularyStore } from "../../store/vocabularyStore";
@@ -18,6 +19,8 @@ import { extractContentFromDocument } from "../../services/aiService";
 import { extractPdfPages } from "../../utils/pdfUtils";
 import { EditorialSidebar } from "./editorial/EditorialSidebar";
 import { EditorialNodeRenderer } from "./editorial/EditorialNodeRenderer";
+import { YouTubeVocabExtractorModal } from "./YouTubeVocabExtractorModal";
+import { ExtractionSourceType } from "../../types/extraction";
 
 interface EditorialCanvasViewProps {
   canvasId: string;
@@ -47,6 +50,8 @@ export function EditorialCanvasView({
 
   const [isExtractPopoverOpen, setIsExtractPopoverOpen] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
+  const [modalSourceType, setModalSourceType] = useState<ExtractionSourceType>("youtube");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingTextData, setPendingTextData] = useState<string | null>(null);
   const [pageRange, setPageRange] = useState("All pages selected");
@@ -142,7 +147,7 @@ export function EditorialCanvasView({
 
     setPendingFiles(files);
     setPageRange("All pages selected");
-    setIsExtractPopoverOpen(false);
+    setIsExtractPopoverOpen(true);
     if (e.target) e.target.value = "";
   };
 
@@ -464,11 +469,6 @@ export function EditorialCanvasView({
                   <div className="flex flex-col gap-1">
                     <button
                       onClick={() => {
-                        if (!getActiveApiKey()) {
-                          alert("Please configure your Gemini API Key in the AI Settings.");
-                          return;
-                        }
-                        setPendingFiles([]);
                         setPendingTextData("");
                       }}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors text-left"
@@ -477,18 +477,33 @@ export function EditorialCanvasView({
                       Text
                     </button>
                     <button
-                      onClick={() => imageInputRef.current?.click()}
+                      onClick={() => {
+                        imageInputRef.current?.click();
+                      }}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors text-left"
                     >
                       <ImageIcon className="w-4 h-4 text-emerald-500" /> Extract
                       from Image
                     </button>
                     <button
-                      onClick={() => pdfInputRef.current?.click()}
+                      onClick={() => {
+                        pdfInputRef.current?.click();
+                      }}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors text-left"
                     >
                       <FileText className="w-4 h-4 text-red-500" /> Extract from
                       PDF
+                    </button>
+                    <button
+                      onClick={() => {
+                        setModalSourceType("youtube");
+                        setIsExtractPopoverOpen(false);
+                        setIsYouTubeModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors text-left font-medium"
+                    >
+                      <Youtube className="w-4 h-4 text-red-500" /> Extract from
+                      YouTube Video
                     </button>
                   </div>
                 )}
@@ -572,6 +587,14 @@ export function EditorialCanvasView({
           </div>
         </div>
       </div>
+
+      {/* Universal Vocab Extractor Modal */}
+      <YouTubeVocabExtractorModal
+        isOpen={isYouTubeModalOpen}
+        onClose={() => setIsYouTubeModalOpen(false)}
+        targetCanvasId={canvasId}
+        initialSourceType={modalSourceType}
+      />
     </div>
   );
 }

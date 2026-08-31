@@ -1,20 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, FileImage, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Eraser, Undo2, Redo2, AlertTriangle, LayoutGrid, Columns } from 'lucide-react';
+import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, LayoutGrid, Columns, Zap, Lock, Unlock, AlertCircle } from 'lucide-react';
 import { useAppStateCtx, useUserProfileCtx, useAuthCtx } from '../../../context/AppContext';
-import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam } from '../../../types/yptTypes';
-import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog, clearDaySubmissions, clearYptDayPoints, restoreDaySubmissions, completeYptChallenge, reopenYptChallenge } from '../../../services/yptService';
-import { formatStudyDuration, getLocalYmd, areYptHandlesMatching, getChallengeStartDateYmd, getChallengeEndDateYmd, formatDisplayYmd } from '../../../utils/yptUtils';
+import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam, YptApiMember, YptDailyDaySnapshot } from '../../../types/yptTypes';
+import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog, completeYptChallenge, reopenYptChallenge, fetchYptRoster, calculatePointsFromRules, autoCloseMissingDays, getAllDailySnapshots, lockDaySnapshot, deleteDailySnapshot, fetchYptDayLog, syncDayLogToChallenge, syncChallengeDaySnapshotWithHighWaterMark } from '../../../services/yptService';
+import { formatStudyDuration, getLocalYmd, getYptDayYmd, getYesterdayYptDayYmd, applyHighWaterMark, isYptReconciliationWindow, areYptHandlesMatching, getChallengeStartDateYmd, getChallengeEndDateYmd, formatDisplayYmd, getMemberStudyHoursFromApi, evaluateMemberDailyPoints } from '../../../utils/yptUtils';
 import { CreateYptChallengeModal } from './CreateYptChallengeModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { YptUploadModal } from './YptUploadModal';
 import { YptMemberEditModal } from './YptMemberEditModal';
-
-interface HistoryAction {
-  type: 'clear_day';
-  targetDateYmd: string;
-  clearedLogs: YptSubmissionLog[];
-  timestamp: number;
-}
 
 interface YptChallengeDetailProps {
   challenge: YptChallenge;
@@ -36,16 +29,6 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
   const canManageYptChallenges = isGlobalAdmin;
 
-  // Strict Authorization Rule: Creator & App Owner Check for clearing daily points
-  const isChallengeCreatorOrOwner =
-    userProfile?.role === 'owner' ||
-    userProfile?.role === 'admin' ||
-    isOwner ||
-    isAdmin ||
-    challenge.leaderUid === user?.uid ||
-    (challenge as any).createdBy === user?.uid ||
-    (challenge as any).createdByEmail === user?.email;
-
   // Build array of current user's handles (lowercased without @ prefix)
   const userYptHandles = [
     userProfile?.defaultYptHandle,
@@ -61,7 +44,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const canEditMember = (teamId: string, _memberHandle?: string): boolean => {
     if (isGlobalAdmin) return true;
 
-    const targetTeam = challenge.teams.find((t) => t.id === teamId || t.name === teamId);
+    const targetTeam = (challenge.teams || []).find((t) => t.id === teamId || t.name === teamId);
     if (!targetTeam || !Array.isArray(targetTeam.teamLeaders)) return false;
 
     const isAssignedLeaderOfTeam = targetTeam.teamLeaders.some((handle) =>
@@ -72,22 +55,57 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   };
 
   const [submissions, setSubmissions] = useState<YptSubmissionLog[]>([]);
+  const [dailySnapshots, setDailySnapshots] = useState<YptDailyDaySnapshot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [liveRosterMembers, setLiveRosterMembers] = useState<YptApiMember[]>([]);
+  const [isLiveRosterLoading, setIsLiveRosterLoading] = useState(false);
+  const [liveRosterError, setLiveRosterError] = useState<string | null>(null);
   const [recalculating, setRecalculating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [dateFilter, setDateFilter] = useState<'date' | 'allTime'>('date');
-  const [selectedFilterDateYmd, setSelectedFilterDateYmd] = useState<string>(getLocalYmd(new Date()));
+  const [selectedFilterDateYmd, setSelectedFilterDateYmd] = useState<string>(getYptDayYmd());
   const [editingMemberHandle, setEditingMemberHandle] = useState<string | null>(null);
   const [quickRulePopoverMember, setQuickRulePopoverMember] = useState<string | null>(null);
-  const [isAuditLogsCollapsed, setIsAuditLogsCollapsed] = useState(true);
   const [expandedTeamBreakdownId, setExpandedTeamBreakdownId] = useState<string | null>(null);
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'swipe'>('grid');
   const [isDeclareResultsModalOpen, setIsDeclareResultsModalOpen] = useState(false);
   const [isSubmittingResults, setIsSubmittingResults] = useState(false);
+  const [isLockDayModalOpen, setIsLockDayModalOpen] = useState(false);
+  const [isLockingDay, setIsLockingDay] = useState(false);
+  const [lockTargetDateYmd, setLockTargetDateYmd] = useState<string>(getYesterdayYptDayYmd());
+  const [isSyncingDayLog, setIsSyncingDayLog] = useState(false);
+  const [dayLogFeedback, setDayLogFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    subjects?: any[];
+  } | null>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
+
+  const handleSyncYptDayLog = async (dateYmd: string) => {
+    setIsSyncingDayLog(true);
+    setDayLogFeedback(null);
+    try {
+      let targetHandle = userProfile?.defaultYptHandle || userProfile?.yptNames?.[0] || '';
+      const result = await syncDayLogToChallenge(challenge, dateYmd, targetHandle);
+      setDayLogFeedback({
+        type: 'success',
+        message: result.message,
+        subjects: result.subjects,
+      });
+      await fetchLogs();
+      onRefresh();
+    } catch (err: any) {
+      setDayLogFeedback({
+        type: 'error',
+        message: err.message || 'Failed to sync YPT day log',
+      });
+    } finally {
+      setIsSyncingDayLog(false);
+    }
+  };
 
   const scrollCarousel = (direction: 'left' | 'right') => {
     if (carouselRef.current) {
@@ -99,11 +117,6 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     }
   };
 
-  // Undo / Redo & Clear Day Points state
-  const [undoStack, setUndoStack] = useState<HistoryAction[]>([]);
-  const [redoStack, setRedoStack] = useState<HistoryAction[]>([]);
-  const [isClearingDay, setIsClearingDay] = useState(false);
-  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
 
   const formatShortDate = (ymd: string): string => {
     if (!ymd) return '';
@@ -127,7 +140,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
   const getTargetDateYmdForFilter = () => {
     if (dateFilter === 'allTime') {
-      return getLocalYmd(new Date());
+      return getYptDayYmd();
     }
     return selectedFilterDateYmd;
   };
@@ -266,11 +279,58 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     onRefresh();
   };
 
+  const fetchLiveRoster = async () => {
+    setIsLiveRosterLoading(true);
+    setLiveRosterError(null);
+    try {
+      const gids = challenge.targetGroupIds && challenge.targetGroupIds.length > 0 ? challenge.targetGroupIds : undefined;
+      const { roster } = await fetchYptRoster(gids);
+      const activeRoster = roster || [];
+      setLiveRosterMembers(activeRoster);
+
+      // Principle B: High-Water Mark Non-Destructive Update Pattern
+      // Continuously persist the highest peak study hours so 5 AM resets never wipe data
+      if (activeRoster.length > 0) {
+        try {
+          const liveSnapshot = await syncChallengeDaySnapshotWithHighWaterMark(challenge, activeRoster);
+          setDailySnapshots((prev) => {
+            const existsIdx = prev.findIndex((s) => s.targetDateYmd === liveSnapshot.targetDateYmd);
+            if (existsIdx >= 0) {
+              const copy = [...prev];
+              copy[existsIdx] = liveSnapshot;
+              return copy;
+            }
+            return [...prev, liveSnapshot];
+          });
+        } catch (snapErr) {
+          console.warn('Non-fatal error updating high-water mark snapshot:', snapErr);
+        }
+      }
+    } catch (err: any) {
+      console.warn('Failed to fetch live YPT roster for direct study time display:', err);
+      setLiveRosterError(err.message || 'Failed to fetch live YPT study times');
+    } finally {
+      setIsLiveRosterLoading(false);
+    }
+  };
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const logs = await getYptSubmissionLogs(challenge.id);
+      // Auto-close any unfinalized past days into daily snapshot records
+      try {
+        await autoCloseMissingDays(challenge);
+      } catch (autoErr) {
+        console.warn('Auto-closer engine check encountered non-fatal error:', autoErr);
+      }
+
+      const [logs, snapshots] = await Promise.all([
+        getYptSubmissionLogs(challenge.id),
+        getAllDailySnapshots(challenge.id),
+      ]);
       setSubmissions(logs);
+      setDailySnapshots(snapshots || []);
+      await fetchLiveRoster();
     } catch (e) {
       console.error('Error fetching YPT submission logs:', e);
     } finally {
@@ -295,68 +355,6 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     }
   };
 
-  const handleClearSelectedDayPoints = async () => {
-    if (!selectedFilterDateYmd) return;
-    setIsClearingDay(true);
-    try {
-      const removedLogs = await clearDaySubmissions(challenge.id, selectedFilterDateYmd);
-      setUndoStack((prev) => [
-        ...prev,
-        {
-          type: 'clear_day',
-          targetDateYmd: selectedFilterDateYmd,
-          clearedLogs: removedLogs,
-          timestamp: Date.now(),
-        },
-      ]);
-      setRedoStack([]);
-      await fetchLogs();
-      onRefresh();
-    } catch (err) {
-      console.error("Failed to clear day's points:", err);
-    } finally {
-      setIsClearingDay(false);
-      setIsClearConfirmOpen(false);
-    }
-  };
-
-  const handleUndo = async () => {
-    if (undoStack.length === 0) return;
-    const lastAction = undoStack[undoStack.length - 1];
-    setIsClearingDay(true);
-    try {
-      if (lastAction.type === 'clear_day') {
-        await restoreDaySubmissions(challenge.id, lastAction.clearedLogs);
-      }
-      setUndoStack((prev) => prev.slice(0, -1));
-      setRedoStack((prev) => [...prev, lastAction]);
-      await fetchLogs();
-      onRefresh();
-    } catch (err) {
-      console.error('Failed to undo clear:', err);
-    } finally {
-      setIsClearingDay(false);
-    }
-  };
-
-  const handleRedo = async () => {
-    if (redoStack.length === 0) return;
-    const nextAction = redoStack[redoStack.length - 1];
-    setIsClearingDay(true);
-    try {
-      if (nextAction.type === 'clear_day') {
-        await clearDaySubmissions(challenge.id, nextAction.targetDateYmd);
-      }
-      setRedoStack((prev) => prev.slice(0, -1));
-      setUndoStack((prev) => [...prev, nextAction]);
-      await fetchLogs();
-      onRefresh();
-    } catch (err) {
-      console.error('Failed to redo clear:', err);
-    } finally {
-      setIsClearingDay(false);
-    }
-  };
 
   const handleSoftDelete = () => {
     setShowDeleteConfirm(true);
@@ -376,7 +374,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     }
   };
 
-  const totalPointsAllTeams = challenge.teams.reduce((acc, t) => acc + (t.totalPoints || 0), 0) || 1;
+  const totalPointsAllTeams = (challenge.teams || []).reduce((acc, t) => acc + (t.totalPoints || 0), 0) || 1;
 
   return (
     <div className="space-y-6">
@@ -390,66 +388,11 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
         </button>
 
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <button
-            onClick={() => setIsUploadModalOpen(true)}
-            className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl transition-all shadow-md hover:shadow-indigo-500/25 active:scale-95 whitespace-nowrap"
-            title="Upload YPT Group Screenshot for this Challenge"
-          >
-            <FileImage className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-            <span>Upload Screenshot</span>
-          </button>
-
           {canManageYptChallenges && (
             <>
-              {isChallengeCreatorOrOwner ? (
-                <button
-                  onClick={() => setIsClearConfirmOpen(true)}
-                  disabled={isClearingDay}
-                  className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-rose-600 dark:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
-                  title={`Clear points and screenshot submissions for ${selectedFilterDateYmd}`}
-                >
-                  <Eraser className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-500 shrink-0 ${isClearingDay ? 'animate-spin' : ''}`} />
-                  Clear {selectedFilterDateYmd === getLocalYmd(new Date()) ? "Today's" : selectedFilterDateYmd} Points
-                </button>
-              ) : (
-                <button
-                  onClick={handleRecalculate}
-                  disabled={recalculating}
-                  className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
-                >
-                  <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${recalculating ? 'animate-spin' : ''}`} />
-                  Recalculate Points
-                </button>
-              )}
-
-              {/* Undo & Redo Controls */}
-              <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleUndo}
-                  disabled={undoStack.length === 0 || isClearingDay}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Undo last cleared points action"
-                >
-                  <Undo2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-500 shrink-0" />
-                  <span>Undo</span>
-                </button>
-                <div className="w-[1px] h-3.5 sm:h-4 bg-slate-300 dark:bg-slate-700 my-auto" />
-                <button
-                  type="button"
-                  onClick={handleRedo}
-                  disabled={redoStack.length === 0 || isClearingDay}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
-                  title="Redo cleared points action"
-                >
-                  <Redo2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-500 shrink-0" />
-                  <span>Redo</span>
-                </button>
-              </div>
-
               <button
                 onClick={() => setIsEditModalOpen(true)}
-                className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
                 title="Edit Challenge Settings"
               >
                 <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
@@ -459,7 +402,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               <button
                 onClick={handleSoftDelete}
                 disabled={isDeleting}
-                className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer"
                 title="Move to Recycle Bin"
               >
                 <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-500 shrink-0" />
@@ -519,6 +462,21 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
             <span className="text-slate-400">(&lt;{challenge.rules.penaltyThresholdValue ?? challenge.rules.noStudyPenaltyThresholdHours ?? 3} {challenge.rules.penaltyThresholdUnit ?? 'hrs'})</span>
           </div>
 
+          {typeof challenge.rules.maxContinuousHoursThreshold === 'number' && challenge.rules.maxContinuousHoursThreshold > 0 && (
+            <div className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-rose-500/15 backdrop-blur-md border border-rose-500/25 text-rose-200 font-medium">
+              <span>🚨</span>
+              <span className="font-bold text-rose-300">Session Limit:</span>
+              <span className="font-semibold text-white">
+                &gt;{challenge.rules.maxContinuousHoursThreshold} hrs{' '}
+                {challenge.rules.maxContinuousPenaltyType === 'fixed'
+                  ? `(-${challenge.rules.maxContinuousFixedPenalty ?? 10} XP)`
+                  : `(${challenge.rules.maxContinuousPenaltyMultiplier ?? 2}x ${
+                      challenge.rules.maxContinuousPenaltyMode === 'whole' ? 'entire' : 'excess'
+                    })`}
+              </span>
+            </div>
+          )}
+
           {typeof challenge.rules.morningSnapBonus === 'number' && (
             <div className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-amber-500/15 backdrop-blur-md border border-amber-500/25 text-amber-200 font-medium">
               <span>☀️</span>
@@ -557,9 +515,24 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
             <div>
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-500 shrink-0" /> Team Score Comparison Arena
-              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Users className="w-4 h-4 text-indigo-500 shrink-0" /> Team Score Comparison Arena
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5 shrink-0">
+                  <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isLiveRosterLoading ? 'animate-ping' : 'animate-pulse'}`} />
+                  <span>Sync</span>
+                  <button
+                    type="button"
+                    onClick={fetchLiveRoster}
+                    disabled={isLiveRosterLoading}
+                    className="ml-1 p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                    title="Refresh direct live YPT API study times"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLiveRosterLoading ? 'animate-spin text-indigo-500' : ''}`} />
+                  </button>
+                </span>
+              </div>
               <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Live performance ranking & team standings</p>
             </div>
 
@@ -599,12 +572,12 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           {(() => {
             const minFilterDateYmd = getChallengeStartDateYmd(challenge);
             const maxFilterDateYmd = getChallengeEndDateYmd(challenge);
+            const todayStr = getYptDayYmd();
 
             const isPrevDateDisabled = selectedFilterDateYmd <= minFilterDateYmd;
             const isNextDateDisabled = selectedFilterDateYmd >= maxFilterDateYmd;
 
             const getDayOffsetFromToday = (dateYmd: string): number => {
-              const todayStr = getLocalYmd(new Date());
               if (dateYmd === todayStr) return 0;
               const [tY, tM, tD] = todayStr.split('-').map(Number);
               const [sY, sM, sD] = dateYmd.split('-').map(Number);
@@ -625,93 +598,214 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               return `📅 ${formatted}`;
             };
 
+            const isPastSelected = dateFilter === 'date' && selectedFilterDateYmd < todayStr;
+            const isTodaySelected = dateFilter === 'date' && selectedFilterDateYmd === todayStr;
+            const activeSnapshot = dailySnapshots.find((s) => s.targetDateYmd === selectedFilterDateYmd);
+
             return (
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs font-bold overflow-x-auto max-w-full shrink-0">
-                {/* Single Date Navigator Pill with Left/Right Arrows */}
-                <div
-                  className={`flex items-center rounded-lg transition-all ${
-                    dateFilter === 'date'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isPrevDateDisabled) {
-                        const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
-                        const dateObj = new Date(y, m - 1, d);
-                        dateObj.setDate(dateObj.getDate() - 1);
-                        const nextYmd = getLocalYmd(dateObj);
-                        if (nextYmd >= minFilterDateYmd) {
-                          setSelectedFilterDateYmd(nextYmd);
-                          setDateFilter('date');
-                        }
-                      }
-                    }}
-                    disabled={isPrevDateDisabled}
-                    className="p-1 sm:p-1.5 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-l-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title={`Previous day (challenge start: ${formatShortDate(minFilterDateYmd)})`}
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Status Indicator Pill & Actions */}
+                {isPastSelected && activeSnapshot && activeSnapshot.isLocked !== false && (
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-lg shadow-2xs whitespace-nowrap">
+                      🔒 Finalized Snapshot
+                    </span>
+                    {canManageYptChallenges && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLockTargetDateYmd(selectedFilterDateYmd);
+                          setIsLockDayModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                        title="Re-lock or review snapshot for this date"
+                      >
+                        <Settings className="w-3 h-3 text-slate-400" />
+                        <span>Manage</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {isPastSelected && activeSnapshot && activeSnapshot.isLocked === false && (
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-lg shadow-2xs whitespace-nowrap">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <span>Live Accumulating</span>
+                    </span>
+                    {canManageYptChallenges && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLockTargetDateYmd(selectedFilterDateYmd);
+                          setIsLockDayModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                        title="Lock and finalize day"
+                      >
+                        <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>Finalize</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {isPastSelected && !activeSnapshot && (
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg whitespace-nowrap" title="No finalized snapshot. Auto-penalties prevented.">
+                      <AlertCircle className="w-3 h-3 text-slate-400" />
+                      <span>Historical Unsynced</span>
+                    </span>
+                    {canManageYptChallenges && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLockTargetDateYmd(selectedFilterDateYmd);
+                          setIsLockDayModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                        title="Lock and snapshot this past day"
+                      >
+                        <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>Lock Day</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {dateFilter === 'allTime' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-lg shadow-2xs whitespace-nowrap">
+                    🏆 Cumulative Tournament Totals
+                  </span>
+                )}
 
-                  <button
-                    type="button"
-                    onClick={() => setDateFilter('date')}
-                    className="px-2 sm:px-2.5 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer"
+                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs font-bold overflow-x-auto max-w-full shrink-0">
+                  {/* Single Date Navigator Pill with Left/Right Arrows */}
+                  <div
+                    className={`flex items-center rounded-lg transition-all ${
+                      dateFilter === 'date'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
                   >
-                    {getFilterDateLabel(selectedFilterDateYmd)}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isNextDateDisabled) {
-                        const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
-                        const dateObj = new Date(y, m - 1, d);
-                        dateObj.setDate(dateObj.getDate() + 1);
-                        const nextYmd = getLocalYmd(dateObj);
-                        if (nextYmd <= maxFilterDateYmd) {
-                          setSelectedFilterDateYmd(nextYmd);
-                          setDateFilter('date');
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isPrevDateDisabled) {
+                          const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
+                          const dateObj = new Date(y, m - 1, d);
+                          dateObj.setDate(dateObj.getDate() - 1);
+                          const nextYmd = getLocalYmd(dateObj);
+                          if (nextYmd >= minFilterDateYmd) {
+                            setSelectedFilterDateYmd(nextYmd);
+                            setDateFilter('date');
+                          }
                         }
-                      }
-                    }}
-                    disabled={isNextDateDisabled}
-                    className="p-1 sm:p-1.5 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-r-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    title={isNextDateDisabled ? `End of challenge period reached (${formatShortDate(maxFilterDateYmd)})` : "Next day"}
+                      }}
+                      disabled={isPrevDateDisabled}
+                      className="p-1 sm:p-1.5 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-l-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title={`Previous day (challenge start: ${formatShortDate(minFilterDateYmd)})`}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDateFilter('date')}
+                      className="px-2 sm:px-2.5 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer"
+                    >
+                      {getFilterDateLabel(selectedFilterDateYmd)}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isNextDateDisabled) {
+                          const [y, m, d] = selectedFilterDateYmd.split('-').map(Number);
+                          const dateObj = new Date(y, m - 1, d);
+                          dateObj.setDate(dateObj.getDate() + 1);
+                          const nextYmd = getLocalYmd(dateObj);
+                          if (nextYmd <= maxFilterDateYmd) {
+                            setSelectedFilterDateYmd(nextYmd);
+                            setDateFilter('date');
+                          }
+                        }
+                      }}
+                      disabled={isNextDateDisabled}
+                      className="p-1 sm:p-1.5 hover:bg-slate-200/70 dark:hover:bg-slate-800 rounded-r-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title={isNextDateDisabled ? `End of challenge period reached (${formatShortDate(maxFilterDateYmd)})` : "Next day"}
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* All-Time Pill */}
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter('allTime')}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all font-bold whitespace-nowrap ${
+                      dateFilter === 'allTime'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
                   >
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    🏆 All-Time
                   </button>
                 </div>
-
-                {/* All-Time Pill */}
-                <button
-                  type="button"
-                  onClick={() => setDateFilter('allTime')}
-                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs rounded-lg transition-all font-bold whitespace-nowrap ${
-                    dateFilter === 'allTime'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  🏆 All-Time
-                </button>
               </div>
             );
           })()}
         </div>
 
+        {/* YPT Historical Day Log Feedback Banner */}
+        {dayLogFeedback && (
+          <div
+            className={`p-3.5 rounded-2xl border flex items-start justify-between gap-3 text-xs transition-all shadow-xs ${
+              dayLogFeedback.type === 'success'
+                ? 'bg-sky-50/90 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800/80 text-sky-900 dark:text-sky-200'
+                : 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/80 text-rose-900 dark:text-rose-200'
+            }`}
+          >
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center gap-2 font-bold">
+                {dayLogFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                )}
+                <span>{dayLogFeedback.message}</span>
+              </div>
+              {dayLogFeedback.subjects && dayLogFeedback.subjects.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">
+                    Subjects breakdown:
+                  </span>
+                  {dayLogFeedback.subjects.map((sub: any, idx: number) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold bg-white/90 dark:bg-slate-900/90 border border-sky-200 dark:border-sky-800 rounded-lg shadow-2xs"
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: sub.color || '#0284C7' }} />
+                      <span>{sub.name}: {sub.hours}h</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setDayLogFeedback(null)}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Compute Stats based on active dateFilter */}
         {(() => {
-          const todayObj = new Date();
-          const todayYmd = getLocalYmd(todayObj);
+          const todayYmd = getYptDayYmd();
 
           const getDayOffsetFromToday = (dateYmd: string): number => {
-            const todayStr = getLocalYmd(new Date());
-            if (dateYmd === todayStr) return 0;
-            const [tY, tM, tD] = todayStr.split('-').map(Number);
+            if (dateYmd === todayYmd) return 0;
+            const [tY, tM, tD] = todayYmd.split('-').map(Number);
             const [sY, sM, sD] = dateYmd.split('-').map(Number);
             const tDate = new Date(tY, tM - 1, tD);
             const sDate = new Date(sY, sM - 1, sD);
@@ -739,11 +833,16 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           // Deduplicate submissions per member & date to ensure same-day replacements
           const deduplicatedDailyStats = getDeduplicatedDailyMemberStats(submissions, challenge);
 
+          // Identify all past finalized daily snapshots
+          const pastClosedSnapshots = dailySnapshots.filter((s) => s.targetDateYmd < todayYmd && s.isLocked !== false);
+          const pastClosedDates = new Set(pastClosedSnapshots.map((s) => s.targetDateYmd));
+          const activeSnapshot = dailySnapshots.find((s) => s.targetDateYmd === selectedFilterDateYmd);
+
           // Global top scorer candidate for period
           let globalTopScorerHandle: string | null = null;
           let globalTopScorerPoints = -Infinity;
 
-          const processedTeams = challenge.teams.map((team) => {
+          const processedTeams = (challenge.teams || []).map((team) => {
             const calculatedMembers = (team.memberUids || []).map((handleRaw) => {
               const cleanHandle = handleRaw.replace(/^@/, '').trim().toLowerCase();
 
@@ -754,41 +853,48 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
               const periodBadgeMap = new Map<string, { emoji: string; name: string; points: number; count: number; isTeamAll?: boolean }>();
 
+              // 1. Add historical hours and points from all past finalized snapshots
+              pastClosedSnapshots.forEach((snap) => {
+                const rec = (snap.memberRecords || []).find((r) =>
+                  areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
+                );
+                if (rec) {
+                  cumulativeHours += rec.hoursStudied || 0;
+                  cumulativePoints += rec.netPoints || 0;
+
+                  if (dateFilter === 'allTime' && Array.isArray(rec.appliedRules)) {
+                    rec.appliedRules.forEach((ar) => {
+                      const key = ar.ruleId || ar.ruleName || ar.emoji;
+                      const existing = periodBadgeMap.get(key);
+                      if (existing) {
+                        existing.count += 1;
+                      } else {
+                        periodBadgeMap.set(key, {
+                          emoji: ar.emoji || '⭐',
+                          name: ar.ruleName,
+                          points: ar.points || 0,
+                          count: 1,
+                          isTeamAll: false,
+                        });
+                      }
+                    });
+                  }
+                }
+              });
+
+              // 2. Add unclosed past submission stats (if any exist before today that weren't captured in snapshot)
               const memberDailyStats = deduplicatedDailyStats.filter(
                 (s) => areYptHandlesMatching(s.memberHandle, handleRaw, s.matchedUid, undefined)
               );
 
               memberDailyStats.forEach((stat) => {
-                const subYmd = stat.dateYmd;
+                if (stat.dateYmd < todayYmd && !pastClosedDates.has(stat.dateYmd)) {
+                  cumulativeHours += stat.hoursStudied || 0;
+                  cumulativePoints += stat.pointsEarned || 0;
 
-                let isMatch = false;
-                if (dateFilter === 'allTime') {
-                  isMatch = true;
-                } else {
-                  isMatch = subYmd === selectedFilterDateYmd;
-                }
-
-                const hours = stat.hoursStudied || 0;
-                const pts = stat.pointsEarned || 0;
-
-                cumulativeHours += hours;
-                cumulativePoints += pts;
-
-                if (isMatch) {
-                  periodHours += hours;
-                  periodPoints += pts;
-
-                  // Extract rules / badges with explicit point values
-                  if (Array.isArray(stat.detectedRules) && stat.detectedRules.length > 0) {
+                  if (dateFilter === 'allTime' && Array.isArray(stat.detectedRules)) {
                     stat.detectedRules.forEach((dr) => {
                       const key = dr.ruleId || dr.ruleName || dr.emoji;
-                      const matchingCustomRule = Array.isArray(challenge.rules?.customRules)
-                        ? challenge.rules.customRules.find(
-                            (cr) => cr.id === dr.ruleId || cr.name === dr.ruleName || (cr.emoji && cr.emoji === dr.emoji)
-                          )
-                        : undefined;
-                      const isTeamAll = matchingCustomRule?.scope === 'team_all';
-
                       const existing = periodBadgeMap.get(key);
                       if (existing) {
                         existing.count += 1;
@@ -798,7 +904,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                           name: dr.ruleName,
                           points: dr.points || 0,
                           count: 1,
-                          isTeamAll: Boolean(isTeamAll),
+                          isTeamAll: false,
                         });
                       }
                     });
@@ -806,11 +912,218 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 }
               });
 
+              // 3. Compute Today's live / verified gain
+              let todayLiveHours = 0;
+              let todayLivePoints = 0;
+
+              const todayStat = memberDailyStats.find((s) => s.dateYmd === todayYmd);
+              if (todayStat) {
+                todayLiveHours = todayStat.hoursStudied || 0;
+                todayLivePoints = todayStat.pointsEarned || 0;
+
+                if (Array.isArray(todayStat.detectedRules)) {
+                  todayStat.detectedRules.forEach((dr) => {
+                    const key = dr.ruleId || dr.ruleName || dr.emoji;
+                    const existing = periodBadgeMap.get(key);
+                    if (existing) {
+                      existing.count += 1;
+                    } else {
+                      periodBadgeMap.set(key, {
+                        emoji: dr.emoji || '✨',
+                        name: dr.ruleName,
+                        points: dr.points || 0,
+                        count: 1,
+                        isTeamAll: false,
+                      });
+                    }
+                  });
+                }
+              }
+
+              // Live YPT API Streaming for Today
+              const liveMember = liveRosterMembers.find((m) => {
+                if (!m) return false;
+                const mHandle = (m.n || '').replace(/^@/, '').trim();
+                return areYptHandlesMatching(mHandle, handleRaw, m.ud ? String(m.ud) : undefined);
+              });
+
+              let apiLiveHours = 0;
+              let apiLivePoints = 0;
+              if (liveMember && challenge.rules) {
+                apiLiveHours = getMemberStudyHoursFromApi(liveMember);
+                const completedChallengeIds: number[] = [];
+                if (liveMember.cls && typeof liveMember.cls === 'object') {
+                  Object.entries(liveMember.cls).forEach(([nativeChId, c]: [string, any]) => {
+                    if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
+                      if (nativeChId) completedChallengeIds.push(Number(nativeChId));
+                      if (c.id) completedChallengeIds.push(Number(c.id));
+                    }
+                  });
+                }
+                const apiLiveMaxContMs = liveMember?.dl?.mm || 0;
+                const evalResult = evaluateMemberDailyPoints(
+                  apiLiveHours,
+                  challenge.rules,
+                  completedChallengeIds,
+                  false,
+                  getChallengeStartDateYmd(challenge),
+                  todayYmd,
+                  [],
+                  false,
+                  apiLiveMaxContMs
+                );
+                apiLivePoints = evalResult.netPoints;
+
+                if (apiLiveHours > todayLiveHours) {
+                  todayLiveHours = apiLiveHours;
+                }
+                if (apiLivePoints > todayLivePoints) {
+                  todayLivePoints = apiLivePoints;
+                }
+
+                if (Array.isArray(evalResult.appliedRules)) {
+                  evalResult.appliedRules.forEach((ar) => {
+                    const key = ar.ruleId || ar.ruleName || ar.emoji;
+                    if (!periodBadgeMap.has(key)) {
+                      periodBadgeMap.set(key, {
+                        emoji: ar.emoji || '✨',
+                        name: ar.ruleName,
+                        points: ar.points || 0,
+                        count: 1,
+                        isTeamAll: false,
+                      });
+                    }
+                  });
+                }
+              }
+
+              // Principle B: High-Water Mark Non-Destructive Update Pattern
+              // Retrieve peak study hours recorded for today from snapshot to safeguard against 5 AM resets
+              const todaySnapshot = dailySnapshots.find((s) => s.targetDateYmd === todayYmd);
+              const recordedHwm = todaySnapshot?.highWaterMarks?.[cleanHandle] ?? 0;
+              const recordedMaxContHwm = todaySnapshot?.maxContinuousHighWaterMarks?.[cleanHandle] ?? 0;
+              if (recordedHwm > todayLiveHours) {
+                todayLiveHours = recordedHwm;
+                const calcHwm = evaluateMemberDailyPoints(
+                  todayLiveHours,
+                  challenge.rules,
+                  [],
+                  false,
+                  getChallengeStartDateYmd(challenge),
+                  todayYmd,
+                  [],
+                  false,
+                  recordedMaxContHwm
+                );
+                if (calcHwm.netPoints > todayLivePoints) {
+                  todayLivePoints = calcHwm.netPoints;
+                }
+              }
+
+              // Cumulative total adds Today's contribution
+              cumulativeHours += todayLiveHours;
+              cumulativePoints += todayLivePoints;
+
+              // 4. Module 4: Client Historical Date Navigator & State Rendering
+              // Logic Tree for dateFilter === 'date':
+              // - If snapshot exists & isLocked: Render snapshot data directly (Zero 0:00 glitches, full team accuracy)
+              // - If snapshot exists & is open: Render current high-water marks + "Live accumulating" badge
+              // - If snapshot is missing: Query GET /logs/day or use submissions, display "Historical Unsynced" (no auto-penalties)
+              if (dateFilter === 'date') {
+                if (selectedFilterDateYmd < todayYmd) {
+                  // Past date selection
+                  if (activeSnapshot && activeSnapshot.isLocked !== false) {
+                    // Case A: Locked Snapshot
+                    const snapRec = (activeSnapshot.memberRecords || []).find((r) =>
+                      areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
+                    );
+                    const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
+
+                    if (snapRec || memberSnap) {
+                      periodHours = memberSnap ? memberSnap.hoursStudied : (snapRec?.hoursStudied || 0);
+                      periodPoints = memberSnap ? memberSnap.netPoints : (snapRec?.netPoints || 0);
+                      periodBadgeMap.clear();
+
+                      const rulesList = memberSnap?.appliedRuleBreakdown || snapRec?.appliedRules || [];
+                      rulesList.forEach((ar: any) => {
+                        const key = ar.ruleId || ar.ruleName || ar.emoji;
+                        periodBadgeMap.set(key, {
+                          emoji: ar.emoji || '⭐',
+                          name: ar.ruleName,
+                          points: ar.points || 0,
+                          count: 1,
+                          isTeamAll: false,
+                        });
+                      });
+                    }
+                  } else if (activeSnapshot && activeSnapshot.isLocked === false) {
+                    // Case B: Open Snapshot
+                    const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
+                    const hwm = activeSnapshot.highWaterMarks?.[cleanHandle] ?? 0;
+                    periodHours = memberSnap ? memberSnap.hoursStudied : hwm;
+                    periodPoints = memberSnap ? memberSnap.netPoints : 0;
+                  } else {
+                    // Case C: Missing Snapshot (Historical Unsynced) -> Use deduplicated submission logs with false-penalty protection
+                    const statForDay = memberDailyStats.find((s) => s.dateYmd === selectedFilterDateYmd);
+                    if (statForDay) {
+                      periodHours = statForDay.hoursStudied || 0;
+                      // Protected calculation: do NOT apply auto-penalties on missing snapshot
+                      const evalMissing = evaluateMemberDailyPoints(
+                        periodHours,
+                        challenge.rules,
+                        [],
+                        false, // isDayLocked: false -> prevent false penalty
+                        getChallengeStartDateYmd(challenge),
+                        selectedFilterDateYmd,
+                        (statForDay.detectedRules || []).map((r) => r.emoji || ''),
+                        false,
+                        statForDay.maxContinuousMs || 0
+                      );
+                      periodPoints = evalMissing.netPoints;
+                      periodBadgeMap.clear();
+                      if (Array.isArray(statForDay.detectedRules)) {
+                        statForDay.detectedRules.forEach((dr) => {
+                          const key = dr.ruleId || dr.ruleName || dr.emoji;
+                          periodBadgeMap.set(key, {
+                            emoji: dr.emoji || '✨',
+                            name: dr.ruleName,
+                            points: dr.points || 0,
+                            count: 1,
+                            isTeamAll: false,
+                          });
+                        });
+                      }
+                    } else {
+                      // No log on missing day -> 0 hours, 0 points (DO NOT auto-penalize)
+                      periodHours = 0;
+                      periodPoints = 0;
+                    }
+                  }
+                } else if (selectedFilterDateYmd === todayYmd) {
+                  // Today selection (Live Day State Protection)
+                  periodHours = todayLiveHours;
+                  periodPoints = Math.max(0, todayLivePoints);
+                }
+              } else {
+                // All-Time selection
+                periodHours = cumulativeHours;
+                periodPoints = cumulativePoints;
+              }
+
               // Check global candidate
               if (periodPoints > globalTopScorerPoints && periodPoints > 0) {
                 globalTopScorerPoints = periodPoints;
                 globalTopScorerHandle = handleRaw;
               }
+
+              // Live State Protection: on the ongoing live day, hide any premature penalty badges
+              const isLiveDay = dateFilter === 'date' && selectedFilterDateYmd === todayYmd;
+              const finalPeriodBadges = Array.from(periodBadgeMap.values()).filter((badge) => {
+                if (isLiveDay && (badge.points < 0 || badge.name?.toLowerCase().includes('penalty') || badge.emoji === '⚠️')) {
+                  return false;
+                }
+                return true;
+              });
 
               return {
                 handleRaw,
@@ -819,7 +1132,9 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 periodHours,
                 cumulativePoints,
                 cumulativeHours,
-                periodBadges: Array.from(periodBadgeMap.values()),
+                periodBadges: finalPeriodBadges,
+                isLiveFromApi: Boolean(liveMember && apiLiveHours > 0),
+                isStudyingCurrently: Boolean(liveMember?.dl?.is || (liveMember as any)?.isStudyingCurrently),
               };
             });
 
@@ -1193,6 +1508,19 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                                       <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0" style={{ backgroundColor: team.color || '#6366f1' }} />
                                       <span className="truncate">@{member.handleRaw.replace(/^@/, '')}</span>
 
+                                      {/* Live "Now Studying" Indicator (Only for Today / Live Tab) */}
+                                      {dateFilter === 'date' && selectedFilterDateYmd === todayYmd && member.isStudyingCurrently && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-extrabold border border-emerald-500/20 shrink-0"
+                                          title="Currently studying on YPT"
+                                        >
+                                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                                          <span>Studying</span>
+                                        </span>
+                                      )}
+
+
+
                                       {canEditThisMember && (
                                         <button
                                           type="button"
@@ -1224,27 +1552,40 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
                                 {/* Earned Badges & Quick Rule Actions */}
                                 <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
-                                  {member.periodBadges.map((badge, bIdx) => (
-                                    <span
-                                      key={bIdx}
-                                      className={`inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-2xs transition-all ${
-                                        badge.isTeamAll
-                                          ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30'
-                                          : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25'
-                                      }`}
-                                      title={
-                                        badge.isTeamAll
-                                          ? `👥 Whole Team Bonus: ${badge.name} (${badge.points >= 0 ? '+' : ''}${badge.points} XP)`
-                                          : `${badge.name} (${badge.points >= 0 ? '+' : ''}${badge.points} XP)`
-                                      }
-                                    >
-                                      {badge.isTeamAll && <span className="text-[10px]">👥</span>}
-                                      <span className="text-[10px] sm:text-xs">{badge.emoji}</span>
-                                      <span className={`font-mono ${badge.isTeamAll ? 'text-purple-600 dark:text-purple-400 font-extrabold' : 'text-amber-600 dark:text-amber-400'}`}>
-                                        {badge.points >= 0 ? `+${badge.points}` : badge.points}
+                                  {member.periodBadges.map((badge, bIdx) => {
+                                    const isPenalty = badge.points < 0;
+                                    return (
+                                      <span
+                                        key={bIdx}
+                                        className={`inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-bold shadow-2xs transition-all ${
+                                          badge.isTeamAll
+                                            ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30'
+                                            : isPenalty
+                                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'
+                                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+                                        }`}
+                                        title={
+                                          badge.isTeamAll
+                                            ? `👥 Whole Team Bonus: ${badge.name} (${badge.points >= 0 ? '+' : ''}${badge.points} XP)`
+                                            : `${badge.name} (${badge.points >= 0 ? '+' : ''}${badge.points} XP)`
+                                        }
+                                      >
+                                        {badge.isTeamAll && <span className="text-[10px]">👥</span>}
+                                        <span className="text-[10px] sm:text-xs">{badge.emoji}</span>
+                                        <span
+                                          className={`font-mono ${
+                                            badge.isTeamAll
+                                              ? 'text-purple-600 dark:text-purple-400 font-extrabold'
+                                              : isPenalty
+                                              ? 'text-rose-600 dark:text-rose-400 font-extrabold'
+                                              : 'text-amber-600 dark:text-amber-400'
+                                          }`}
+                                        >
+                                          {badge.points >= 0 ? `+${badge.points}` : badge.points}
+                                        </span>
                                       </span>
-                                    </span>
-                                  ))}
+                                    );
+                                  })}
 
                                   {canEditThisMember && (
                                     <div className="relative inline-block">
@@ -1349,7 +1690,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
       {/* Admin Results Declaration Banner (Placed below Team Score Comparison Arena and above Audit Logs) */}
       {(() => {
-        const todayYmd = getLocalYmd(new Date());
+        const todayYmd = getYptDayYmd();
         const endDateYmd = getChallengeEndDateYmd(challenge);
         const isPastEndDate = todayYmd > endDateYmd;
         const isNotCompleted = challenge.status !== 'completed';
@@ -1392,172 +1733,6 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           </div>
         );
       })()}
-
-      {/* Audit Log / Submissions */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-5 rounded-2xl space-y-3 sm:space-y-4 shadow-sm">
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 cursor-pointer select-none group"
-          onClick={() => setIsAuditLogsCollapsed(!isAuditLogsCollapsed)}
-        >
-          <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <FileImage className="w-4 h-4 text-indigo-500 shrink-0" /> Screenshot Verification Audit Logs
-          </h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] sm:text-xs text-slate-500 font-semibold">
-              {Math.min(submissions.length, 3)} Log{Math.min(submissions.length, 3) !== 1 ? 's' : ''} Shown
-            </span>
-            <div className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
-              {isAuditLogsCollapsed ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronUp className="w-4 h-4" />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {!isAuditLogsCollapsed && (
-          loading ? (
-            <div className="py-8 text-center text-xs text-slate-500">Loading audit log entries...</div>
-          ) : submissions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-              No study screenshots uploaded yet for this challenge.
-            </div>
-          ) : (
-            <div className="space-y-2.5 sm:space-y-3 max-h-80 overflow-y-auto pr-1">
-              {submissions.slice(0, 3).map((sub) => {
-                const targetYmd = sub.targetDateYmd || sub.dateYmd || getLocalYmd(sub.timestamp);
-                const formatShortDate = (ymdStr: string) => {
-                  if (!ymdStr) return '';
-                  const parts = ymdStr.split('-').map(Number);
-                  if (parts.length !== 3 || isNaN(parts[0])) return ymdStr;
-                  const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-                  return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                };
-                const studySessionDateStr = formatShortDate(targetYmd);
-                const uploadDateStr = new Date(sub.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-                const sameDateSubs = submissions.filter(
-                  (s) => (s.targetDateYmd || s.dateYmd || getLocalYmd(s.timestamp)) === targetYmd
-                );
-                const subTs = new Date(sub.timestamp).getTime();
-                const hasPreviousSubmission = sameDateSubs.some(
-                  (s) => new Date(s.timestamp).getTime() < subTs
-                );
-                const isLatestForDate = !sameDateSubs.some(
-                  (s) => new Date(s.timestamp).getTime() > subTs
-                );
-
-                return (
-                  <div key={sub.id} className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-[11px] sm:text-xs flex-wrap gap-1">
-                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                          {sub.status}
-                        </span>
-                        <span className="text-slate-700 dark:text-slate-300 font-medium text-[10px] sm:text-[11px]">
-                          Uploaded on <strong>{uploadDateStr}</strong> for <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{studySessionDateStr}</strong> study session
-                        </span>
-                        {hasPreviousSubmission && isLatestForDate && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
-                            <RefreshCw className="w-3 h-3 shrink-0" />
-                            <span>Updated latest submission for {studySessionDateStr}</span>
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-extrabold text-xs sm:text-sm text-indigo-600 dark:text-indigo-400">
-                        +{sub.totalPointsAwarded} XP awarded
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60 text-xs">
-                      {sub.extractedMembers.map((m, i) => {
-                        const emojis = Array.isArray(m.detectedEmojis) && m.detectedEmojis.length > 0
-                          ? m.detectedEmojis
-                          : m.morningSnap ? ['☀️'] : [];
-
-                        return (() => {
-                          let baseIntervalInHours = 1;
-                          if (challenge.rules?.studyIntervalValue && challenge.rules.studyIntervalValue > 0) {
-                            baseIntervalInHours = challenge.rules.studyIntervalUnit === 'minutes'
-                              ? challenge.rules.studyIntervalValue / 60
-                              : challenge.rules.studyIntervalValue;
-                          }
-                          const intervalsCompleted = baseIntervalInHours > 0 ? Math.floor(m.hoursStudied / baseIntervalInHours) : Math.floor(m.hoursStudied);
-                          const ptsPerInt = typeof challenge.rules?.pointsPerInterval === 'number'
-                            ? challenge.rules.pointsPerInterval
-                            : (challenge.rules?.pointsPerStudyHour ?? 2);
-                          const baseStudyPts = intervalsCompleted * ptsPerInt;
-
-                          let penThreshHours = challenge.rules?.noStudyPenaltyThresholdHours || 0;
-                          if (challenge.rules?.penaltyThresholdValue && challenge.rules.penaltyThresholdValue > 0) {
-                            penThreshHours = challenge.rules.penaltyThresholdUnit === 'minutes'
-                              ? challenge.rules.penaltyThresholdValue / 60
-                              : challenge.rules.penaltyThresholdValue;
-                          }
-                          let penaltyPts = 0;
-                          if (penThreshHours > 0 && m.hoursStudied < penThreshHours) {
-                            penaltyPts = challenge.rules?.penaltyPoints ?? 5;
-                          }
-
-                          const ruleTerms = Array.isArray(m.detectedRules)
-                            ? m.detectedRules.map((r) => (r.points >= 0 ? `+${r.points}` : `${r.points}`))
-                            : [];
-                          const penaltyTerm = penaltyPts > 0 ? `-${penaltyPts}` : '';
-                          const breakdownExpr = `(${baseStudyPts}${penaltyTerm}${ruleTerms.join('')})`;
-
-                          return (
-                            <div
-                              key={i}
-                              className="flex flex-wrap items-center gap-1 sm:gap-1.5 bg-white dark:bg-slate-900 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[10px] sm:text-[11px] font-medium text-slate-700 dark:text-slate-300 shadow-2xs max-w-full"
-                            >
-                              <span className="font-bold truncate max-w-[120px] sm:max-w-[180px]">{m.yptHandle}</span>
-                              <span className="text-indigo-600 dark:text-indigo-400 font-bold font-mono">
-                                {formatStudyDuration(m.hoursStudied)}
-                              </span>
-                              {emojis.length > 0 && (
-                                <span className="flex items-center gap-0.5 px-1 sm:px-1.5 py-0.2 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 rounded-md text-[9px] sm:text-[10px] font-bold">
-                                  {emojis.join(' ')}
-                                </span>
-                              )}
-                              {Array.isArray(m.detectedRules) &&
-                                m.detectedRules.map((dr, drIdx) => {
-                                  const isTeamAll = challenge.rules?.customRules?.some(
-                                    (cr) => (cr.id === dr.ruleId || cr.name === dr.ruleName || cr.emoji === dr.emoji) && cr.scope === 'team_all'
-                                  );
-                                  return (
-                                    <span
-                                      key={drIdx}
-                                      className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold border flex items-center gap-0.5 ${
-                                        isTeamAll
-                                          ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30'
-                                          : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
-                                      }`}
-                                      title={`${dr.ruleName}${isTeamAll ? ' (Whole Team Rule)' : ''}`}
-                                    >
-                                      {isTeamAll && <span className="text-[9px]">👥</span>}
-                                      <span>{dr.emoji || dr.ruleName}</span>
-                                    </span>
-                                  );
-                                })}
-                              <span className={m.pointsEarned >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold'}>
-                                {m.pointsEarned >= 0 ? `+${m.pointsEarned}` : m.pointsEarned} XP
-                              </span>
-                              <span className="font-mono text-[9px] text-slate-400 dark:text-slate-500 font-semibold">
-                                {breakdownExpr}
-                              </span>
-                            </div>
-                          );
-                        })();
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
-      </div>
 
       {/* Edit Challenge Settings Modal */}
       <CreateYptChallengeModal
@@ -1611,66 +1786,6 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
         />
       )}
 
-      {/* Clear Day Points Confirmation Modal */}
-      {isClearConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
-              <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/20">
-                <Eraser className="w-6 h-6 text-rose-500" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
-                  Clear {selectedFilterDateYmd === getLocalYmd(new Date()) ? "Today's" : selectedFilterDateYmd} Points?
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Challenge: <span className="font-bold text-slate-700 dark:text-slate-300">{challenge.title}</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 rounded-2xl text-xs space-y-2 text-rose-800 dark:text-rose-200">
-              <p className="font-semibold flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
-                This will delete screenshot submissions and clear points recorded for {selectedFilterDateYmd}.
-              </p>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                If wrong days data was added by screenshot upload, clearing this date will reset all member and team points for {selectedFilterDateYmd}. You can undo this action immediately using the Undo button.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsClearConfirmOpen(false)}
-                disabled={isClearingDay}
-                className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleClearSelectedDayPoints}
-                disabled={isClearingDay}
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors shadow-md disabled:opacity-50 cursor-pointer"
-              >
-                {isClearingDay ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Clearing Points...
-                  </>
-                ) : (
-                  <>
-                    <Eraser className="w-3.5 h-3.5" />
-                    Confirm Clear Points
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Declare Final Results Modal */}
       {isDeclareResultsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
@@ -1681,7 +1796,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               const teamMap = new Map<string, { name: string; color: string; points: number; hours: number }>();
               const memberHoursMap = new Map<string, number>();
 
-              challenge.teams.forEach((t) => {
+              (challenge.teams || []).forEach((t) => {
                 teamMap.set(t.id, { name: t.name, color: t.color || '#6366f1', points: 0, hours: 0 });
               });
 
@@ -1696,7 +1811,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 const currMemberHours = memberHoursMap.get(memberHandle) || 0;
                 memberHoursMap.set(memberHandle, currMemberHours + hours);
 
-                const targetTeam = challenge.teams.find((t) =>
+                const targetTeam = (challenge.teams || []).find((t) =>
                   (t.memberUids || []).some((m) => areYptHandlesMatching(m, memberHandle, stat.matchedUid))
                 );
 
@@ -1839,6 +1954,185 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                         </>
                       )}
                     </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Manual Lock Day Snapshot Modal (Admin Override) */}
+      {isLockDayModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-md w-full p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            {(() => {
+              const targetSnapshot = dailySnapshots.find((s) => s.targetDateYmd === lockTargetDateYmd);
+              const isAlreadyLocked = Boolean(targetSnapshot);
+              const minAllowed = getChallengeStartDateYmd(challenge);
+              const maxAllowed = getChallengeEndDateYmd(challenge);
+
+              const handleExecuteLock = async () => {
+                setIsLockingDay(true);
+                try {
+                  await lockDaySnapshot(challenge, lockTargetDateYmd, liveRosterMembers);
+                  await fetchLogs();
+                  onRefresh();
+                  setIsLockDayModalOpen(false);
+                } catch (err) {
+                  console.error('Failed to lock day snapshot:', err);
+                } finally {
+                  setIsLockingDay(false);
+                }
+              };
+
+              const handleExecuteUnlock = async () => {
+                if (!confirm(`Are you sure you want to unlock ${formatShortDate(lockTargetDateYmd)}? It will revert to live/submission mode until closed again.`)) {
+                  return;
+                }
+                setIsLockingDay(true);
+                try {
+                  await deleteDailySnapshot(challenge.id, lockTargetDateYmd);
+                  await recalculateTeamPointsFromSubmissions(challenge.id);
+                  await fetchLogs();
+                  onRefresh();
+                  setIsLockDayModalOpen(false);
+                } catch (err) {
+                  console.error('Failed to delete snapshot:', err);
+                } finally {
+                  setIsLockingDay(false);
+                }
+              };
+
+              return (
+                <>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+                          {isAlreadyLocked ? 'Manage Day Snapshot' : 'Lock Day Snapshot'}
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                          {challenge.title}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsLockDayModalOpen(false)}
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3.5 text-xs text-slate-600 dark:text-slate-300">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Select Target Date
+                      </label>
+                      <input
+                        type="date"
+                        min={minAllowed}
+                        max={maxAllowed}
+                        value={lockTargetDateYmd}
+                        onChange={(e) => setLockTargetDateYmd(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-mono font-medium"
+                      />
+                    </div>
+
+                    {isAlreadyLocked ? (
+                      <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl space-y-1.5">
+                        <p className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          This date is currently Locked & Finalized
+                        </p>
+                        <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80 leading-relaxed">
+                          Closed: {new Date(targetSnapshot!.closedAt).toLocaleString()} ({targetSnapshot!.isAutoClosed ? 'Auto-closed' : 'Manual override'})
+                          <br />
+                          Total Points Awarded: <strong>{targetSnapshot!.totalPointsAwarded} XP</strong> across {targetSnapshot!.memberRecords?.length || 0} members.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-1.5">
+                        <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Lock className="w-4 h-4 text-emerald-500" />
+                          Freeze Study Hours & XP
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Freezes current study stats and rules into a permanent daily snapshot. Ideal for locking scores at the end of the day or late evening.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Quick Sync YPT Day Log before locking */}
+                    <div className="p-3 bg-sky-50/60 dark:bg-sky-950/30 border border-sky-200/70 dark:border-sky-800/50 rounded-2xl flex items-center justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-bold text-sky-900 dark:text-sky-200">
+                          Pull Real Study Minutes from YPT
+                        </p>
+                        <p className="text-[10px] text-sky-700/80 dark:text-sky-300/80">
+                          Calls GET /logs/day?date={lockTargetDateYmd}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSyncYptDayLog(lockTargetDateYmd)}
+                        disabled={isSyncingDayLog}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-sky-700 dark:text-sky-300 bg-white dark:bg-slate-900 hover:bg-sky-100 dark:hover:bg-sky-950 border border-sky-200 dark:border-sky-800 rounded-xl transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap shadow-2xs"
+                      >
+                        <RefreshCw className={`w-3 h-3 text-sky-600 ${isSyncingDayLog ? 'animate-spin' : ''}`} />
+                        <span>{isSyncingDayLog ? 'Syncing...' : 'Sync from YPT'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+                    {isAlreadyLocked ? (
+                      <button
+                        type="button"
+                        onClick={handleExecuteUnlock}
+                        disabled={isLockingDay}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <Unlock className="w-3.5 h-3.5" />
+                        Unlock Date
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsLockDayModalOpen(false)}
+                        disabled={isLockingDay}
+                        className="px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExecuteLock}
+                        disabled={isLockingDay}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer active:scale-95"
+                      >
+                        {isLockingDay ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Locking...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3.5 h-3.5" />
+                            {isAlreadyLocked ? 'Re-Lock Snapshot' : 'Lock Day Snapshot'}
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </>
               );

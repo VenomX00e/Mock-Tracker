@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap, CheckCircle2, RotateCcw, Flag } from 'lucide-react';
-import { useAppStateCtx, useUserProfileCtx } from '../../context/AppContext';
+import { Trophy, Plus, FileImage, Users, Award, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Calendar, Settings, Trash2, Search, Clock, UserCheck, Crown, Zap, CheckCircle2, RotateCcw, Flag, Eye, EyeOff } from 'lucide-react';
+import { useAppStateCtx, useUserProfileCtx, usePublicSettingsCtx } from '../../context/AppContext';
 import { YptChallenge, YptSubmissionLog } from '../../types/yptTypes';
-import { getAllYptChallenges, getYptSubmissionLogs, softDeleteYptChallenge, reopenYptChallenge, getRegisteredUserYptList, YptUserEntry, getDeduplicatedDailyMemberStats, subscribeToYptSubmissions } from '../../services/yptService';
+import { getAllYptChallenges, getYptSubmissionLogs, softDeleteYptChallenge, reopenYptChallenge, getRegisteredUserYptList, YptUserEntry, getDeduplicatedDailyMemberStats, subscribeToYptSubmissions, getYptSyncInterval } from '../../services/yptService';
 import { useYptStore } from '../../store/useYptStore';
 import { CreateYptChallengeModal } from './ypt/CreateYptChallengeModal';
 import { YptUploadModal } from './ypt/YptUploadModal';
 import { YptChallengeDetail } from './ypt/YptChallengeDetail';
 import { YptRecycleBinModal } from './ypt/YptRecycleBinModal';
 import { ConfirmDeleteModal } from './ypt/ConfirmDeleteModal';
+import { YptAutoSyncModal } from './ypt/YptAutoSyncModal';
 import { formatStudyDuration, areYptHandlesMatching, normalizeHandle, extractAlpha, formatDisplayYmd } from '../../utils/yptUtils';
 
 type SubViewTab = 'global' | 'challenges' | 'completed' | 'leaderboard';
@@ -44,12 +45,95 @@ function formatStudyHours(hours: number): string {
 export function YptHubView() {
   const { isOwner, isAdmin } = useAppStateCtx();
   const { profile: userProfile } = useUserProfileCtx();
+  const { hiddenYptTabs = [] } = usePublicSettingsCtx();
 
-  const canManageYptChallenges = 
+  const isYptAdmin = Boolean(
     isOwner || 
-    isAdmin || 
-    userProfile?.role === 'admin' || 
-    Boolean(userProfile?.permissions?.canManageYpt);
+    userProfile?.role === 'owner' || 
+    userProfile?.permissions?.canManageYpt === true
+  );
+
+  const canManageYptChallenges = isYptAdmin;
+
+  const [localHiddenTabs, setLocalHiddenTabs] = useState<string[]>(hiddenYptTabs);
+
+  useEffect(() => {
+    if (hiddenYptTabs) {
+      setLocalHiddenTabs(hiddenYptTabs);
+    }
+  }, [hiddenYptTabs]);
+
+  // Real-time Firestore sync on both sources so all accounts update instantly
+  useEffect(() => {
+    let unsub1: any;
+    let unsub2: any;
+
+    const setupRealtimeSync = async () => {
+      try {
+        const { onSnapshot, doc } = await import('firebase/firestore');
+        const { db } = await import('../../services/firebase');
+
+        unsub1 = onSnapshot(doc(db, 'yptChallenges', 'hub_settings'), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.hiddenYptTabs)) {
+              setLocalHiddenTabs(data.hiddenYptTabs);
+            }
+          }
+        }, (err) => {
+          if (err.code !== 'permission-denied') console.warn('yptChallenges config sub:', err);
+        });
+
+        unsub2 = onSnapshot(doc(db, 'system', 'settings'), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (Array.isArray(data.hiddenYptTabs)) {
+              setLocalHiddenTabs(data.hiddenYptTabs);
+            }
+          }
+        }, (err) => {
+          if (err.code !== 'permission-denied') console.warn('system settings sub:', err);
+        });
+      } catch (err) {
+        console.error('Failed to setup hidden tabs sync:', err);
+      }
+    };
+
+    setupRealtimeSync();
+
+    return () => {
+      if (unsub1) unsub1();
+      if (unsub2) unsub2();
+    };
+  }, []);
+
+  const isTabHidden = (tabId: SubViewTab) => localHiddenTabs.includes(tabId);
+  const canUserSeeTab = (tabId: SubViewTab) => !isTabHidden(tabId) || isOwner || isYptAdmin;
+
+  const toggleHideTab = async (tabId: SubViewTab, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!isOwner) return;
+
+    const nextHidden = localHiddenTabs.includes(tabId)
+      ? localHiddenTabs.filter((t) => t !== tabId)
+      : [...localHiddenTabs, tabId];
+
+    setLocalHiddenTabs(nextHidden);
+
+    try {
+      const { doc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('../../services/firebase');
+      await Promise.allSettled([
+        setDoc(doc(db, 'yptChallenges', 'hub_settings'), { hiddenYptTabs: nextHidden }, { merge: true }),
+        setDoc(doc(db, 'system', 'settings'), { hiddenYptTabs: nextHidden }, { merge: true }),
+      ]);
+    } catch (err) {
+      console.error('Failed to update hidden YPT tabs:', err);
+    }
+  };
 
   const { isSyncing, lastSyncedAt, isFromCache, forceRefresh } = useYptStore();
 
@@ -85,8 +169,16 @@ export function YptHubView() {
   const [editingChallenge, setEditingChallenge] = useState<YptChallenge | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
+  const [isAutoSyncModalOpen, setIsAutoSyncModalOpen] = useState(false);
+  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState<number>(15);
   const [challengeToDelete, setChallengeToDelete] = useState<YptChallenge | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    getYptSyncInterval().then((mins) => {
+      if (mins && !isNaN(mins)) setSyncIntervalMinutes(mins);
+    }).catch(() => {});
+  }, []);
 
   const storeChallenges = useYptStore((s) => s.challenges);
   const storeLoading = useYptStore((s) => s.isLoading);
@@ -150,7 +242,7 @@ export function YptHubView() {
   const uniqueRegisteredHandles = Array.from(
     new Set(
       allVisibleChallenges.flatMap((c) =>
-        c.teams.flatMap((t) => (t.memberUids || []).map((h) => h.replace(/^@/, '').trim().toLowerCase()))
+        (c.teams || []).flatMap((t) => ((t?.memberUids) || []).map((h) => (h || '').replace(/^@/, '').trim().toLowerCase()))
       ).filter(Boolean)
     )
   );
@@ -285,7 +377,7 @@ export function YptHubView() {
 
     // 1. Index registered members across all active challenges
     activeChallenges.forEach((c) => {
-      c.teams.forEach((t) => {
+      (c.teams || []).forEach((t) => {
         (t.memberUids || []).forEach((rawHandle) => {
           getOrInitMemberRecord(rawHandle);
         });
@@ -402,6 +494,49 @@ export function YptHubView() {
     }
   };
 
+  const tabDefinitions: {
+    id: SubViewTab;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    iconColor: string;
+  }[] = [
+    {
+      id: 'global',
+      label: `Global Leaderboard (${uniqueRegisteredHandles.length})`,
+      icon: Trophy,
+      iconColor: 'text-amber-300',
+    },
+    {
+      id: 'challenges',
+      label: `Active Challenges (${activeChallenges.length})`,
+      icon: Zap,
+      iconColor: 'text-amber-400',
+    },
+    {
+      id: 'completed',
+      label: `Completed Challenges (${completedChallenges.length})`,
+      icon: Flag,
+      iconColor: 'text-emerald-400',
+    },
+    {
+      id: 'leaderboard',
+      label: 'Team Rankings',
+      icon: Users,
+      iconColor: 'text-indigo-400',
+    },
+  ];
+
+  const visibleTabs = tabDefinitions.filter((t) => canUserSeeTab(t.id));
+
+  // Automatically switch active tab if current tab is hidden and cannot be seen by the user
+  useEffect(() => {
+    if (!canUserSeeTab(activeTab)) {
+      if (visibleTabs.length > 0) {
+        setActiveTab(visibleTabs[0].id);
+      }
+    }
+  }, [localHiddenTabs, activeTab, isOwner, isYptAdmin, visibleTabs.length]);
+
   if (selectedChallenge) {
     return (
       <YptChallengeDetail
@@ -427,6 +562,19 @@ export function YptHubView() {
               <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : isFromCache ? 'bg-indigo-400' : 'bg-emerald-400'}`} />
               <span>{isSyncing ? 'Syncing...' : isFromCache ? 'Cached State' : timeAgoStr}</span>
             </div>
+
+            {/* Auto-Sync Interval Pill / Trigger */}
+            {canManageYptChallenges && (
+              <button
+                type="button"
+                onClick={() => setIsAutoSyncModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/70 text-indigo-300 transition-colors cursor-pointer"
+                title="Configure background auto-sync frequency"
+              >
+                <Clock className="w-3 h-3 text-indigo-400" />
+                <span>{syncIntervalMinutes}m sync</span>
+              </button>
+            )}
           </div>
           <p className="hidden sm:block text-xs text-slate-400 mt-1">Track study time, complete group challenges, and upload daily logs</p>
         </div>
@@ -467,58 +615,64 @@ export function YptHubView() {
       {/* Tab Switcher & Bin Icon */}
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 gap-2">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-          <button
-            onClick={() => setActiveTab('global')}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'global'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Trophy className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-            <span>Global Leaderboard ({uniqueRegisteredHandles.length})</span>
-          </button>
+          {tabDefinitions
+            .filter((tab) => canUserSeeTab(tab.id))
+            .map((tab) => {
+              const Icon = tab.icon;
+              const isHidden = isTabHidden(tab.id);
+              const isActive = activeTab === tab.id;
 
-          <button
-            onClick={() => setActiveTab('global')}
-            className="hidden"
-          />
+              return (
+                <div key={tab.id} className="relative group/tab flex items-center shrink-0">
+                  <button
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${tab.iconColor} shrink-0`} />
+                    <span>{tab.label}</span>
 
-          <button
-            onClick={() => setActiveTab('challenges')}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'challenges'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>Active Challenges ({activeChallenges.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('completed')}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'completed'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Flag className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Completed Challenges ({completedChallenges.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('leaderboard')}
-            className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'leaderboard'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-            <span>Team Rankings</span>
-          </button>
+                    {/* Visibility Icon: Eye if not hidden, Cross-Eye (EyeOff) if hidden */}
+                    {isOwner ? (
+                      <span
+                        role="button"
+                        onClick={(e) => toggleHideTab(tab.id, e)}
+                        title={
+                          isHidden
+                            ? 'Unhide this tile for all members'
+                            : 'Hide this tile from members'
+                        }
+                        className={`p-1 rounded-lg transition-all ml-0.5 cursor-pointer flex items-center justify-center ${
+                          isActive
+                            ? 'text-white/80 hover:text-white hover:bg-indigo-700/60'
+                            : isHidden
+                              ? 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              : 'text-slate-400 opacity-60 group-hover/tab:opacity-100 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {isHidden ? (
+                          <EyeOff className="w-3.5 h-3.5" />
+                        ) : (
+                          <Eye className="w-3.5 h-3.5" />
+                        )}
+                      </span>
+                    ) : isHidden && isYptAdmin ? (
+                      <span
+                        title="This tile is currently hidden from members"
+                        className={`p-1 rounded-lg flex items-center justify-center ml-0.5 ${
+                          isActive ? 'text-white/70' : 'text-slate-400'
+                        }`}
+                      >
+                        <EyeOff className="w-3.5 h-3.5" />
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
+              );
+            })}
         </div>
 
         <div className="flex items-center gap-2">
@@ -551,6 +705,16 @@ export function YptHubView() {
       {/* Main Tab Content */}
       {loading ? (
         <div className="py-12 text-center text-xs text-slate-500">Loading YPT challenges...</div>
+      ) : visibleTabs.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 p-8 sm:p-12 rounded-2xl text-center space-y-3">
+          <EyeOff className="w-10 h-10 text-slate-400 mx-auto" />
+          <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200">
+            No Challenge Tabs Visible
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            All challenge tiles are currently hidden by the administrator. Please check back later.
+          </p>
+        </div>
       ) : activeTab === 'global' ? (
         <div className="space-y-6">
           {/* Global Arena Header Banner */}
@@ -874,10 +1038,10 @@ export function YptHubView() {
                 <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] sm:text-xs">
                   <div className="flex items-center gap-2.5 sm:gap-3 text-slate-600 dark:text-slate-400 font-medium">
                     <span className="flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {c.teams.length} Teams
+                      <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {c.teams?.length || 0} Teams
                     </span>
                     <span className="flex items-center gap-1">
-                      <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {c.rules.pointsPerStudyHour} XP/hr
+                      <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" /> {c.rules?.pointsPerStudyHour || 1} XP/hr
                     </span>
                   </div>
 
@@ -901,7 +1065,8 @@ export function YptHubView() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             {completedChallenges.map((c) => {
-              const winningTeam = c.teams.find((t) => t.id === c.winningTeamId) || (c.teams.length > 0 ? c.teams.slice().sort((a, b) => b.totalPoints - a.totalPoints)[0] : null);
+              const teamsList = c.teams || [];
+              const winningTeam = teamsList.find((t) => t.id === c.winningTeamId) || (teamsList.length > 0 ? teamsList.slice().sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))[0] : null);
               const mvpHandle = c.finalMvpHandle ? `@${c.finalMvpHandle.replace(/^@/, '')}` : null;
 
               return (
@@ -970,7 +1135,7 @@ export function YptHubView() {
                   <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] sm:text-xs">
                     <div className="flex items-center gap-2.5 sm:gap-3 text-slate-600 dark:text-slate-400 font-medium">
                       <span className="flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {c.teams.length} Teams
+                        <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {teamsList.length} Teams
                       </span>
                       <span className="flex items-center gap-1">
                         <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" /> Final Results Locked
@@ -994,12 +1159,12 @@ export function YptHubView() {
           </h3>
 
           <div className="space-y-3">
-            {allVisibleChallenges.flatMap((c) => c.teams).length === 0 ? (
+            {allVisibleChallenges.flatMap((c) => c.teams || []).length === 0 ? (
               <div className="text-xs text-slate-500 py-4 text-center">No team records found.</div>
             ) : (
               allVisibleChallenges
-                .flatMap((c) => c.teams.map((t) => ({ ...t, challengeTitle: c.title })))
-                .sort((a, b) => b.totalPoints - a.totalPoints)
+                .flatMap((c) => (c.teams || []).map((t) => ({ ...t, challengeTitle: c.title })))
+                .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))
                 .map((team, idx) => (
                   <div
                     key={idx}
@@ -1057,6 +1222,12 @@ export function YptHubView() {
         isLoading={isDeleting}
         onConfirm={confirmSoftDelete}
         onClose={() => setChallengeToDelete(null)}
+      />
+
+      <YptAutoSyncModal
+        isOpen={isAutoSyncModalOpen}
+        onClose={() => setIsAutoSyncModalOpen(false)}
+        onIntervalChanged={(mins) => setSyncIntervalMinutes(mins)}
       />
     </div>
   );

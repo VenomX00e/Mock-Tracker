@@ -37,7 +37,7 @@ export const jarvisApi = {
       }
 
       const data = await response.json();
-      const text = data.text || '';
+      const text = data.reply || data.text || '';
       onUpdate(text);
 
       // Execute function calls if any return from backend

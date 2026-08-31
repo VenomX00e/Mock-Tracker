@@ -1,6 +1,6 @@
 {
   "name": "MockTracker",
-  "description": "Mock score tracker with AI-powered scorecard image parsing for exams.",
+  "description": "Mock score tracker with AI-powered scorecard image parsing and vocabulary extraction.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

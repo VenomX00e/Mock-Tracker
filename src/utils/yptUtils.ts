@@ -12,6 +12,153 @@ export function formatStudyDuration(decimalHours: number): string {
 }
 
 /**
+ * Returns current date/time converted to Indian Standard Time (IST, UTC+5:30).
+ * Creates a Date object whose UTC methods (getUTCHours, etc.) reflect IST values.
+ */
+export function getIstDate(dateInput: Date | string | number = new Date()): Date {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return new Date();
+  const utcMs = d.getTime();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  return new Date(utcMs + istOffsetMs);
+}
+
+/**
+ * Principle A: Native YPT Day Cycle (5:00 AM IST Boundary)
+ * - Start of Day: 05:00:00 AM IST
+ * - End of Day:   04:59:59 AM IST (Next Day)
+ * - Active Session Crossing: Sessions starting in the night and ending between 05:00 AM and 05:20 AM IST
+ *   are attributed to yesterday's log.
+ * 
+ * Returns the YPT calendar day YYYY-MM-DD for any date/time in IST.
+ * 
+ * Mathematical offset formula:
+ * 1. Convert to UTC milliseconds.
+ * 2. Add +5.5 hours for IST.
+ * 3. Subtract -5.0 hours for the 5:00 AM reset boundary.
+ * 4. Combined offset = +0.5 hours (30 minutes) relative to UTC.
+ */
+export function getYptDayYmd(dateInput: Date | string | number = new Date()): string {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return getYptDayYmd(new Date());
+
+  const utcMs = d.getTime();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const rolloverOffsetMs = -5 * 60 * 60 * 1000;
+  const shiftedMs = utcMs + istOffsetMs + rolloverOffsetMs;
+
+  const shiftedDate = new Date(shiftedMs);
+  const yyyy = shiftedDate.getUTCFullYear();
+  const mm = String(shiftedDate.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(shiftedDate.getUTCDate()).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Returns yesterday's YPT calendar day YYYY-MM-DD relative to current YPT Day.
+ */
+export function getYesterdayYptDayYmd(dateInput: Date | string | number = new Date()): string {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return getYesterdayYptDayYmd(new Date());
+
+  const utcMs = d.getTime();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const rolloverOffsetMs = -5 * 60 * 60 * 1000;
+  const previousDayOffsetMs = -24 * 60 * 60 * 1000;
+  const shiftedMs = utcMs + istOffsetMs + rolloverOffsetMs + previousDayOffsetMs;
+
+  const shiftedDate = new Date(shiftedMs);
+  const yyyy = shiftedDate.getUTCFullYear();
+  const mm = String(shiftedDate.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(shiftedDate.getUTCDate()).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Checks if current time in IST is within the 15-20 minute post-5:00 AM reconciliation buffer (05:00 AM - 05:20 AM IST).
+ * During this buffer, active sessions that started before 05:00 AM are allowed to complete and finalize yesterday's log.
+ */
+export function isYptReconciliationWindow(dateInput: Date | string | number = new Date()): boolean {
+  const ist = getIstDate(dateInput);
+  const istHours = ist.getUTCHours();
+  const istMins = ist.getUTCMinutes();
+  return istHours === 5 && istMins <= 20;
+}
+
+/**
+ * Principle B: The "High-Water Mark" Non-Destructive Update Pattern
+ * Formula: Math.max(previousHours || 0, incomingHours || 0)
+ * Why: When YPT wipes dl.sm to 0 at 5:00 AM, the database retains the peak accumulated hours from earlier in the night.
+ */
+export function applyHighWaterMark(previousHours: number = 0, incomingHours: number = 0): number {
+  const prev = typeof previousHours === 'number' && !isNaN(previousHours) ? Math.max(0, previousHours) : 0;
+  const inc = typeof incomingHours === 'number' && !isNaN(incomingHours) ? Math.max(0, incomingHours) : 0;
+  return Math.round(Math.max(prev, inc) * 100) / 100;
+}
+
+/**
+ * Safely extracts today's study duration in hours from a YPT API member object.
+ * Handles both base accumulated study duration (`dl.sm` in ms) and active real-time ongoing sessions.
+ */
+export function getMemberStudyHoursFromApi(member: any): number {
+  if (!member) return 0;
+
+  // 1. Base completed/accumulated study time in milliseconds
+  let baseMs = 0;
+  if (member.dl && typeof member.dl.sm === 'number' && member.dl.sm > 0) {
+    baseMs = member.dl.sm;
+  } else if (typeof member.sm === 'number' && member.sm > 0) {
+    baseMs = member.sm;
+  } else if (typeof member.tt === 'number' && member.tt > 0) {
+    baseMs = member.tt;
+  } else if (typeof member.studyTime === 'number' && member.studyTime > 0) {
+    baseMs = member.studyTime;
+  }
+
+  // If baseMs was passed as seconds (< 100,000 for realistic daytime study durations), normalize to ms
+  if (baseMs > 0 && baseMs < 100000) {
+    baseMs = baseMs * 1000;
+  }
+
+  // 2. Active Live Session Timer (when member is currently studying live in real-time)
+  // YPT provides start timestamp in fields like started_at, startedAt, c_st, start_time, startTime, st
+  const rawStart =
+    member.started_at ||
+    member.startedAt ||
+    member.c_st ||
+    member.start_time ||
+    member.startTime ||
+    member.start ||
+    (typeof member.st === 'number' && member.st > 1000000000 ? member.st : undefined);
+
+  let activeMs = 0;
+  if (rawStart) {
+    let startEpochMs = Number(rawStart);
+    // If timestamp in seconds, convert to milliseconds
+    if (startEpochMs > 0 && startEpochMs < 10000000000) {
+      startEpochMs = startEpochMs * 1000;
+    }
+    const now = Date.now();
+    if (startEpochMs > 0 && startEpochMs <= now) {
+      const elapsed = now - startEpochMs;
+      // Cap at 24 hours to guard against anomalous stale timestamps
+      if (elapsed > 0 && elapsed < 24 * 3600 * 1000) {
+        activeMs = elapsed;
+      }
+    }
+  }
+
+  const totalMs = baseMs + activeMs;
+  if (totalMs > 0) {
+    return totalMs / (1000 * 3600);
+  }
+
+  return 0;
+}
+
+/**
  * Returns YYYY-MM-DD string for a local Date object.
  */
 export function getLocalYmd(dateInput: Date | string | number): string {
@@ -200,4 +347,233 @@ export function areYptHandlesMatching(
   }
 
   return false;
+}
+
+/**
+ * Module 3: Rule Evaluation & False-Penalty Prevention Engine
+ * Evaluates points for a member on a target date with strict false-penalty prevention rules:
+ * 1. Checks if member joined after the target date -> Fully exempt (0 net points)
+ * 2. Unlocked / Live Day with 0 hours -> Does NOT apply penalties while day is actively accumulating
+ * 3. Penalties are ONLY applied when the day is officially locked/finalized or past closed
+ * 4. Normal point calculation for study intervals + custom bonuses & penalties
+ */
+export interface CalculatedDailyMemberPoints {
+  basePoints: number;
+  bonusPoints: number;
+  penaltyPoints: number;
+  netPoints: number;
+  appliedRules: Array<{
+    ruleId?: string;
+    ruleName: string;
+    emoji: string;
+    points: number;
+    type?: 'bonus' | 'penalty' | 'base' | 'milestone' | 'exempt';
+  }>;
+  isExempt?: boolean;
+}
+
+export function evaluateMemberDailyPoints(
+  hours: number,
+  rules: any = {},
+  completedNativeChallengeIds: number[] = [],
+  isDayLocked: boolean = false,
+  memberJoinDateYmd?: string,
+  targetDateYmd?: string,
+  detectedEmojis: string[] = [],
+  hasSnap: boolean = false,
+  maxContinuousMs: number = 0
+): CalculatedDailyMemberPoints {
+  const safeHours = typeof hours === 'number' && !isNaN(hours) && hours > 0 ? hours : 0;
+
+  // 1. Check if member joined AFTER this date -> Fully Exempt
+  if (memberJoinDateYmd && targetDateYmd && targetDateYmd < memberJoinDateYmd) {
+    return {
+      basePoints: 0,
+      bonusPoints: 0,
+      penaltyPoints: 0,
+      netPoints: 0,
+      appliedRules: [
+        {
+          ruleId: 'exempt_joined_after',
+          ruleName: 'Joined After This Date (Exempt)',
+          emoji: '🛡️',
+          points: 0,
+          type: 'exempt',
+        },
+      ],
+      isExempt: true,
+    };
+  }
+
+  // 2. Unlocked / Live Day with 0 hours -> Do NOT apply penalties yet!
+  // Penalties should ONLY be applied when the day is officially closed/locked at 5:00 AM IST
+  if (!isDayLocked && safeHours === 0) {
+    return {
+      basePoints: 0,
+      bonusPoints: 0,
+      penaltyPoints: 0,
+      netPoints: 0,
+      appliedRules: [],
+    };
+  }
+
+  // 3. Interval Base Study Points Calculation
+  const intervalVal = rules.studyIntervalValue ?? 1;
+  const intervalUnit = rules.studyIntervalUnit ?? 'hours';
+  const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+  const ptsPerInterval = rules.pointsPerInterval ?? rules.pointsPerStudyHour ?? 1;
+
+  const basePoints = Math.floor(safeHours / (intervalHours || 1)) * ptsPerInterval;
+
+  // 4. Penalty Check (Only when day is officially locked / closed)
+  const penaltyThresholdVal = rules.penaltyThresholdValue ?? rules.noStudyPenaltyThresholdHours ?? 3;
+  const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
+  const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
+
+  const isPenalized = isDayLocked && safeHours < penaltyThresholdHours;
+  const penaltyVal = isPenalized ? (rules.penaltyPoints || 0) : 0;
+
+  // 5. Custom Rules Calculation
+  const appliedRules: Array<{
+    ruleId?: string;
+    ruleName: string;
+    emoji: string;
+    points: number;
+    type?: 'bonus' | 'penalty' | 'base' | 'milestone' | 'exempt';
+  }> = [];
+
+  let bonusPoints = 0;
+  let customPenaltiesSum = 0;
+
+  if (Array.isArray(rules.customRules)) {
+    for (const cr of rules.customRules) {
+      if (!cr || !cr.name) continue;
+
+      const ruleEmoji = cr.emoji ? String(cr.emoji).trim() : '';
+      const nameLower = cr.name.toLowerCase();
+
+      const isNativeChallengeCompleted = Boolean(
+        cr.nativeChallengeId &&
+        (completedNativeChallengeIds.includes(Number(cr.nativeChallengeId)) ||
+         completedNativeChallengeIds.map(String).includes(String(cr.nativeChallengeId)))
+      );
+
+      const emojiMatched =
+        isNativeChallengeCompleted ||
+        Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
+        Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'));
+
+      const minHours = cr.minHoursNeeded ?? 0;
+      const hoursMatched = safeHours >= minHours;
+
+      const condition = cr.conditionType || 'emoji_only';
+      let isMet = false;
+
+      switch (condition) {
+        case 'hours_only':
+          isMet = hoursMatched;
+          break;
+        case 'both':
+          isMet = emojiMatched && hoursMatched;
+          break;
+        case 'either':
+          isMet = emojiMatched || hoursMatched;
+          break;
+        case 'emoji_only':
+        default:
+          isMet = emojiMatched;
+          break;
+      }
+
+      if (isMet) {
+        const p = Number(cr.points) || 0;
+        const awardedPts = cr.type === 'bonus' ? p : -p;
+        const isTeamAll = cr.scope === 'team_all';
+        const effectivePts = isTeamAll ? 0 : awardedPts;
+
+        if (effectivePts > 0) {
+          bonusPoints += effectivePts;
+        } else if (effectivePts < 0) {
+          // If unlocked live day, do not apply custom penalties prematurely
+          if (!isDayLocked) {
+            continue;
+          }
+          customPenaltiesSum += Math.abs(effectivePts);
+        }
+
+        appliedRules.push({
+          ruleId: cr.id,
+          ruleName: cr.name,
+          emoji: cr.emoji || (cr.type === 'bonus' ? '☀️' : '📱'),
+          points: effectivePts,
+          type: cr.type === 'bonus' ? 'bonus' : 'penalty',
+        });
+      }
+    }
+  }
+
+  if (isPenalized && (rules.penaltyPoints || 0) > 0) {
+    appliedRules.push({
+      ruleId: 'no_study_penalty',
+      ruleName: 'No Study Penalty',
+      emoji: '⚠️',
+      points: -(rules.penaltyPoints || 0),
+      type: 'penalty',
+    });
+  }
+
+  // Evaluate the Fake Session / Max Continuous Trap
+  let maxContinuousPenaltyDeduction = 0;
+  const maxContThreshold = rules.maxContinuousHoursThreshold;
+  if (typeof maxContThreshold === 'number' && maxContThreshold > 0 && maxContinuousMs > 0) {
+    const maxContHours = maxContinuousMs / 3600000;
+    if (maxContHours > maxContThreshold) {
+      const penaltyType = rules.maxContinuousPenaltyType || 'variable';
+
+      if (penaltyType === 'fixed') {
+        const fixedDeduction = typeof rules.maxContinuousFixedPenalty === 'number' ? rules.maxContinuousFixedPenalty : 0;
+        if (fixedDeduction > 0) {
+          maxContinuousPenaltyDeduction = fixedDeduction;
+          appliedRules.push({
+            ruleId: 'max_continuous_fake_session_penalty',
+            ruleName: `Fake Session Penalty (>${maxContThreshold}hrs - Flat Deduction)`,
+            emoji: '🚨',
+            points: -fixedDeduction,
+            type: 'penalty',
+          });
+        }
+      } else {
+        const mode = rules.maxContinuousPenaltyMode || 'excess';
+        const targetHours = mode === 'whole' ? maxContHours : maxContHours - maxContThreshold;
+
+        if (targetHours > 0) {
+          const multiplier = rules.maxContinuousPenaltyMultiplier ?? 1;
+          const baseTargetPoints = Math.floor(targetHours / (intervalHours || 1)) * ptsPerInterval;
+          const calculatedPenalty = Math.max(0, baseTargetPoints * multiplier);
+
+          if (calculatedPenalty > 0) {
+            maxContinuousPenaltyDeduction = calculatedPenalty;
+            appliedRules.push({
+              ruleId: 'max_continuous_fake_session_penalty',
+              ruleName: `Fake Session Penalty (>${maxContThreshold}hrs)`,
+              emoji: '🚨',
+              points: -calculatedPenalty,
+              type: 'penalty',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  const totalPenaltyPoints = penaltyVal + customPenaltiesSum + maxContinuousPenaltyDeduction;
+  const netPoints = basePoints + bonusPoints - totalPenaltyPoints;
+
+  return {
+    basePoints,
+    bonusPoints,
+    penaltyPoints: totalPenaltyPoints,
+    netPoints,
+    appliedRules,
+  };
 }

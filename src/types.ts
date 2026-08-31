@@ -308,4 +308,5 @@ export interface GlobalGeminiSystemConfig {
 }
 
 export * from './types/yptTypes';
+export * from './types/extraction';
 

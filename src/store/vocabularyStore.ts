@@ -35,7 +35,15 @@ interface VocabularyState {
   canvases: EditorialCanvas[];
   isLoaded: boolean;
   setCanvases: (canvases: EditorialCanvas[]) => void;
-  addCanvas: (canvas: Omit<EditorialCanvas, 'id' | 'vocabularies' | 'phrasalVerbs' | 'idioms' | 'oneWordSubs'>) => void;
+  addCanvas: (canvas: {
+    id?: string;
+    title: string;
+    date: string;
+    vocabularies?: VocabEntry[];
+    phrasalVerbs?: TextEntry[];
+    idioms?: TextEntry[];
+    oneWordSubs?: TextEntry[];
+  }) => string;
   deleteCanvas: (id: string) => void;
   updateCanvas: (id: string, updates: Partial<EditorialCanvas>) => void;
   addVocab: (canvasId: string, vocab: Omit<VocabEntry, 'id' | 'isMastered'>) => void;
@@ -53,16 +61,19 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
   setCanvases: (canvases) => set({ canvases, isLoaded: true }),
 
   addCanvas: (canvas) => {
-    const newCanvas = {
-      id: Math.random().toString(36).substring(2, 9),
-      ...canvas,
-      vocabularies: [],
-      phrasalVerbs: [],
-      idioms: [],
-      oneWordSubs: []
+    const id = canvas.id || Math.random().toString(36).substring(2, 9);
+    const newCanvas: EditorialCanvas = {
+      id,
+      title: canvas.title,
+      date: canvas.date,
+      vocabularies: canvas.vocabularies || [],
+      phrasalVerbs: canvas.phrasalVerbs || [],
+      idioms: canvas.idioms || [],
+      oneWordSubs: canvas.oneWordSubs || [],
     };
     set((state) => ({ canvases: [...state.canvases, newCanvas] }));
     saveCanvasToFirestore(newCanvas);
+    return id;
   },
   
   deleteCanvas: (id) => {
