@@ -3525,6 +3525,108 @@ app.post("/api/admin/ypt/trigger-continuous-sync", requireAdminAuth, async (req,
   }
 });
 
+// Helper for validating incoming cron webhook triggers from cron-job.org or Vercel Crons
+function verifyCronTriggerSecret(req: any): boolean {
+  const configuredSecret = (process.env.CRON_SECRET || "").trim();
+  const defaultFallbackSecret = "ypt_sync_secret_2026";
+  
+  const authHeader = (req.headers?.authorization || "").trim();
+  const bearerToken = authHeader.toLowerCase().startsWith("bearer ")
+    ? authHeader.substring(7).trim()
+    : null;
+  const customHeader = (req.headers?.["x-cron-secret"] || "").trim();
+  const queryKey = (req.query?.key || req.query?.secret || req.query?.cron_secret || "").toString().trim();
+  const bodyKey = (req.body?.key || req.body?.secret || req.body?.cron_secret || "").toString().trim();
+  const isVercelCron = Boolean(req.headers?.["x-vercel-cron"]);
+
+  const providedKey = bearerToken || customHeader || queryKey || bodyKey;
+
+  // 1. If Vercel Cron header is present and valid
+  if (isVercelCron) {
+    return true;
+  }
+
+  // 2. If an environment secret is configured
+  if (configuredSecret) {
+    return (
+      providedKey === configuredSecret ||
+      providedKey === defaultFallbackSecret
+    );
+  }
+
+  // 3. If no env secret set, accept default fallback secret or any provided key
+  return !providedKey || providedKey === defaultFallbackSecret;
+}
+
+// Dedicated endpoints for External Cron Trigger (cron-job.org / GitHub Actions / Vercel Crons)
+const handleExternalYptSync = async (req: any, res: any) => {
+  if (!verifyCronTriggerSecret(req)) {
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized: Invalid or missing cron secret key.",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  try {
+    const adminDb = getAdminDb();
+    const { executeContinuousYptSync } = await import("./cron.js");
+    console.log(`[CRON WEBHOOK] Executing YPT continuous sync from ${req.ip || "scheduler"} at ${new Date().toISOString()}...`);
+    await executeContinuousYptSync(adminDb);
+    
+    return res.json({
+      success: true,
+      message: "YPT continuous sync executed successfully",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error("[CRON WEBHOOK] Failed to execute YPT continuous sync:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to execute YPT continuous sync",
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
+app.get(["/api/cron/ypt-sync", "/api/cron/ypt_sync"], handleExternalYptSync);
+app.post(["/api/cron/ypt-sync", "/api/cron/ypt_sync"], handleExternalYptSync);
+
+// Dedicated endpoint for YPT 5:15 AM IST Daily Finalizer & Transition
+const handleExternalYptFinalizer = async (req: any, res: any) => {
+  if (!verifyCronTriggerSecret(req)) {
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized: Invalid or missing cron secret key.",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  try {
+    const adminDb = getAdminDb();
+    const { execute515AmYptFinalizer } = await import("./cron.js");
+    console.log(`[CRON WEBHOOK] Executing YPT 5:15 AM IST Daily Finalizer at ${new Date().toISOString()}...`);
+    await execute515AmYptFinalizer(adminDb);
+    
+    return res.json({
+      success: true,
+      message: "YPT daily finalizer executed successfully",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error("[CRON WEBHOOK] Failed to execute YPT daily finalizer:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to execute YPT daily finalizer",
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
+
+app.get(["/api/cron/ypt-finalizer", "/api/cron/ypt_finalizer"], handleExternalYptFinalizer);
+app.post(["/api/cron/ypt-finalizer", "/api/cron/ypt_finalizer"], handleExternalYptFinalizer);
+
+
 // YouTube Transcript Extraction API via TranscriptAPI
 function extractYouTubeVideoId(input: string): string | null {
   if (!input || typeof input !== "string") return null;

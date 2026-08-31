@@ -1157,5 +1157,9 @@ async function initDynamicYptSync(adminDb: admin.firestore.Firestore) {
   }
 }
 
-export { execute15MinYptSync as executeContinuousYptSync };
+export { 
+  execute15MinYptSync as executeContinuousYptSync,
+  execute15MinYptSync,
+  execute515AmYptFinalizer 
+};
 
