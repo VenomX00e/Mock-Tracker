@@ -198,8 +198,8 @@ async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | 
     return nodeYptTokenCache;
   }
 
-  const email = process.env.YPT_EMAIL;
-  const password = process.env.YPT_PASSWORD;
+  const email = (process.env.YPT_EMAIL || "").trim();
+  const password = process.env.YPT_PASSWORD || "";
   if (!email || !password) return null;
 
   const md5Pass = crypto.createHash("md5").update(password).digest("hex");
@@ -231,10 +231,34 @@ async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | 
       if (!data || data.s === false) continue;
 
       const token = data.jwt || data.access_token || data.token;
-      let coid = data.coid || data.country_id || "IN";
+      let coid = data.coid || data.country_id;
 
       if (token) {
-        nodeYptTokenCache = { token, coid: String(coid), expiresAt: now + 50 * 60 * 1000 };
+        if (!coid || coid === "0" || coid === 0) {
+          try {
+            const infoRes = await fetch("https://pi.tgclab.com/user/v2/reload/info", {
+              method: "POST",
+              headers: {
+                authorization: `JWT ${token}`,
+                "User-Agent": "Dart/3.11 (dart:io)",
+                "Content-Type": "application/json",
+                "Accept-Encoding": "gzip",
+              },
+              body: JSON.stringify({
+                pv: 0,
+                cd: { su: null, sbu: null, cu: null, eu: null, du: null, tu: null },
+              }),
+            });
+            if (infoRes.ok) {
+              const infoData = await infoRes.json();
+              if (infoData && (infoData.coid || infoData.country_id)) {
+                coid = infoData.coid || infoData.country_id;
+              }
+            }
+          } catch (_e) {}
+        }
+
+        nodeYptTokenCache = { token, coid: String(coid || process.env.YPT_COID || "8"), expiresAt: now + 50 * 60 * 1000 };
         return nodeYptTokenCache;
       }
     } catch (_err) {}
@@ -535,21 +559,32 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
           }
         }
 
+        const mode = challenge.mode || 'team';
+        const isSoloMode = mode === 'individual';
+
         const updatedHwms: Record<string, number> = { ...existingHwms };
         const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
         const memberSnapshots: Record<string, any> = {};
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+        let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
         let dayTotalPoints = 0;
         let activeMemberCount = 0;
 
-        (challenge.teams || []).forEach((team: any) => {
-          let teamDailyHours = 0;
-          let teamDailyPoints = 0;
+        if (isSoloMode) {
+          // SOLO / INDIVIDUAL MODE: Process flat list of participating members
+          const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+            challenge.participants && challenge.participants.length > 0
+              ? challenge.participants
+              : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
 
-          (team.memberUids || []).forEach((memberHandleOrUid: string) => {
-            const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
-            const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+          participantsList.forEach((p) => {
+            const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+            if (!cleanHandle && !p.yptUd) return;
+
+            const liveMember = liveMembers.find((m: any) =>
+              areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''))
+            );
 
             let apiLiveHours = 0;
             let apiLiveMaxContMs = 0;
@@ -587,7 +622,6 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
 
             if (peakHours > 0) activeMemberCount++;
             dayTotalHours += peakHours;
-            teamDailyHours += peakHours;
 
             // Compute points without penalties during active open day
             const calculated = calculatePointsFromRulesNode(
@@ -599,11 +633,12 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
               peakMaxContMs
             );
 
-            teamDailyPoints += calculated.netPoints;
+            dayTotalPoints += calculated.netPoints;
 
             memberSnapshots[cleanHandle] = {
-              handle: liveMember?.n || cleanHandle,
-              rawYptUd: liveMember?.ud,
+              handle: liveMember?.n || p.yptHandle || cleanHandle,
+              rawYptUd: liveMember?.ud || p.yptUd,
+              appUserId: p.appUserId,
               hoursStudied: peakHours,
               studyMs: Math.round(peakHours * 3600000),
               maxContinuousMs: peakMaxContMs,
@@ -619,21 +654,110 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
             };
           });
 
-          teamStandingsDraft.push({
-            teamId: team.id,
-            teamName: team.name || `Team ${team.id}`,
-            dayHours: Math.round(teamDailyHours * 100) / 100,
-            dayPoints: teamDailyPoints,
+          // Build solo leaderboard participant standings sorted by dayPoints desc, then dayHours desc
+          const participantDraft = Object.values(memberSnapshots).map((m: any) => ({
+            yptUd: m.rawYptUd,
+            yptHandle: m.handle,
+            appUserId: m.appUserId,
+            dayHours: m.hoursStudied,
+            dayPoints: m.netPoints,
+          }));
+          participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+          participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
+        } else {
+          // TEAM MODE: Aggregate member snapshots into team rosters & standings
+          (challenge.teams || []).forEach((team: any) => {
+            let teamDailyHours = 0;
+            let teamDailyPoints = 0;
+
+            (team.memberUids || []).forEach((memberHandleOrUid: string) => {
+              const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+              const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+
+              let apiLiveHours = 0;
+              let apiLiveMaxContMs = 0;
+              const completedChallengeIds: number[] = [];
+
+              if (liveMember) {
+                if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                  apiLiveHours = liveMember.dl.sm / 3600000;
+                } else if (typeof liveMember.sm === 'number') {
+                  apiLiveHours = liveMember.sm / 3600000;
+                }
+
+                if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
+                  apiLiveMaxContMs = liveMember.dl.mm;
+                }
+
+                if (liveMember.cls && typeof liveMember.cls === 'object') {
+                  for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
+                    if (cItem && (cItem as any).st === 1) {
+                      completedChallengeIds.push(Number(cIdStr));
+                    }
+                  }
+                }
+              }
+
+              // Principle B: High-Water Mark Non-Destructive Update
+              const prevHwm = existingHwms[cleanHandle] || 0;
+              const peakHours = Math.round(Math.max(prevHwm, apiLiveHours) * 100) / 100;
+              updatedHwms[cleanHandle] = peakHours;
+
+              // Track max continuous study session (dl.mm) High-Water Mark
+              const prevMaxContHwm = existingMaxContHwms[cleanHandle] || 0;
+              const peakMaxContMs = Math.max(prevMaxContHwm, apiLiveMaxContMs);
+              updatedMaxContHwms[cleanHandle] = peakMaxContMs;
+
+              if (peakHours > 0) activeMemberCount++;
+              dayTotalHours += peakHours;
+              teamDailyHours += peakHours;
+
+              // Compute points without penalties during active open day
+              const calculated = calculatePointsFromRulesNode(
+                peakHours,
+                challenge.rules,
+                [],
+                completedChallengeIds,
+                false, // No penalty during live open day
+                peakMaxContMs
+              );
+
+              teamDailyPoints += calculated.netPoints;
+
+              memberSnapshots[cleanHandle] = {
+                handle: liveMember?.n || cleanHandle,
+                rawYptUd: liveMember?.ud,
+                hoursStudied: peakHours,
+                studyMs: Math.round(peakHours * 3600000),
+                maxContinuousMs: peakMaxContMs,
+                isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+                completedNativeChallengeIds: completedChallengeIds,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: 0,
+                netPoints: calculated.netPoints,
+                appliedRuleBreakdown: calculated.appliedRules,
+                status: 'active',
+                lastSyncedAt: new Date().toISOString(),
+              };
+            });
+
+            teamStandingsDraft.push({
+              teamId: team.id,
+              teamName: team.name || `Team ${team.id}`,
+              dayHours: Math.round(teamDailyHours * 100) / 100,
+              dayPoints: teamDailyPoints,
+            });
+
+            dayTotalPoints += teamDailyPoints;
           });
+        }
 
-          dayTotalPoints += teamDailyPoints;
-        });
-
-        // Rank teams
+        // Rank teams if in team mode
         teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
         const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
 
-        const snapshotData = {
+        const snapshotData: any = {
           id: activeYmd,
           challengeId: challenge.id,
           dateYmd: activeYmd,
@@ -643,7 +767,8 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
           totalChallengePoints: dayTotalPoints,
           activeMemberCount,
           memberSnapshots,
-          teamStandings,
+          teamStandings: isSoloMode ? [] : teamStandings,
+          participantStandings: isSoloMode ? participantStandings : undefined,
           highWaterMarks: updatedHwms,
           maxContinuousHighWaterMarks: updatedMaxContHwms,
           lastSyncedAt: new Date().toISOString(),
@@ -717,19 +842,30 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
           }
         }
 
+        const mode = challenge.mode || 'team';
+        const isSoloMode = mode === 'individual';
+
         const finalizedMemberSnapshots: Record<string, any> = {};
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+        let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
         let dayTotalPoints = 0;
         let activeMemberCount = 0;
 
-        (challenge.teams || []).forEach((team: any) => {
-          let teamDailyHours = 0;
-          let teamDailyPoints = 0;
+        if (isSoloMode) {
+          // SOLO / INDIVIDUAL MODE: Finalize member snapshots with penalties
+          const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+            challenge.participants && challenge.participants.length > 0
+              ? challenge.participants
+              : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
 
-          (team.memberUids || []).forEach((memberHandleOrUid: string) => {
-            const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
-            const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+          participantsList.forEach((p) => {
+            const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+            if (!cleanHandle && !p.yptUd) return;
+
+            const liveMember = liveMembers.find((m: any) =>
+              areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''))
+            );
 
             let apiLiveHours = 0;
             let apiLiveMaxContMs = 0;
@@ -757,7 +893,6 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
             if (peakHours > 0) activeMemberCount++;
             dayTotalHours += peakHours;
-            teamDailyHours += peakHours;
 
             // Final lock applies penalties!
             const calculated = calculatePointsFromRulesNode(
@@ -769,11 +904,12 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
               peakMaxContMs
             );
 
-            teamDailyPoints += calculated.netPoints;
+            dayTotalPoints += calculated.netPoints;
 
             finalizedMemberSnapshots[cleanHandle] = {
-              handle: liveMember?.n || cleanHandle,
-              rawYptUd: liveMember?.ud,
+              handle: liveMember?.n || p.yptHandle || cleanHandle,
+              rawYptUd: liveMember?.ud || p.yptUd,
+              appUserId: p.appUserId,
               hoursStudied: peakHours,
               studyMs: Math.round(peakHours * 3600000),
               maxContinuousMs: peakMaxContMs,
@@ -789,20 +925,99 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
             };
           });
 
-          teamStandingsDraft.push({
-            teamId: team.id,
-            teamName: team.name || `Team ${team.id}`,
-            dayHours: Math.round(teamDailyHours * 100) / 100,
-            dayPoints: teamDailyPoints,
-          });
+          // Build solo leaderboard participant standings sorted by dayPoints desc, then dayHours desc
+          const participantDraft = Object.values(finalizedMemberSnapshots).map((m: any) => ({
+            yptUd: m.rawYptUd,
+            yptHandle: m.handle,
+            appUserId: m.appUserId,
+            dayHours: m.hoursStudied,
+            dayPoints: m.netPoints,
+          }));
+          participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+          participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
+        } else {
+          // TEAM MODE: Finalize teams with penalties
+          (challenge.teams || []).forEach((team: any) => {
+            let teamDailyHours = 0;
+            let teamDailyPoints = 0;
 
-          dayTotalPoints += teamDailyPoints;
-        });
+            (team.memberUids || []).forEach((memberHandleOrUid: string) => {
+              const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+              const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+
+              let apiLiveHours = 0;
+              let apiLiveMaxContMs = 0;
+              const completedChallengeIds: number[] = [];
+
+              if (liveMember) {
+                if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                  apiLiveHours = liveMember.dl.sm / 3600000;
+                }
+                if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
+                  apiLiveMaxContMs = liveMember.dl.mm;
+                }
+                if (liveMember.cls && typeof liveMember.cls === 'object') {
+                  for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
+                    if (cItem && (cItem as any).st === 1) completedChallengeIds.push(Number(cIdStr));
+                  }
+                }
+              }
+
+              const peakHours = Math.round(Math.max(existingHwms[cleanHandle] || 0, apiLiveHours) * 100) / 100;
+              existingHwms[cleanHandle] = peakHours;
+
+              const peakMaxContMs = Math.max(existingMaxContHwms[cleanHandle] || 0, apiLiveMaxContMs);
+              existingMaxContHwms[cleanHandle] = peakMaxContMs;
+
+              if (peakHours > 0) activeMemberCount++;
+              dayTotalHours += peakHours;
+              teamDailyHours += peakHours;
+
+              // Final lock applies penalties!
+              const calculated = calculatePointsFromRulesNode(
+                peakHours,
+                challenge.rules,
+                [],
+                completedChallengeIds,
+                true, // Apply penalty on final lock
+                peakMaxContMs
+              );
+
+              teamDailyPoints += calculated.netPoints;
+
+              finalizedMemberSnapshots[cleanHandle] = {
+                handle: liveMember?.n || cleanHandle,
+                rawYptUd: liveMember?.ud,
+                hoursStudied: peakHours,
+                studyMs: Math.round(peakHours * 3600000),
+                maxContinuousMs: peakMaxContMs,
+                isCurrentlyStudying: false, // Day concluded
+                completedNativeChallengeIds: completedChallengeIds,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: calculated.penaltyPoints,
+                netPoints: calculated.netPoints,
+                appliedRuleBreakdown: calculated.appliedRules,
+                status: 'active',
+                lastSyncedAt: new Date().toISOString(),
+              };
+            });
+
+            teamStandingsDraft.push({
+              teamId: team.id,
+              teamName: team.name || `Team ${team.id}`,
+              dayHours: Math.round(teamDailyHours * 100) / 100,
+              dayPoints: teamDailyPoints,
+            });
+
+            dayTotalPoints += teamDailyPoints;
+          });
+        }
 
         teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
         const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
 
-        const lockedYesterdayData = {
+        const lockedYesterdayData: any = {
           id: yesterdayYmd,
           challengeId: challenge.id,
           dateYmd: yesterdayYmd,
@@ -814,7 +1029,8 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
           totalChallengePoints: dayTotalPoints,
           activeMemberCount,
           memberSnapshots: finalizedMemberSnapshots,
-          teamStandings,
+          teamStandings: isSoloMode ? [] : teamStandings,
+          participantStandings: isSoloMode ? participantStandings : undefined,
           highWaterMarks: existingHwms,
           maxContinuousHighWaterMarks: existingMaxContHwms,
           isAutoClosed: true,
@@ -833,13 +1049,90 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
         if (isChallengeConcluded) {
           // Finalize and mark challenge as completed in Firestore
-          await adminDb.collection("yptChallenges").doc(challenge.id).update({
+          const completionUpdate: any = {
             status: 'completed',
             completedAt: new Date().toISOString(),
             completedBy: 'cron_system',
             autoCompletedReason: `Reached end date ${challengeEndDateYmd} and finalized last day ${yesterdayYmd}.`,
-          });
-          console.log(`[YPT 5:15 AM IST FINALIZER] Challenge ${challenge.id} reached end date (${challengeEndDateYmd}) and has been auto-completed.`);
+          };
+
+          // Fetch all daily snapshots to calculate overall tournament winner
+          const allSnaps = await adminDb
+            .collection("yptChallenges")
+            .doc(challenge.id)
+            .collection("dailySnapshots")
+            .get();
+
+          if (isSoloMode) {
+            const memberPointTotals: Record<string, { yptUd?: number; yptHandle: string; points: number; hours: number }> = {};
+            allSnaps.docs.forEach((docSnap) => {
+              const data = docSnap.data() as any;
+              if (data.participantStandings && Array.isArray(data.participantStandings)) {
+                data.participantStandings.forEach((ps: any) => {
+                  const key = (ps.yptHandle || '').replace(/^@/, '').trim().toLowerCase() || String(ps.yptUd || '');
+                  if (!key) return;
+                  if (!memberPointTotals[key]) {
+                    memberPointTotals[key] = { yptUd: ps.yptUd, yptHandle: ps.yptHandle || key, points: 0, hours: 0 };
+                  }
+                  memberPointTotals[key].points += ps.dayPoints || 0;
+                  memberPointTotals[key].hours += ps.dayHours || 0;
+                });
+              } else if (data.memberSnapshots) {
+                Object.values(data.memberSnapshots).forEach((ms: any) => {
+                  const key = (ms.handle || '').replace(/^@/, '').trim().toLowerCase() || String(ms.rawYptUd || '');
+                  if (!key) return;
+                  if (!memberPointTotals[key]) {
+                    memberPointTotals[key] = { yptUd: ms.rawYptUd, yptHandle: ms.handle || key, points: 0, hours: 0 };
+                  }
+                  memberPointTotals[key].points += ms.netPoints || 0;
+                  memberPointTotals[key].hours += ms.hoursStudied || 0;
+                });
+              }
+            });
+
+            const sortedParticipants = Object.values(memberPointTotals).sort((a, b) => b.points - a.points || b.hours - a.hours);
+            const topWinner = sortedParticipants[0] || participantStandings[0];
+            const sortedByHours = Object.values(memberPointTotals).sort((a, b) => b.hours - a.hours);
+            const topMvp = sortedByHours[0];
+
+            completionUpdate.winningParticipantUd = topWinner?.yptUd || null;
+            completionUpdate.winningParticipantHandle = topWinner?.yptHandle || null;
+            completionUpdate.finalMvpHandle = topMvp?.yptHandle || topWinner?.yptHandle || null;
+          } else {
+            const teamPointTotals: Record<string, { teamId: string; teamName: string; points: number; hours: number }> = {};
+            (challenge.teams || []).forEach((t: any) => {
+              teamPointTotals[t.id] = { teamId: t.id, teamName: t.name, points: t.totalPoints || 0, hours: 0 };
+            });
+
+            const memberHoursMap: Record<string, number> = {};
+            allSnaps.docs.forEach((docSnap) => {
+              const data = docSnap.data() as any;
+              if (data.teamStandings && Array.isArray(data.teamStandings)) {
+                data.teamStandings.forEach((ts: any) => {
+                  if (ts.teamId && teamPointTotals[ts.teamId]) {
+                    teamPointTotals[ts.teamId].hours += ts.dayHours || 0;
+                  }
+                });
+              }
+              if (data.memberSnapshots) {
+                Object.values(data.memberSnapshots).forEach((ms: any) => {
+                  const clean = (ms.handle || '').replace(/^@/, '').trim().toLowerCase();
+                  memberHoursMap[clean] = (memberHoursMap[clean] || 0) + (ms.hoursStudied || 0);
+                });
+              }
+            });
+
+            const sortedTeams = Object.values(teamPointTotals).sort((a, b) => b.points - a.points || b.hours - a.hours);
+            const topTeam = sortedTeams[0] || teamStandings[0];
+            const sortedMembers = Object.entries(memberHoursMap).sort((a, b) => b[1] - a[1]);
+            const topMvp = sortedMembers[0];
+
+            completionUpdate.winningTeamId = topTeam?.teamId || null;
+            completionUpdate.finalMvpHandle = topMvp ? topMvp[0] : null;
+          }
+
+          await adminDb.collection("yptChallenges").doc(challenge.id).update(completionUpdate);
+          console.log(`[YPT 5:15 AM IST FINALIZER] Challenge ${challenge.id} reached end date (${challengeEndDateYmd}) and has been auto-completed with winners resolved.`);
         } else {
           // STEP C: Create Fresh Open Snapshot for Today (dateYmd = todayYmd) ONLY IF CHALLENGE IS STILL ACTIVE
           const todaySnapRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("dailySnapshots").doc(todayYmd);
@@ -848,12 +1141,20 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
           if (!todaySnap.exists) {
             const initialMemberSnapshots: Record<string, any> = {};
             const initialTeamStandings: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number; rank: number }> = [];
+            let initialParticipantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
 
-            (challenge.teams || []).forEach((team: any, idx: number) => {
-              (team.memberUids || []).forEach((mHandle: string) => {
-                const cleanHandle = mHandle.replace(/^@/, '').trim().toLowerCase();
+            if (isSoloMode) {
+              const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+                challenge.participants && challenge.participants.length > 0
+                  ? challenge.participants
+                  : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
+
+              initialParticipantStandings = participantsList.map((p, idx) => {
+                const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
                 initialMemberSnapshots[cleanHandle] = {
-                  handle: cleanHandle,
+                  handle: p.yptHandle || cleanHandle,
+                  rawYptUd: p.yptUd,
+                  appUserId: p.appUserId,
                   hoursStudied: 0,
                   studyMs: 0,
                   maxContinuousMs: 0,
@@ -867,18 +1168,48 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
                   status: 'active',
                   lastSyncedAt: new Date().toISOString(),
                 };
-              });
 
-              initialTeamStandings.push({
-                teamId: team.id,
-                teamName: team.name || `Team ${team.id}`,
-                dayHours: 0,
-                dayPoints: 0,
-                rank: idx + 1,
+                return {
+                  yptUd: p.yptUd,
+                  yptHandle: p.yptHandle || cleanHandle,
+                  appUserId: p.appUserId,
+                  dayHours: 0,
+                  dayPoints: 0,
+                  rank: idx + 1,
+                };
               });
-            });
+            } else {
+              (challenge.teams || []).forEach((team: any, idx: number) => {
+                (team.memberUids || []).forEach((mHandle: string) => {
+                  const cleanHandle = mHandle.replace(/^@/, '').trim().toLowerCase();
+                  initialMemberSnapshots[cleanHandle] = {
+                    handle: cleanHandle,
+                    hoursStudied: 0,
+                    studyMs: 0,
+                    maxContinuousMs: 0,
+                    isCurrentlyStudying: false,
+                    completedNativeChallengeIds: [],
+                    basePoints: 0,
+                    bonusPoints: 0,
+                    penaltyPoints: 0,
+                    netPoints: 0,
+                    appliedRuleBreakdown: [],
+                    status: 'active',
+                    lastSyncedAt: new Date().toISOString(),
+                  };
+                });
 
-            const freshDayData = {
+                initialTeamStandings.push({
+                  teamId: team.id,
+                  teamName: team.name || `Team ${team.id}`,
+                  dayHours: 0,
+                  dayPoints: 0,
+                  rank: idx + 1,
+                });
+              });
+            }
+
+            const freshDayData: any = {
               id: todayYmd,
               challengeId: challenge.id,
               dateYmd: todayYmd,
@@ -888,7 +1219,8 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
               totalChallengePoints: 0,
               activeMemberCount: 0,
               memberSnapshots: initialMemberSnapshots,
-              teamStandings: initialTeamStandings,
+              teamStandings: isSoloMode ? [] : initialTeamStandings,
+              participantStandings: isSoloMode ? initialParticipantStandings : undefined,
               highWaterMarks: {},
               maxContinuousHighWaterMarks: {},
               lastSyncedAt: new Date().toISOString(),

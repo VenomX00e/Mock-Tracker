@@ -861,24 +861,326 @@ export async function softDeleteYptChallenge(challengeId: string): Promise<void>
   });
 }
 
+export interface YptChallengeWinnerSummary {
+  mode: 'team' | 'individual';
+  winningTeamId?: string;
+  winningTeamName?: string;
+  winningTeamPoints?: number;
+  winningParticipantUd?: number;
+  winningParticipantHandle?: string;
+  winningParticipantPoints?: number;
+  winningParticipantHours?: number;
+  finalMvpHandle?: string;
+  finalMvpHours?: number;
+  topParticipants?: Array<{
+    yptUd?: number;
+    yptHandle: string;
+    appUserId?: string;
+    totalPoints: number;
+    totalHours: number;
+    rank: number;
+  }>;
+  rankedTeams?: Array<{
+    id: string;
+    name: string;
+    color?: string;
+    totalPoints: number;
+    totalHours: number;
+    rank: number;
+  }>;
+  grandTotalHours: number;
+  totalSubmissions: number;
+}
+
+/**
+ * Resolves the final tournament winners and standings for a challenge across
+ * all daily snapshots and submission logs.
+ * - Team Mode: Calculates the team with the most points (tie-breaker: hours) -> sets winningTeamId.
+ * - Individual Mode: Sorts final accumulated points of all participants -> sets winningParticipantUd & winningParticipantHandle.
+ * - Finds overall tournament MVP (member with the highest cumulative study hours).
+ */
+export async function resolveChallengeWinners(
+  challengeIdOrChallenge: string | YptChallenge
+): Promise<YptChallengeWinnerSummary> {
+  const challenge: YptChallenge | null =
+    typeof challengeIdOrChallenge === 'string'
+      ? await getYptChallenge(challengeIdOrChallenge)
+      : challengeIdOrChallenge;
+
+  if (!challenge) {
+    throw new Error(`Challenge not found: ${challengeIdOrChallenge}`);
+  }
+
+  const isSoloMode = (challenge.mode || 'team') === 'individual';
+  const todayStr = getYptDayYmd();
+
+  const [submissions, dailySnapshots] = await Promise.all([
+    getYptSubmissionLogs(challenge.id),
+    getAllDailySnapshots(challenge.id),
+  ]);
+
+  const deduplicatedStats = getDeduplicatedDailyMemberStats(submissions, challenge);
+
+  // Set of dates covered by finalized daily snapshots
+  const closedSnapshotDates = new Set(
+    dailySnapshots
+      .filter((s) => s.targetDateYmd < todayStr)
+      .map((s) => s.targetDateYmd || s.dateYmd)
+  );
+
+  // Deduplicated submission stats not covered by closed snapshots (e.g. today or unclosed)
+  const unclosedStats = deduplicatedStats.filter(
+    (stat) => !closedSnapshotDates.has(stat.dateYmd)
+  );
+
+  let grandTotalHours = 0;
+
+  if (isSoloMode) {
+    // Accumulator map for every participant: key = clean handle or yptUd
+    const participantMap = new Map<string, {
+      yptUd?: number;
+      yptHandle: string;
+      appUserId?: string;
+      totalPoints: number;
+      totalHours: number;
+    }>();
+
+    // Initialize from challenge.participants if provided
+    (challenge.participants || []).forEach((p) => {
+      const cleanKey = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+      if (!cleanKey && !p.yptUd) return;
+      participantMap.set(cleanKey || String(p.yptUd), {
+        yptUd: p.yptUd,
+        yptHandle: p.yptHandle || cleanKey,
+        appUserId: p.appUserId,
+        totalPoints: 0,
+        totalHours: 0,
+      });
+    });
+
+    // Helper to find or add entry in participantMap
+    const getOrAddParticipant = (handle: string, yptUd?: number, appUserId?: string) => {
+      const cleanKey = (handle || '').replace(/^@/, '').trim().toLowerCase();
+      for (const existing of participantMap.values()) {
+        if (areYptHandlesMatching(existing.yptHandle, handle, yptUd ? String(yptUd) : undefined)) {
+          if (!existing.yptUd && yptUd) existing.yptUd = yptUd;
+          if (!existing.appUserId && appUserId) existing.appUserId = appUserId;
+          return existing;
+        }
+      }
+      const newEntry = {
+        yptUd,
+        yptHandle: handle || cleanKey,
+        appUserId,
+        totalPoints: 0,
+        totalHours: 0,
+      };
+      participantMap.set(cleanKey || String(yptUd || Date.now()), newEntry);
+      return newEntry;
+    };
+
+    // 1. Accumulate points from past locked snapshots
+    dailySnapshots.forEach((snap) => {
+      if (snap.participantStandings && Array.isArray(snap.participantStandings)) {
+        snap.participantStandings.forEach((ps) => {
+          const entry = getOrAddParticipant(ps.yptHandle, ps.yptUd, ps.appUserId);
+          entry.totalPoints += ps.dayPoints || 0;
+          entry.totalHours += ps.dayHours || 0;
+          grandTotalHours += ps.dayHours || 0;
+        });
+      } else if (snap.memberSnapshots) {
+        Object.values(snap.memberSnapshots).forEach((ms) => {
+          const entry = getOrAddParticipant(ms.handle, ms.rawYptUd, ms.appUserId);
+          entry.totalPoints += ms.netPoints || 0;
+          entry.totalHours += ms.hoursStudied || 0;
+          grandTotalHours += ms.hoursStudied || 0;
+        });
+      } else if (Array.isArray(snap.memberRecords)) {
+        snap.memberRecords.forEach((mr) => {
+          const entry = getOrAddParticipant(mr.yptHandle, mr.userId ? Number(mr.userId) : undefined);
+          entry.totalPoints += mr.netPoints || 0;
+          entry.totalHours += mr.hoursStudied || 0;
+          grandTotalHours += mr.hoursStudied || 0;
+        });
+      }
+    });
+
+    // 2. Accumulate points from unclosed stats (e.g. today)
+    unclosedStats.forEach((stat) => {
+      const entry = getOrAddParticipant(stat.memberHandle, stat.matchedUid ? Number(stat.matchedUid) : undefined);
+      entry.totalPoints += stat.pointsEarned || 0;
+      entry.totalHours += stat.hoursStudied || 0;
+      grandTotalHours += stat.hoursStudied || 0;
+    });
+
+    // Sort participants by totalPoints desc, then totalHours desc
+    const sortedParticipants = Array.from(participantMap.values()).map((p) => ({
+      ...p,
+      totalHours: Math.round(p.totalHours * 100) / 100,
+    }));
+    sortedParticipants.sort((a, b) => b.totalPoints - a.totalPoints || b.totalHours - a.totalHours);
+
+    const topParticipants = sortedParticipants.map((p, idx) => ({
+      ...p,
+      rank: idx + 1,
+    }));
+
+    const topChampion = topParticipants[0];
+
+    // MVP: member with highest cumulative study hours
+    const mvpSorted = [...topParticipants].sort((a, b) => b.totalHours - a.totalHours);
+    const topMvp = mvpSorted[0];
+
+    return {
+      mode: 'individual',
+      winningParticipantUd: topChampion?.yptUd,
+      winningParticipantHandle: topChampion?.yptHandle,
+      winningParticipantPoints: topChampion?.totalPoints,
+      winningParticipantHours: topChampion?.totalHours,
+      finalMvpHandle: topMvp?.yptHandle || topChampion?.yptHandle,
+      finalMvpHours: topMvp?.totalHours,
+      topParticipants,
+      grandTotalHours: Math.round(grandTotalHours * 100) / 100,
+      totalSubmissions: submissions.length,
+    };
+  } else {
+    // TEAM MODE: Aggregate team totals and find winning team + overall MVP
+    const teamMap = new Map<string, {
+      id: string;
+      name: string;
+      color?: string;
+      totalPoints: number;
+      totalHours: number;
+      memberUids: string[];
+    }>();
+
+    (challenge.teams || []).forEach((t) => {
+      teamMap.set(t.id, {
+        id: t.id,
+        name: t.name || `Team ${t.id}`,
+        color: t.color,
+        totalPoints: t.totalPoints || 0,
+        totalHours: 0,
+        memberUids: t.memberUids || [],
+      });
+    });
+
+    // Map to track individual hours for overall MVP
+    const memberHoursMap = new Map<string, number>();
+
+    // 1. Add points and hours from all past finalized daily snapshots
+    dailySnapshots.forEach((snapshot) => {
+      if (snapshot.teamStandings && Array.isArray(snapshot.teamStandings)) {
+        snapshot.teamStandings.forEach((ts) => {
+          const t = teamMap.get(ts.teamId);
+          if (t) {
+            t.totalHours += ts.dayHours || 0;
+            grandTotalHours += ts.dayHours || 0;
+          }
+        });
+      }
+
+      if (snapshot.memberSnapshots) {
+        Object.values(snapshot.memberSnapshots).forEach((ms) => {
+          const clean = (ms.handle || '').replace(/^@/, '').trim().toLowerCase();
+          const prev = memberHoursMap.get(clean) || 0;
+          memberHoursMap.set(clean, prev + (ms.hoursStudied || 0));
+        });
+      } else if (Array.isArray(snapshot.memberRecords)) {
+        snapshot.memberRecords.forEach((mr) => {
+          const clean = (mr.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+          const prev = memberHoursMap.get(clean) || 0;
+          memberHoursMap.set(clean, prev + (mr.hoursStudied || 0));
+        });
+      }
+    });
+
+    // 2. Add unclosed stats
+    unclosedStats.forEach((stat) => {
+      const clean = (stat.memberHandle || '').replace(/^@/, '').trim().toLowerCase();
+      const prev = memberHoursMap.get(clean) || 0;
+      memberHoursMap.set(clean, prev + (stat.hoursStudied || 0));
+      grandTotalHours += stat.hoursStudied || 0;
+
+      for (const t of teamMap.values()) {
+        if (t.memberUids.some((m) => areYptHandlesMatching(m, stat.memberHandle, stat.matchedUid))) {
+          t.totalPoints += stat.pointsEarned || 0;
+          t.totalHours += stat.hoursStudied || 0;
+          break;
+        }
+      }
+    });
+
+    // Sort teams by totalPoints desc, then totalHours desc
+    const sortedTeams = Array.from(teamMap.values()).map((t) => ({
+      ...t,
+      totalHours: Math.round(t.totalHours * 100) / 100,
+    }));
+    sortedTeams.sort((a, b) => b.totalPoints - a.totalPoints || b.totalHours - a.totalHours);
+
+    const rankedTeams = sortedTeams.map((t, idx) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+      totalPoints: t.totalPoints,
+      totalHours: t.totalHours,
+      rank: idx + 1,
+    }));
+
+    const winningTeam = rankedTeams[0];
+
+    // MVP: member with max study hours across all teams
+    const sortedMembers = Array.from(memberHoursMap.entries()).map(([handle, hours]) => ({ handle, hours }));
+    sortedMembers.sort((a, b) => b.hours - a.hours);
+    const topMvp = sortedMembers.length > 0 && sortedMembers[0].hours > 0 ? sortedMembers[0] : null;
+
+    return {
+      mode: 'team',
+      winningTeamId: winningTeam?.id,
+      winningTeamName: winningTeam?.name,
+      winningTeamPoints: winningTeam?.totalPoints,
+      finalMvpHandle: topMvp?.handle || '',
+      finalMvpHours: topMvp?.hours ? Math.round(topMvp.hours * 100) / 100 : 0,
+      rankedTeams,
+      grandTotalHours: Math.round(grandTotalHours * 100) / 100,
+      totalSubmissions: submissions.length,
+    };
+  }
+}
+
 /**
  * Marks a YPT Challenge as completed and saves completion metadata.
+ * Uses resolveChallengeWinners to automatically calculate winners if not explicitly provided.
  */
 export async function completeYptChallenge(
   challengeId: string,
   summaryData?: {
     completedBy?: string;
     winningTeamId?: string;
+    winningParticipantUd?: number;
+    winningParticipantHandle?: string;
     finalMvpHandle?: string;
   }
-): Promise<void> {
-  await updateYptChallenge(challengeId, {
+): Promise<YptChallengeWinnerSummary> {
+  const calculated = await resolveChallengeWinners(challengeId);
+  const isSolo = calculated.mode === 'individual';
+
+  const updates: Partial<YptChallenge> = {
     status: 'completed',
     completedAt: new Date().toISOString(),
-    completedBy: summaryData?.completedBy || '',
-    winningTeamId: summaryData?.winningTeamId || '',
-    finalMvpHandle: summaryData?.finalMvpHandle || '',
-  });
+    completedBy: summaryData?.completedBy || 'admin',
+    winningTeamId: isSolo ? '' : (summaryData?.winningTeamId || calculated.winningTeamId || ''),
+    winningParticipantUd: isSolo
+      ? (summaryData?.winningParticipantUd !== undefined ? summaryData.winningParticipantUd : calculated.winningParticipantUd)
+      : undefined,
+    winningParticipantHandle: isSolo
+      ? (summaryData?.winningParticipantHandle || calculated.winningParticipantHandle || '')
+      : '',
+    finalMvpHandle: summaryData?.finalMvpHandle || calculated.finalMvpHandle || '',
+  };
+
+  await updateYptChallenge(challengeId, updates);
+  return calculated;
 }
 
 /**
@@ -1567,24 +1869,29 @@ export async function autoCloseMissingDays(
 
   for (const dateYmd of missingDates) {
     const statsForDate = allDeduplicatedStats.filter((s) => s.dateYmd === dateYmd);
+    const isSoloMode = (challenge.mode || 'team') === 'individual';
     const teamPointsMap: Record<string, number> = {};
     const memberRecords: NonNullable<YptDailyDaySnapshot['memberRecords']> = [];
     const memberSnapshots: YptDailyDaySnapshot['memberSnapshots'] = {};
     const highWaterMarks: Record<string, number> = {};
     const maxContinuousHighWaterMarks: Record<string, number> = {};
     const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+    let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
     let dayTotalPoints = 0;
     let dayTotalHours = 0;
     let activeMemberCount = 0;
 
-    (challenge.teams || []).forEach((team) => {
-      let teamDailyPoints = 0;
-      let teamDailyHours = 0;
+    if (isSoloMode) {
+      const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+        challenge.participants && challenge.participants.length > 0
+          ? challenge.participants
+          : [];
 
-      (team.memberUids || []).forEach((memberHandleOrUid) => {
-        const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+      participantsList.forEach((p) => {
+        const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+        const memberHandleOrUid = p.yptHandle || cleanHandle;
         const foundStat = statsForDate.find((s) =>
-          areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
+          areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid || (p.yptUd ? String(p.yptUd) : undefined))
         );
 
         if (foundStat) {
@@ -1595,7 +1902,6 @@ export async function autoCloseMissingDays(
           maxContinuousHighWaterMarks[cleanHandle] = maxContMs;
           if (hours > 0) activeMemberCount++;
           dayTotalHours += hours;
-          teamDailyHours += hours;
 
           const appliedRules = foundStat.detectedRules
             ? foundStat.detectedRules.map((r) => ({
@@ -1629,7 +1935,8 @@ export async function autoCloseMissingDays(
 
           const memberDoc = {
             handle: foundStat.memberHandle || memberHandleOrUid,
-            rawYptUd: undefined,
+            rawYptUd: p.yptUd,
+            appUserId: p.appUserId,
             hoursStudied: hours,
             studyMs: Math.round(hours * 3600000),
             maxContinuousMs: maxContMs,
@@ -1648,8 +1955,7 @@ export async function autoCloseMissingDays(
 
           memberRecords.push({
             yptHandle: foundStat.memberHandle || memberHandleOrUid,
-            userId: foundStat.matchedUid,
-            teamId: team.id,
+            userId: foundStat.matchedUid || (p.yptUd ? String(p.yptUd) : undefined),
             hoursStudied: hours,
             basePoints,
             bonusPoints,
@@ -1658,7 +1964,7 @@ export async function autoCloseMissingDays(
             appliedRules,
           });
 
-          teamDailyPoints += net;
+          dayTotalPoints += net;
         } else {
           // Member had 0 study time recorded on this past date
           highWaterMarks[cleanHandle] = 0;
@@ -1684,7 +1990,8 @@ export async function autoCloseMissingDays(
 
           memberSnapshots[cleanHandle] = {
             handle: cleanHandle,
-            rawYptUd: undefined,
+            rawYptUd: p.yptUd,
+            appUserId: p.appUserId,
             hoursStudied: 0,
             studyMs: 0,
             maxContinuousMs: 0,
@@ -1711,7 +2018,6 @@ export async function autoCloseMissingDays(
 
           memberRecords.push({
             yptHandle: cleanHandle,
-            teamId: team.id,
             hoursStudied: 0,
             basePoints: 0,
             bonusPoints: 0,
@@ -1720,20 +2026,178 @@ export async function autoCloseMissingDays(
             appliedRules,
           });
 
-          teamDailyPoints += netPoints;
+          dayTotalPoints += netPoints;
         }
       });
 
-      teamPointsMap[team.id] = teamDailyPoints;
-      dayTotalPoints += teamDailyPoints;
+      const participantDraft = Object.values(memberSnapshots).map((m: any) => ({
+        yptUd: m.rawYptUd,
+        yptHandle: m.handle,
+        appUserId: m.appUserId,
+        dayHours: m.hoursStudied || 0,
+        dayPoints: m.netPoints || 0,
+      }));
+      participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+      participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
+    } else {
+      (challenge.teams || []).forEach((team) => {
+        let teamDailyPoints = 0;
+        let teamDailyHours = 0;
 
-      teamStandingsDraft.push({
-        teamId: team.id,
-        teamName: team.name || `Team ${team.id}`,
-        dayHours: teamDailyHours,
-        dayPoints: teamDailyPoints,
+        (team.memberUids || []).forEach((memberHandleOrUid) => {
+          const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+          const foundStat = statsForDate.find((s) =>
+            areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
+          );
+
+          if (foundStat) {
+            const hours = foundStat.hoursStudied || 0;
+            const net = foundStat.pointsEarned || 0;
+            const maxContMs = foundStat.maxContinuousMs || 0;
+            highWaterMarks[cleanHandle] = hours;
+            maxContinuousHighWaterMarks[cleanHandle] = maxContMs;
+            if (hours > 0) activeMemberCount++;
+            dayTotalHours += hours;
+            teamDailyHours += hours;
+
+            const appliedRules = foundStat.detectedRules
+              ? foundStat.detectedRules.map((r) => ({
+                  ruleId: r.ruleId,
+                  ruleName: r.ruleName,
+                  emoji: r.emoji || '⭐',
+                  points: r.points || 0,
+                }))
+              : [];
+
+            const intervalVal = challenge.rules?.studyIntervalValue ?? 1;
+            const intervalUnit = challenge.rules?.studyIntervalUnit ?? 'hours';
+            const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+            const ptsPerInterval = challenge.rules?.pointsPerInterval ?? challenge.rules?.pointsPerStudyHour ?? 1;
+            const basePoints = Math.floor(hours / (intervalHours || 1)) * ptsPerInterval;
+
+            const bonusPoints = appliedRules
+              .filter((r) => r.points > 0)
+              .reduce((acc, r) => acc + r.points, 0);
+            const penaltyPoints = appliedRules
+              .filter((r) => r.points < 0)
+              .reduce((acc, r) => acc + Math.abs(r.points), 0);
+
+            const appliedRuleBreakdown = appliedRules.map((r) => ({
+              ruleId: r.ruleId || '',
+              ruleName: r.ruleName,
+              emoji: r.emoji,
+              points: r.points,
+              type: (r.points < 0 ? 'penalty' : r.points > 0 ? 'bonus' : 'base') as 'bonus' | 'penalty' | 'base' | 'milestone',
+            }));
+
+            const memberDoc = {
+              handle: foundStat.memberHandle || memberHandleOrUid,
+              rawYptUd: undefined,
+              hoursStudied: hours,
+              studyMs: Math.round(hours * 3600000),
+              maxContinuousMs: maxContMs,
+              isCurrentlyStudying: false,
+              completedNativeChallengeIds: [],
+              basePoints,
+              bonusPoints,
+              penaltyPoints,
+              netPoints: net,
+              appliedRuleBreakdown,
+              status: 'active' as const,
+              lastSyncedAt: new Date().toISOString(),
+            };
+
+            memberSnapshots[cleanHandle] = memberDoc;
+
+            memberRecords.push({
+              yptHandle: foundStat.memberHandle || memberHandleOrUid,
+              userId: foundStat.matchedUid,
+              teamId: team.id,
+              hoursStudied: hours,
+              basePoints,
+              bonusPoints,
+              penaltyPoints,
+              netPoints: net,
+              appliedRules,
+            });
+
+            teamDailyPoints += net;
+          } else {
+            // Member had 0 study time recorded on this past date
+            highWaterMarks[cleanHandle] = 0;
+            maxContinuousHighWaterMarks[cleanHandle] = 0;
+            const penaltyThreshold =
+              challenge.rules?.penaltyThresholdValue ??
+              challenge.rules?.noStudyPenaltyThresholdHours ??
+              0;
+            const penaltyVal = challenge.rules?.penaltyPoints || 0;
+            const isPenalized = penaltyThreshold > 0 && penaltyVal > 0;
+            const penaltyPoints = isPenalized ? penaltyVal : 0;
+            const netPoints = -penaltyPoints;
+
+            const appliedRules = isPenalized
+              ? [
+                  {
+                    ruleName: 'No Study Penalty',
+                    emoji: '⚠️',
+                    points: -penaltyVal,
+                  },
+                ]
+              : [];
+
+            memberSnapshots[cleanHandle] = {
+              handle: cleanHandle,
+              rawYptUd: undefined,
+              hoursStudied: 0,
+              studyMs: 0,
+              maxContinuousMs: 0,
+              isCurrentlyStudying: false,
+              completedNativeChallengeIds: [],
+              basePoints: 0,
+              bonusPoints: 0,
+              penaltyPoints,
+              netPoints,
+              appliedRuleBreakdown: isPenalized
+                ? [
+                    {
+                      ruleId: 'no_study_penalty',
+                      ruleName: 'No Study Penalty',
+                      emoji: '⚠️',
+                      points: -penaltyVal,
+                      type: 'penalty',
+                    },
+                  ]
+                : [],
+              status: 'active',
+              lastSyncedAt: new Date().toISOString(),
+            };
+
+            memberRecords.push({
+              yptHandle: cleanHandle,
+              teamId: team.id,
+              hoursStudied: 0,
+              basePoints: 0,
+              bonusPoints: 0,
+              penaltyPoints,
+              netPoints,
+              appliedRules,
+            });
+
+            teamDailyPoints += netPoints;
+          }
+        });
+
+        teamPointsMap[team.id] = teamDailyPoints;
+        dayTotalPoints += teamDailyPoints;
+
+        teamStandingsDraft.push({
+          teamId: team.id,
+          teamName: team.name || `Team ${team.id}`,
+          dayHours: teamDailyHours,
+          dayPoints: teamDailyPoints,
+        });
       });
-    });
+    }
 
     // Rank teams descending by dayPoints, then dayHours
     teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
@@ -1754,7 +2218,8 @@ export async function autoCloseMissingDays(
       totalChallengePoints: dayTotalPoints,
       activeMemberCount,
       memberSnapshots,
-      teamStandings,
+      teamStandings: isSoloMode ? [] : teamStandings,
+      participantStandings: isSoloMode ? participantStandings : undefined,
       isAutoClosed: true,
       closedAt: Date.now(),
       totalPointsAwarded: dayTotalPoints,
@@ -1825,10 +2290,12 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
   const allDeduplicatedStats = getDeduplicatedDailyMemberStats(allSubmissions, challenge);
   const statsForDate = allDeduplicatedStats.filter((s) => s.dateYmd === activeYmd);
 
+  const isSoloMode = (challenge.mode || 'team') === 'individual';
   const teamPointsMap: Record<string, number> = {};
   const memberRecords: NonNullable<YptDailyDaySnapshot['memberRecords']> = [];
   const memberSnapshots: YptDailyDaySnapshot['memberSnapshots'] = {};
   const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+  let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
   let dayTotalPoints = 0;
   let dayTotalHours = 0;
   let activeMemberCount = 0;
@@ -1838,16 +2305,19 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
   const isPastLockedDate = activeYmd < getYptDayYmd();
   const applyPenalty = isPastLockedDate || forceFinalLock;
 
-  (challenge.teams || []).forEach((team) => {
-    let teamDailyPoints = 0;
-    let teamDailyHours = 0;
+  if (isSoloMode) {
+    const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+      challenge.participants && challenge.participants.length > 0
+        ? challenge.participants
+        : (liveRoster || []).map((m) => ({ yptUd: m.ud, yptHandle: m.n }));
 
-    (team.memberUids || []).forEach((memberHandleOrUid) => {
-      const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+    participantsList.forEach((p) => {
+      const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+      const memberHandleOrUid = p.yptHandle || cleanHandle;
 
       // Find manual submission stat (if any)
       const foundStat = statsForDate.find((s) =>
-        areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
+        areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid || (p.yptUd ? String(p.yptUd) : undefined))
       );
 
       // Find member in live API roster
@@ -1855,7 +2325,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
         if (!m) return false;
         const mHandle = (m.n || '').replace(/^@/, '').trim();
         const mUid = m.ud ? String(m.ud) : undefined;
-        return areYptHandlesMatching(mHandle, memberHandleOrUid, mUid);
+        return areYptHandlesMatching(mHandle, memberHandleOrUid, mUid || (p.yptUd ? String(p.yptUd) : undefined));
       });
 
       // 1. Calculate incoming hours from API
@@ -1876,7 +2346,6 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
 
       if (peakHours > 0) activeMemberCount++;
       dayTotalHours += peakHours;
-      teamDailyHours += peakHours;
 
       // 3. Extract completed native challenges
       const completedChallengeIds: number[] = [];
@@ -1931,8 +2400,9 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
       }));
 
       memberSnapshots[cleanHandle] = {
-        handle: foundStat?.memberHandle || cleanHandle,
-        rawYptUd: liveMember?.ud,
+        handle: foundStat?.memberHandle || liveMember?.n || p.yptHandle || cleanHandle,
+        rawYptUd: liveMember?.ud || p.yptUd,
+        appUserId: p.appUserId,
         hoursStudied: peakHours,
         studyMs: Math.round(peakHours * 3600000),
         maxContinuousMs: peakMaxContMs,
@@ -1949,8 +2419,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
 
       memberRecords.push({
         yptHandle: foundStat?.memberHandle || cleanHandle,
-        userId: foundStat?.matchedUid || (liveMember?.ud ? String(liveMember.ud) : undefined),
-        teamId: team.id,
+        userId: foundStat?.matchedUid || (liveMember?.ud ? String(liveMember.ud) : p.yptUd ? String(p.yptUd) : undefined),
         hoursStudied: peakHours,
         basePoints,
         bonusPoints,
@@ -1961,19 +2430,156 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
         completedChallengeIds,
       });
 
-      teamDailyPoints += netPoints;
+      dayTotalPoints += netPoints;
     });
 
-    teamPointsMap[team.id] = teamDailyPoints;
-    dayTotalPoints += teamDailyPoints;
+    const participantDraft = Object.values(memberSnapshots).map((m: any) => ({
+      yptUd: m.rawYptUd,
+      yptHandle: m.handle,
+      appUserId: m.appUserId,
+      dayHours: m.hoursStudied || 0,
+      dayPoints: m.netPoints || 0,
+    }));
+    participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+    participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
+  } else {
+    (challenge.teams || []).forEach((team) => {
+      let teamDailyPoints = 0;
+      let teamDailyHours = 0;
 
-    teamStandingsDraft.push({
-      teamId: team.id,
-      teamName: team.name || `Team ${team.id}`,
-      dayHours: teamDailyHours,
-      dayPoints: teamDailyPoints,
+      (team.memberUids || []).forEach((memberHandleOrUid) => {
+        const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+
+        // Find manual submission stat (if any)
+        const foundStat = statsForDate.find((s) =>
+          areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
+        );
+
+        // Find member in live API roster
+        const liveMember = (liveRoster || []).find((m) => {
+          if (!m) return false;
+          const mHandle = (m.n || '').replace(/^@/, '').trim();
+          const mUid = m.ud ? String(m.ud) : undefined;
+          return areYptHandlesMatching(mHandle, memberHandleOrUid, mUid);
+        });
+
+        // 1. Calculate incoming hours from API
+        const apiLiveHours = liveMember ? getMemberStudyHoursFromApi(liveMember) : 0;
+        const manualHours = foundStat ? foundStat.hoursStudied || 0 : 0;
+
+        // 2. High-Water Mark for total hours: Math.max(previous recorded HWM, apiLiveHours, manualHours)
+        const prevHwm = existingHwms[cleanHandle] ?? 0;
+        const peakHours = applyHighWaterMark(prevHwm, Math.max(apiLiveHours, manualHours));
+        updatedHwms[cleanHandle] = peakHours;
+
+        // 2b. High-Water Mark for max continuous session (ms): Math.max(prev HWM, api live mm, manual mm)
+        const apiLiveMaxContMs = (liveMember?.dl && typeof liveMember.dl.mm === 'number') ? liveMember.dl.mm : 0;
+        const manualMaxContMs = foundStat?.maxContinuousMs || 0;
+        const prevMaxContHwm = existingMaxContHwms[cleanHandle] ?? 0;
+        const peakMaxContMs = Math.max(prevMaxContHwm, apiLiveMaxContMs, manualMaxContMs);
+        updatedMaxContHwms[cleanHandle] = peakMaxContMs;
+
+        if (peakHours > 0) activeMemberCount++;
+        dayTotalHours += peakHours;
+        teamDailyHours += peakHours;
+
+        // 3. Extract completed native challenges
+        const completedChallengeIds: number[] = [];
+        if (liveMember?.cls && typeof liveMember.cls === 'object') {
+          Object.entries(liveMember.cls).forEach(([cid, statusObj]) => {
+            if (statusObj && typeof statusObj === 'object' && (statusObj as any).st === 1) {
+              const numCid = Number(cid);
+              if (!isNaN(numCid)) completedChallengeIds.push(numCid);
+            }
+          });
+        }
+
+        // 4. Calculate points using challenge rules (with live penalty guard and max continuous trap)
+        const calculated = calculatePointsFromRules(
+          peakHours,
+          challenge.rules,
+          foundStat?.detectedRules?.map((r) => r.emoji || '') || [],
+          false,
+          completedChallengeIds,
+          applyPenalty,
+          peakMaxContMs
+        );
+
+        const appliedRules = (calculated.appliedRules || []).map((r) => ({
+          ruleId: r.ruleId,
+          ruleName: r.ruleName,
+          emoji: r.emoji || '⭐',
+          points: r.points || 0,
+        }));
+
+        const intervalVal = challenge.rules?.studyIntervalValue ?? 1;
+        const intervalUnit = challenge.rules?.studyIntervalUnit ?? 'hours';
+        const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
+        const ptsPerInterval = challenge.rules?.pointsPerInterval ?? challenge.rules?.pointsPerStudyHour ?? 1;
+        const basePoints = Math.floor(peakHours / (intervalHours || 1)) * ptsPerInterval;
+
+        const bonusPoints = appliedRules
+          .filter((r) => r.points > 0)
+          .reduce((acc, r) => acc + r.points, 0);
+        const penaltyPoints = appliedRules
+          .filter((r) => r.points < 0)
+          .reduce((acc, r) => acc + Math.abs(r.points), 0);
+
+        const netPoints = calculated.totalPoints;
+
+        const appliedRuleBreakdown = appliedRules.map((r) => ({
+          ruleId: r.ruleId || '',
+          ruleName: r.ruleName,
+          emoji: r.emoji,
+          points: r.points,
+          type: (r.points < 0 ? 'penalty' : r.points > 0 ? 'bonus' : 'base') as 'bonus' | 'penalty' | 'base' | 'milestone',
+        }));
+
+        memberSnapshots[cleanHandle] = {
+          handle: foundStat?.memberHandle || cleanHandle,
+          rawYptUd: liveMember?.ud,
+          hoursStudied: peakHours,
+          studyMs: Math.round(peakHours * 3600000),
+          maxContinuousMs: peakMaxContMs,
+          isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+          completedNativeChallengeIds: completedChallengeIds,
+          basePoints,
+          bonusPoints,
+          penaltyPoints,
+          netPoints,
+          appliedRuleBreakdown,
+          status: 'active',
+          lastSyncedAt: new Date().toISOString(),
+        };
+
+        memberRecords.push({
+          yptHandle: foundStat?.memberHandle || cleanHandle,
+          userId: foundStat?.matchedUid || (liveMember?.ud ? String(liveMember.ud) : undefined),
+          teamId: team.id,
+          hoursStudied: peakHours,
+          basePoints,
+          bonusPoints,
+          penaltyPoints,
+          netPoints,
+          isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+          appliedRules,
+          completedChallengeIds,
+        });
+
+        teamDailyPoints += netPoints;
+      });
+
+      teamPointsMap[team.id] = teamDailyPoints;
+      dayTotalPoints += teamDailyPoints;
+
+      teamStandingsDraft.push({
+        teamId: team.id,
+        teamName: team.name || `Team ${team.id}`,
+        dayHours: teamDailyHours,
+        dayPoints: teamDailyPoints,
+      });
     });
-  });
+  }
 
   // Rank teams descending by dayPoints, then dayHours
   teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
@@ -1994,7 +2600,8 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
     totalChallengePoints: dayTotalPoints,
     activeMemberCount,
     memberSnapshots,
-    teamStandings,
+    teamStandings: isSoloMode ? [] : teamStandings,
+    participantStandings: isSoloMode ? participantStandings : undefined,
     isAutoClosed: forceFinalLock,
     closedAt: Date.now(),
     totalPointsAwarded: dayTotalPoints,

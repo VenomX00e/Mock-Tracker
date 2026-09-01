@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, ShieldAlert, Clock, ArrowLeft, CheckCircle2, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, LayoutGrid, Columns, Zap, Lock, Unlock, AlertCircle } from 'lucide-react';
+import { Trophy, Users, User, UserCheck, ShieldAlert, Clock, ArrowLeft, CheckCircle2, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, LayoutGrid, Columns, Zap, Lock, Unlock, AlertCircle, TrendingUp, Flame, Medal, Sparkles } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { useAppStateCtx, useUserProfileCtx, useAuthCtx } from '../../../context/AppContext';
-import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam, YptApiMember, YptDailyDaySnapshot } from '../../../types/yptTypes';
+import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam, YptApiMember, YptDailyDaySnapshot, YptTeamMemberRef, YptParticipantStandingSnapshot } from '../../../types/yptTypes';
 import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog, completeYptChallenge, reopenYptChallenge, fetchYptRoster, calculatePointsFromRules, autoCloseMissingDays, getAllDailySnapshots, lockDaySnapshot, deleteDailySnapshot, fetchYptDayLog, syncDayLogToChallenge, syncChallengeDaySnapshotWithHighWaterMark } from '../../../services/yptService';
 import { formatStudyDuration, getLocalYmd, getYptDayYmd, getYesterdayYptDayYmd, applyHighWaterMark, isYptReconciliationWindow, areYptHandlesMatching, getChallengeStartDateYmd, getChallengeEndDateYmd, formatDisplayYmd, getMemberStudyHoursFromApi, evaluateMemberDailyPoints } from '../../../utils/yptUtils';
 import { CreateYptChallengeModal } from './CreateYptChallengeModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { YptUploadModal } from './YptUploadModal';
 import { YptMemberEditModal } from './YptMemberEditModal';
+import { YptPerformanceTrendsChart } from './YptPerformanceTrendsChart';
+import { YptIndividualStandings, CalculatedParticipant } from './YptIndividualStandings';
 
 interface YptChallengeDetailProps {
   challenge: YptChallenge;
@@ -19,6 +22,8 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const { isOwner, isAdmin } = useAppStateCtx();
   const { profile: userProfile } = useUserProfileCtx();
   const { user } = useAuthCtx();
+
+  const isSoloMode = (challenge.mode || 'team') === 'individual';
 
   const isGlobalAdmin =
     isOwner ||
@@ -40,11 +45,15 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     .filter((h): h is string => Boolean(h && typeof h === 'string'))
     .map((h) => h.toLowerCase().replace(/^@/, '').trim());
 
-  // Permission Resolver: check if current user can edit a member in a specific team
-  const canEditMember = (teamId: string, _memberHandle?: string): boolean => {
+  // Permission Resolver: check if current user can edit a member
+  const canEditMember = (teamIdOrHandle: string, _memberHandle?: string): boolean => {
     if (isGlobalAdmin) return true;
 
-    const targetTeam = (challenge.teams || []).find((t) => t.id === teamId || t.name === teamId);
+    if (isSoloMode) {
+      return isGlobalAdmin;
+    }
+
+    const targetTeam = (challenge.teams || []).find((t) => t.id === teamIdOrHandle || t.name === teamIdOrHandle);
     if (!targetTeam || !Array.isArray(targetTeam.teamLeaders)) return false;
 
     const isAssignedLeaderOfTeam = targetTeam.teamLeaders.some((handle) =>
@@ -70,7 +79,10 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const [editingMemberHandle, setEditingMemberHandle] = useState<string | null>(null);
   const [quickRulePopoverMember, setQuickRulePopoverMember] = useState<string | null>(null);
   const [expandedTeamBreakdownId, setExpandedTeamBreakdownId] = useState<string | null>(null);
+  const [expandedParticipantBreakdownHandle, setExpandedParticipantBreakdownHandle] = useState<string | null>(null);
   const [teamViewMode, setTeamViewMode] = useState<'grid' | 'swipe'>('grid');
+  const [soloViewMode, setSoloViewMode] = useState<'cards' | 'table'>('cards');
+  const [showTrendsChart, setShowTrendsChart] = useState(false);
   const [isDeclareResultsModalOpen, setIsDeclareResultsModalOpen] = useState(false);
   const [isSubmittingResults, setIsSubmittingResults] = useState(false);
   const [isLockDayModalOpen, setIsLockDayModalOpen] = useState(false);
@@ -393,10 +405,14 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               <button
                 onClick={() => setIsEditModalOpen(true)}
                 className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors whitespace-nowrap cursor-pointer"
-                title="Edit Challenge Settings"
+                title={isSoloMode ? "Manage Participants & Settings" : "Edit Challenge Settings"}
               >
-                <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
-                <span>Settings</span>
+                {isSoloMode ? (
+                  <UserCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-500 shrink-0" />
+                ) : (
+                  <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                )}
+                <span>{isSoloMode ? 'Manage Participants' : 'Settings'}</span>
               </button>
 
               <button
@@ -414,21 +430,31 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
       </div>
 
       {/* Challenge Hero Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-4 sm:p-7 rounded-3xl border border-indigo-500/30 text-white shadow-xl space-y-3 sm:space-y-5">
+      <div className={`relative overflow-hidden ${
+        isSoloMode
+          ? 'bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 border-purple-500/30'
+          : 'bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-indigo-500/30'
+      } p-4 sm:p-7 rounded-3xl border text-white shadow-xl space-y-3 sm:space-y-5`}>
         {/* Subtle decorative glow */}
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className={`absolute -top-24 -right-24 w-64 h-64 ${isSoloMode ? 'bg-purple-500/15' : 'bg-indigo-500/15'} rounded-full blur-3xl pointer-events-none`} />
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5 sm:space-y-2">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-extrabold uppercase tracking-wider border shadow-xs ${
                 challenge.status === 'active'
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  ? isSoloMode
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                   : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
               }`}>
-                <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${challenge.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-400'}`} />
-                {challenge.status} Challenge
+                {isSoloMode ? (
+                  <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                ) : (
+                  <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${challenge.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-400'}`} />
+                )}
+                {challenge.status === 'active' ? 'Active' : challenge.status} {isSoloMode ? 'Individual Challenge' : 'Team Challenge'}
               </span>
               <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium text-slate-300 bg-white/10 backdrop-blur-md border border-white/10">
                 <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-300 shrink-0" />
@@ -490,7 +516,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               <div
                 key={cr.id}
                 className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl backdrop-blur-md border font-medium ${
-                  cr.scope === 'team_all'
+                  !isSoloMode && cr.scope === 'team_all'
                     ? 'bg-purple-500/20 border-purple-500/35 text-purple-200'
                     : 'bg-white/10 border-white/10 text-slate-200'
                 }`}
@@ -500,7 +526,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 <span className={`font-semibold ${cr.type === 'bonus' ? 'text-emerald-300' : 'text-rose-300'}`}>
                   {cr.type === 'bonus' ? '+' : '-'}{cr.points} XP
                 </span>
-                {cr.scope === 'team_all' && (
+                {!isSoloMode && cr.scope === 'team_all' && (
                   <span className="ml-0.5 text-[8px] sm:text-[9px] font-extrabold px-1 sm:px-1.5 py-0.5 rounded-md bg-purple-400/25 text-purple-100 border border-purple-300/30 uppercase tracking-wide">
                     👥 Team Rule (100%)
                   </span>
@@ -510,14 +536,94 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
         </div>
       </div>
 
-      {/* Team Score Comparison Arena */}
+      {/* Hall of Fame / Tournament Concluded Showcase */}
+      {challenge.status === 'completed' && (
+        <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-indigo-500/15 border-2 border-amber-500/30 dark:border-amber-400/30 shadow-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shadow-md shrink-0">
+                <Trophy className="w-6 h-6 text-amber-950" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 uppercase tracking-wider">
+                    🏆 Tournament Concluded & Locked
+                  </span>
+                  {challenge.completedAt && (
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                      {formatDisplayYmd(challenge.completedAt)}
+                    </span>
+                  )}
+                </div>
+
+                {isSoloMode ? (
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>Champion:</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-mono">
+                        {challenge.winningParticipantHandle ? `@${challenge.winningParticipantHandle.replace(/^@/, '')}` : (challenge.finalMvpHandle ? `@${challenge.finalMvpHandle.replace(/^@/, '')}` : 'Individual Winner')}
+                      </span>
+                    </h2>
+                  </div>
+                ) : (
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>Winning Team:</span>
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {(challenge.teams || []).find((t) => t.id === challenge.winningTeamId)?.name || 'Champion Team'}
+                      </span>
+                    </h2>
+                    {challenge.finalMvpHandle && (
+                      <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold font-mono flex items-center gap-1">
+                        <Crown className="w-3 h-3 text-amber-400" />
+                        MVP: @{challenge.finalMvpHandle.replace(/^@/, '')}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {canManageYptChallenges && (
+              <div className="flex items-center gap-2 self-end md:self-center">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to re-open this challenge back to active status?')) {
+                      try {
+                        await reopenYptChallenge(challenge.id);
+                        onRefresh();
+                      } catch (e) {
+                        console.error('Failed to reopen challenge:', e);
+                      }
+                    }
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Re-open Challenge</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Score Comparison Arena */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-5 rounded-2xl space-y-4 sm:space-y-5 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-500 shrink-0" /> Team Score Comparison Arena
+                  {isSoloMode ? (
+                    <User className="w-4 h-4 text-purple-500 shrink-0" />
+                  ) : (
+                    <Users className="w-4 h-4 text-indigo-500 shrink-0" />
+                  )}
+                  {isSoloMode ? 'Individual Standings Arena' : 'Team Score Comparison Arena'}
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5 shrink-0">
                   <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isLiveRosterLoading ? 'animate-ping' : 'animate-pulse'}`} />
@@ -533,38 +639,90 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                   </button>
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Live performance ranking & team standings</p>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                {isSoloMode ? 'Live performance ranking & participant standings' : 'Live performance ranking & team standings'}
+              </p>
             </div>
 
-            {/* View Switcher Button on the text row */}
-            <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs font-bold shrink-0">
+            {/* View Switcher & Trends Toggle */}
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
-                onClick={() => setTeamViewMode('grid')}
-                className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  teamViewMode === 'grid'
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                onClick={() => setShowTrendsChart(!showTrendsChart)}
+                className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-xl transition-all cursor-pointer border ${
+                  showTrendsChart
+                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
-                title="Grid View Layout"
+                title="Toggle Performance Trends Chart"
               >
-                <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
-                <span>Grid</span>
+                <TrendingUp className="w-3.5 h-3.5 shrink-0 text-purple-500" />
+                <span>{showTrendsChart ? 'Hide Trends' : 'Trends'}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setTeamViewMode('swipe')}
-                className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                  teamViewMode === 'swipe'
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-                title="Swipe Horizontal View"
-              >
-                <Columns className="w-3.5 h-3.5 shrink-0" />
-                <span>Swipe</span>
-              </button>
+              <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs font-bold shrink-0">
+                {isSoloMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setSoloViewMode('cards')}
+                      className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        soloViewMode === 'cards'
+                          ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs border border-purple-100 dark:border-purple-950/60'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                      title="Cards View"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                      <span>Cards</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSoloViewMode('table')}
+                      className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        soloViewMode === 'table'
+                          ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs border border-purple-100 dark:border-purple-950/60'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                      title="Table View"
+                    >
+                      <Columns className="w-3.5 h-3.5 shrink-0" />
+                      <span>Table</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setTeamViewMode('grid')}
+                      className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        teamViewMode === 'grid'
+                          ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                      title="Grid View Layout"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5 shrink-0" />
+                      <span>Grid</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTeamViewMode('swipe')}
+                      className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        teamViewMode === 'swipe'
+                          ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-indigo-950/60'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                      title="Swipe Horizontal View"
+                    >
+                      <Columns className="w-3.5 h-3.5 shrink-0" />
+                      <span>Swipe</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -842,87 +1000,61 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           let globalTopScorerHandle: string | null = null;
           let globalTopScorerPoints = -Infinity;
 
-          const processedTeams = (challenge.teams || []).map((team) => {
-            const calculatedMembers = (team.memberUids || []).map((handleRaw) => {
-              const cleanHandle = handleRaw.replace(/^@/, '').trim().toLowerCase();
+          // Helper to calculate statistics for a single participant/member across historical snapshots & live streams
+          const calculateMemberStats = (handleRaw: string, targetUd?: number) => {
+            const cleanHandle = handleRaw.replace(/^@/, '').trim().toLowerCase();
 
-              let periodHours = 0;
-              let periodPoints = 0;
-              let cumulativeHours = 0;
-              let cumulativePoints = 0;
+            let periodHours = 0;
+            let periodPoints = 0;
+            let cumulativeHours = 0;
+            let cumulativePoints = 0;
 
-              const periodBadgeMap = new Map<string, { emoji: string; name: string; points: number; count: number; isTeamAll?: boolean }>();
+            const periodBadgeMap = new Map<string, { emoji: string; name: string; points: number; count: number; isTeamAll?: boolean }>();
 
-              // 1. Add historical hours and points from all past finalized snapshots
-              pastClosedSnapshots.forEach((snap) => {
-                const rec = (snap.memberRecords || []).find((r) =>
-                  areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
-                );
-                if (rec) {
-                  cumulativeHours += rec.hoursStudied || 0;
-                  cumulativePoints += rec.netPoints || 0;
-
-                  if (dateFilter === 'allTime' && Array.isArray(rec.appliedRules)) {
-                    rec.appliedRules.forEach((ar) => {
-                      const key = ar.ruleId || ar.ruleName || ar.emoji;
-                      const existing = periodBadgeMap.get(key);
-                      if (existing) {
-                        existing.count += 1;
-                      } else {
-                        periodBadgeMap.set(key, {
-                          emoji: ar.emoji || '⭐',
-                          name: ar.ruleName,
-                          points: ar.points || 0,
-                          count: 1,
-                          isTeamAll: false,
-                        });
-                      }
-                    });
-                  }
-                }
-              });
-
-              // 2. Add unclosed past submission stats (if any exist before today that weren't captured in snapshot)
-              const memberDailyStats = deduplicatedDailyStats.filter(
-                (s) => areYptHandlesMatching(s.memberHandle, handleRaw, s.matchedUid, undefined)
+            // 1. Add historical hours and points from all past finalized snapshots
+            pastClosedSnapshots.forEach((snap) => {
+              const rec = (snap.memberRecords || []).find((r) =>
+                areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
               );
+              const memberSnap = snap.memberSnapshots?.[cleanHandle];
 
-              memberDailyStats.forEach((stat) => {
-                if (stat.dateYmd < todayYmd && !pastClosedDates.has(stat.dateYmd)) {
-                  cumulativeHours += stat.hoursStudied || 0;
-                  cumulativePoints += stat.pointsEarned || 0;
+              if (rec || memberSnap) {
+                cumulativeHours += memberSnap ? memberSnap.hoursStudied : (rec?.hoursStudied || 0);
+                cumulativePoints += memberSnap ? memberSnap.netPoints : (rec?.netPoints || 0);
 
-                  if (dateFilter === 'allTime' && Array.isArray(stat.detectedRules)) {
-                    stat.detectedRules.forEach((dr) => {
-                      const key = dr.ruleId || dr.ruleName || dr.emoji;
-                      const existing = periodBadgeMap.get(key);
-                      if (existing) {
-                        existing.count += 1;
-                      } else {
-                        periodBadgeMap.set(key, {
-                          emoji: dr.emoji || '✨',
-                          name: dr.ruleName,
-                          points: dr.points || 0,
-                          count: 1,
-                          isTeamAll: false,
-                        });
-                      }
-                    });
-                  }
+                if (dateFilter === 'allTime') {
+                  const rulesList = memberSnap?.appliedRuleBreakdown || rec?.appliedRules || [];
+                  rulesList.forEach((ar: any) => {
+                    const key = ar.ruleId || ar.ruleName || ar.emoji;
+                    const existing = periodBadgeMap.get(key);
+                    if (existing) {
+                      existing.count += 1;
+                    } else {
+                      periodBadgeMap.set(key, {
+                        emoji: ar.emoji || '⭐',
+                        name: ar.ruleName,
+                        points: ar.points || 0,
+                        count: 1,
+                        isTeamAll: false,
+                      });
+                    }
+                  });
                 }
-              });
+              }
+            });
 
-              // 3. Compute Today's live / verified gain
-              let todayLiveHours = 0;
-              let todayLivePoints = 0;
+            // 2. Add unclosed past submission stats
+            const memberDailyStats = deduplicatedDailyStats.filter(
+              (s) => areYptHandlesMatching(s.memberHandle, handleRaw, s.matchedUid, targetUd ? String(targetUd) : undefined)
+            );
 
-              const todayStat = memberDailyStats.find((s) => s.dateYmd === todayYmd);
-              if (todayStat) {
-                todayLiveHours = todayStat.hoursStudied || 0;
-                todayLivePoints = todayStat.pointsEarned || 0;
+            memberDailyStats.forEach((stat) => {
+              if (stat.dateYmd < todayYmd && !pastClosedDates.has(stat.dateYmd)) {
+                cumulativeHours += stat.hoursStudied || 0;
+                cumulativePoints += stat.pointsEarned || 0;
 
-                if (Array.isArray(todayStat.detectedRules)) {
-                  todayStat.detectedRules.forEach((dr) => {
+                if (dateFilter === 'allTime' && Array.isArray(stat.detectedRules)) {
+                  stat.detectedRules.forEach((dr) => {
                     const key = dr.ruleId || dr.ruleName || dr.emoji;
                     const existing = periodBadgeMap.get(key);
                     if (existing) {
@@ -939,206 +1071,225 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                   });
                 }
               }
+            });
 
-              // Live YPT API Streaming for Today
-              const liveMember = liveRosterMembers.find((m) => {
-                if (!m) return false;
-                const mHandle = (m.n || '').replace(/^@/, '').trim();
-                return areYptHandlesMatching(mHandle, handleRaw, m.ud ? String(m.ud) : undefined);
-              });
+            // 3. Compute Today's live / verified gain
+            let todayLiveHours = 0;
+            let todayLivePoints = 0;
 
-              let apiLiveHours = 0;
-              let apiLivePoints = 0;
-              if (liveMember && challenge.rules) {
-                apiLiveHours = getMemberStudyHoursFromApi(liveMember);
-                const completedChallengeIds: number[] = [];
-                if (liveMember.cls && typeof liveMember.cls === 'object') {
-                  Object.entries(liveMember.cls).forEach(([nativeChId, c]: [string, any]) => {
-                    if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
-                      if (nativeChId) completedChallengeIds.push(Number(nativeChId));
-                      if (c.id) completedChallengeIds.push(Number(c.id));
-                    }
-                  });
-                }
-                const apiLiveMaxContMs = liveMember?.dl?.mm || 0;
-                const evalResult = evaluateMemberDailyPoints(
-                  apiLiveHours,
-                  challenge.rules,
-                  completedChallengeIds,
-                  false,
-                  getChallengeStartDateYmd(challenge),
-                  todayYmd,
-                  [],
-                  false,
-                  apiLiveMaxContMs
-                );
-                apiLivePoints = evalResult.netPoints;
+            const todayStat = memberDailyStats.find((s) => s.dateYmd === todayYmd);
+            if (todayStat) {
+              todayLiveHours = todayStat.hoursStudied || 0;
+              todayLivePoints = todayStat.pointsEarned || 0;
 
-                if (apiLiveHours > todayLiveHours) {
-                  todayLiveHours = apiLiveHours;
-                }
-                if (apiLivePoints > todayLivePoints) {
-                  todayLivePoints = apiLivePoints;
-                }
+              if (Array.isArray(todayStat.detectedRules)) {
+                todayStat.detectedRules.forEach((dr) => {
+                  const key = dr.ruleId || dr.ruleName || dr.emoji;
+                  const existing = periodBadgeMap.get(key);
+                  if (existing) {
+                    existing.count += 1;
+                  } else {
+                    periodBadgeMap.set(key, {
+                      emoji: dr.emoji || '✨',
+                      name: dr.ruleName,
+                      points: dr.points || 0,
+                      count: 1,
+                      isTeamAll: false,
+                    });
+                  }
+                });
+              }
+            }
 
-                if (Array.isArray(evalResult.appliedRules)) {
-                  evalResult.appliedRules.forEach((ar) => {
-                    const key = ar.ruleId || ar.ruleName || ar.emoji;
-                    if (!periodBadgeMap.has(key)) {
+            // Live YPT API Streaming for Today
+            const liveMember = liveRosterMembers.find((m) => {
+              if (!m) return false;
+              const mHandle = (m.n || '').replace(/^@/, '').trim();
+              return areYptHandlesMatching(mHandle, handleRaw, m.ud ? String(m.ud) : (targetUd ? String(targetUd) : undefined));
+            });
+
+            let apiLiveHours = 0;
+            let apiLivePoints = 0;
+            if (liveMember && challenge.rules) {
+              apiLiveHours = getMemberStudyHoursFromApi(liveMember);
+              const completedChallengeIds: number[] = [];
+              if (liveMember.cls && typeof liveMember.cls === 'object') {
+                Object.entries(liveMember.cls).forEach(([nativeChId, c]: [string, any]) => {
+                  if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
+                    if (nativeChId) completedChallengeIds.push(Number(nativeChId));
+                    if (c.id) completedChallengeIds.push(Number(c.id));
+                  }
+                });
+              }
+              const apiLiveMaxContMs = liveMember?.dl?.mm || 0;
+              const evalResult = evaluateMemberDailyPoints(
+                apiLiveHours,
+                challenge.rules,
+                completedChallengeIds,
+                false,
+                getChallengeStartDateYmd(challenge),
+                todayYmd,
+                [],
+                false,
+                apiLiveMaxContMs
+              );
+              apiLivePoints = evalResult.netPoints;
+
+              if (apiLiveHours > todayLiveHours) {
+                todayLiveHours = apiLiveHours;
+              }
+              if (apiLivePoints > todayLivePoints) {
+                todayLivePoints = apiLivePoints;
+              }
+
+              if (Array.isArray(evalResult.appliedRules)) {
+                evalResult.appliedRules.forEach((ar) => {
+                  const key = ar.ruleId || ar.ruleName || ar.emoji;
+                  if (!periodBadgeMap.has(key)) {
+                    periodBadgeMap.set(key, {
+                      emoji: ar.emoji || '✨',
+                      name: ar.ruleName,
+                      points: ar.points || 0,
+                      count: 1,
+                      isTeamAll: false,
+                    });
+                  }
+                });
+              }
+            }
+
+            // Principle B: High-Water Mark Non-Destructive Update Pattern
+            const todaySnapshot = dailySnapshots.find((s) => s.targetDateYmd === todayYmd);
+            const recordedHwm = todaySnapshot?.highWaterMarks?.[cleanHandle] ?? 0;
+            const recordedMaxContHwm = todaySnapshot?.maxContinuousHighWaterMarks?.[cleanHandle] ?? 0;
+            if (recordedHwm > todayLiveHours) {
+              todayLiveHours = recordedHwm;
+              const calcHwm = evaluateMemberDailyPoints(
+                todayLiveHours,
+                challenge.rules,
+                [],
+                false,
+                getChallengeStartDateYmd(challenge),
+                todayYmd,
+                [],
+                false,
+                recordedMaxContHwm
+              );
+              if (calcHwm.netPoints > todayLivePoints) {
+                todayLivePoints = calcHwm.netPoints;
+              }
+            }
+
+            // Cumulative total adds Today's contribution
+            cumulativeHours += todayLiveHours;
+            cumulativePoints += todayLivePoints;
+
+            // 4. Module 4: Client Historical Date Navigator & State Rendering
+            if (dateFilter === 'date') {
+              if (selectedFilterDateYmd < todayYmd) {
+                if (activeSnapshot && activeSnapshot.isLocked !== false) {
+                  const snapRec = (activeSnapshot.memberRecords || []).find((r) =>
+                    areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
+                  );
+                  const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
+
+                  if (snapRec || memberSnap) {
+                    periodHours = memberSnap ? memberSnap.hoursStudied : (snapRec?.hoursStudied || 0);
+                    periodPoints = memberSnap ? memberSnap.netPoints : (snapRec?.netPoints || 0);
+                    periodBadgeMap.clear();
+
+                    const rulesList = memberSnap?.appliedRuleBreakdown || snapRec?.appliedRules || [];
+                    rulesList.forEach((ar: any) => {
+                      const key = ar.ruleId || ar.ruleName || ar.emoji;
                       periodBadgeMap.set(key, {
-                        emoji: ar.emoji || '✨',
+                        emoji: ar.emoji || '⭐',
                         name: ar.ruleName,
                         points: ar.points || 0,
                         count: 1,
                         isTeamAll: false,
                       });
-                    }
-                  });
-                }
-              }
-
-              // Principle B: High-Water Mark Non-Destructive Update Pattern
-              // Retrieve peak study hours recorded for today from snapshot to safeguard against 5 AM resets
-              const todaySnapshot = dailySnapshots.find((s) => s.targetDateYmd === todayYmd);
-              const recordedHwm = todaySnapshot?.highWaterMarks?.[cleanHandle] ?? 0;
-              const recordedMaxContHwm = todaySnapshot?.maxContinuousHighWaterMarks?.[cleanHandle] ?? 0;
-              if (recordedHwm > todayLiveHours) {
-                todayLiveHours = recordedHwm;
-                const calcHwm = evaluateMemberDailyPoints(
-                  todayLiveHours,
-                  challenge.rules,
-                  [],
-                  false,
-                  getChallengeStartDateYmd(challenge),
-                  todayYmd,
-                  [],
-                  false,
-                  recordedMaxContHwm
-                );
-                if (calcHwm.netPoints > todayLivePoints) {
-                  todayLivePoints = calcHwm.netPoints;
-                }
-              }
-
-              // Cumulative total adds Today's contribution
-              cumulativeHours += todayLiveHours;
-              cumulativePoints += todayLivePoints;
-
-              // 4. Module 4: Client Historical Date Navigator & State Rendering
-              // Logic Tree for dateFilter === 'date':
-              // - If snapshot exists & isLocked: Render snapshot data directly (Zero 0:00 glitches, full team accuracy)
-              // - If snapshot exists & is open: Render current high-water marks + "Live accumulating" badge
-              // - If snapshot is missing: Query GET /logs/day or use submissions, display "Historical Unsynced" (no auto-penalties)
-              if (dateFilter === 'date') {
-                if (selectedFilterDateYmd < todayYmd) {
-                  // Past date selection
-                  if (activeSnapshot && activeSnapshot.isLocked !== false) {
-                    // Case A: Locked Snapshot
-                    const snapRec = (activeSnapshot.memberRecords || []).find((r) =>
-                      areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
+                    });
+                  }
+                } else if (activeSnapshot && activeSnapshot.isLocked === false) {
+                  const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
+                  const hwm = activeSnapshot.highWaterMarks?.[cleanHandle] ?? 0;
+                  periodHours = memberSnap ? memberSnap.hoursStudied : hwm;
+                  periodPoints = memberSnap ? memberSnap.netPoints : 0;
+                } else {
+                  const statForDay = memberDailyStats.find((s) => s.dateYmd === selectedFilterDateYmd);
+                  if (statForDay) {
+                    periodHours = statForDay.hoursStudied || 0;
+                    const evalMissing = evaluateMemberDailyPoints(
+                      periodHours,
+                      challenge.rules,
+                      [],
+                      false,
+                      getChallengeStartDateYmd(challenge),
+                      selectedFilterDateYmd,
+                      (statForDay.detectedRules || []).map((r) => r.emoji || ''),
+                      false,
+                      statForDay.maxContinuousMs || 0
                     );
-                    const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
-
-                    if (snapRec || memberSnap) {
-                      periodHours = memberSnap ? memberSnap.hoursStudied : (snapRec?.hoursStudied || 0);
-                      periodPoints = memberSnap ? memberSnap.netPoints : (snapRec?.netPoints || 0);
-                      periodBadgeMap.clear();
-
-                      const rulesList = memberSnap?.appliedRuleBreakdown || snapRec?.appliedRules || [];
-                      rulesList.forEach((ar: any) => {
-                        const key = ar.ruleId || ar.ruleName || ar.emoji;
+                    periodPoints = evalMissing.netPoints;
+                    periodBadgeMap.clear();
+                    if (Array.isArray(statForDay.detectedRules)) {
+                      statForDay.detectedRules.forEach((dr) => {
+                        const key = dr.ruleId || dr.ruleName || dr.emoji;
                         periodBadgeMap.set(key, {
-                          emoji: ar.emoji || '⭐',
-                          name: ar.ruleName,
-                          points: ar.points || 0,
+                          emoji: dr.emoji || '✨',
+                          name: dr.ruleName,
+                          points: dr.points || 0,
                           count: 1,
                           isTeamAll: false,
                         });
                       });
                     }
-                  } else if (activeSnapshot && activeSnapshot.isLocked === false) {
-                    // Case B: Open Snapshot
-                    const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
-                    const hwm = activeSnapshot.highWaterMarks?.[cleanHandle] ?? 0;
-                    periodHours = memberSnap ? memberSnap.hoursStudied : hwm;
-                    periodPoints = memberSnap ? memberSnap.netPoints : 0;
                   } else {
-                    // Case C: Missing Snapshot (Historical Unsynced) -> Use deduplicated submission logs with false-penalty protection
-                    const statForDay = memberDailyStats.find((s) => s.dateYmd === selectedFilterDateYmd);
-                    if (statForDay) {
-                      periodHours = statForDay.hoursStudied || 0;
-                      // Protected calculation: do NOT apply auto-penalties on missing snapshot
-                      const evalMissing = evaluateMemberDailyPoints(
-                        periodHours,
-                        challenge.rules,
-                        [],
-                        false, // isDayLocked: false -> prevent false penalty
-                        getChallengeStartDateYmd(challenge),
-                        selectedFilterDateYmd,
-                        (statForDay.detectedRules || []).map((r) => r.emoji || ''),
-                        false,
-                        statForDay.maxContinuousMs || 0
-                      );
-                      periodPoints = evalMissing.netPoints;
-                      periodBadgeMap.clear();
-                      if (Array.isArray(statForDay.detectedRules)) {
-                        statForDay.detectedRules.forEach((dr) => {
-                          const key = dr.ruleId || dr.ruleName || dr.emoji;
-                          periodBadgeMap.set(key, {
-                            emoji: dr.emoji || '✨',
-                            name: dr.ruleName,
-                            points: dr.points || 0,
-                            count: 1,
-                            isTeamAll: false,
-                          });
-                        });
-                      }
-                    } else {
-                      // No log on missing day -> 0 hours, 0 points (DO NOT auto-penalize)
-                      periodHours = 0;
-                      periodPoints = 0;
-                    }
+                    periodHours = 0;
+                    periodPoints = 0;
                   }
-                } else if (selectedFilterDateYmd === todayYmd) {
-                  // Today selection (Live Day State Protection)
-                  periodHours = todayLiveHours;
-                  periodPoints = Math.max(0, todayLivePoints);
                 }
-              } else {
-                // All-Time selection
-                periodHours = cumulativeHours;
-                periodPoints = cumulativePoints;
+              } else if (selectedFilterDateYmd === todayYmd) {
+                periodHours = todayLiveHours;
+                periodPoints = Math.max(0, todayLivePoints);
               }
+            } else {
+              periodHours = cumulativeHours;
+              periodPoints = cumulativePoints;
+            }
 
-              // Check global candidate
-              if (periodPoints > globalTopScorerPoints && periodPoints > 0) {
-                globalTopScorerPoints = periodPoints;
-                globalTopScorerHandle = handleRaw;
+            const isLiveDay = dateFilter === 'date' && selectedFilterDateYmd === todayYmd;
+            const finalPeriodBadges = Array.from(periodBadgeMap.values()).filter((badge) => {
+              if (isLiveDay && (badge.points < 0 || badge.name?.toLowerCase().includes('penalty') || badge.emoji === '⚠️')) {
+                return false;
               }
-
-              // Live State Protection: on the ongoing live day, hide any premature penalty badges
-              const isLiveDay = dateFilter === 'date' && selectedFilterDateYmd === todayYmd;
-              const finalPeriodBadges = Array.from(periodBadgeMap.values()).filter((badge) => {
-                if (isLiveDay && (badge.points < 0 || badge.name?.toLowerCase().includes('penalty') || badge.emoji === '⚠️')) {
-                  return false;
-                }
-                return true;
-              });
-
-              return {
-                handleRaw,
-                cleanHandle,
-                periodPoints,
-                periodHours,
-                cumulativePoints,
-                cumulativeHours,
-                periodBadges: finalPeriodBadges,
-                isLiveFromApi: Boolean(liveMember && apiLiveHours > 0),
-                isStudyingCurrently: Boolean(liveMember?.dl?.is || (liveMember as any)?.isStudyingCurrently),
-              };
+              return true;
             });
 
-            // Sort members according to active date filter (period score first if period mode, cumulative score if All-Time)
+            return {
+              handleRaw,
+              cleanHandle,
+              periodPoints,
+              periodHours,
+              cumulativePoints,
+              cumulativeHours,
+              periodBadges: finalPeriodBadges,
+              isLiveFromApi: Boolean(liveMember && apiLiveHours > 0),
+              isStudyingCurrently: Boolean(liveMember?.dl?.is || (liveMember as any)?.isStudyingCurrently),
+            };
+          };
+
+          // TEAM MODE CALCULATIONS
+          const processedTeams = (challenge.teams || []).map((team) => {
+            const calculatedMembers = (team.memberUids || []).map((handleRaw) => {
+              const memStats = calculateMemberStats(handleRaw);
+              if (memStats.periodPoints > globalTopScorerPoints && memStats.periodPoints > 0) {
+                globalTopScorerPoints = memStats.periodPoints;
+                globalTopScorerHandle = handleRaw;
+              }
+              return memStats;
+            });
+
             calculatedMembers.sort((a, b) => {
               if (dateFilter === 'allTime') {
                 return b.cumulativePoints - a.cumulativePoints || b.cumulativeHours - a.cumulativeHours || b.periodPoints - a.periodPoints;
@@ -1147,7 +1298,6 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               }
             });
 
-            // Identify Team MVP (1st) and Team Silver (2nd) contributors based on cumulative points/hours
             const teamMvpHandle = calculatedMembers.length > 0 && (calculatedMembers[0].cumulativePoints > 0 || calculatedMembers[0].cumulativeHours > 0)
               ? calculatedMembers[0].handleRaw
               : null;
@@ -1171,6 +1321,42 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
             };
           });
 
+          // INDIVIDUAL MODE CALCULATIONS
+          const rawParticipants: YptTeamMemberRef[] = isSoloMode
+            ? (Array.isArray(challenge.participants) && challenge.participants.length > 0
+                ? challenge.participants
+                : (challenge.teams || []).flatMap((t) =>
+                    (t.memberUids || []).map((h) => ({
+                      yptUd: 0,
+                      yptHandle: h,
+                    }))
+                  ))
+            : [];
+
+          const processedParticipants: CalculatedParticipant[] = rawParticipants.map((p) => {
+            const memStats = calculateMemberStats(p.yptHandle, p.yptUd);
+            return {
+              ...memStats,
+              yptUd: p.yptUd,
+              displayName: (p as any).displayName || p.yptHandle.replace(/^@/, ''),
+              rank: 1,
+            };
+          });
+
+          // Sort participants
+          processedParticipants.sort((a, b) => {
+            if (dateFilter === 'allTime') {
+              return b.cumulativePoints - a.cumulativePoints || b.cumulativeHours - a.cumulativeHours || b.periodPoints - a.periodPoints;
+            } else {
+              return b.periodPoints - a.periodPoints || b.periodHours - a.periodHours || b.cumulativePoints - a.cumulativePoints;
+            }
+          });
+
+          // Assign ranks
+          processedParticipants.forEach((p, idx) => {
+            p.rank = idx + 1;
+          });
+
           // Calculate active total points across all teams for percentage share
           const activeTotalPointsAllTeams = processedTeams.reduce(
             (sum, t) => sum + (dateFilter === 'allTime' ? t.totalPoints : t.teamPeriodGain),
@@ -1185,43 +1371,82 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
           });
 
           return (
-            <div className="space-y-3 sm:space-y-4">
-              {/* Optional Navigation controls for Swipe mode */}
-              {teamViewMode === 'swipe' && rankedTeams.length > 1 && (
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1 pt-0.5">
-                  <span className="text-[11px] font-semibold flex items-center gap-1 text-slate-600 dark:text-slate-300">
-                    <span>↔️</span> Swipe horizontally to view all {rankedTeams.length} teams
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => scrollCarousel('left')}
-                      className="p-1 sm:p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 active:scale-95 transition-all cursor-pointer"
-                      title="Scroll Left"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => scrollCarousel('right')}
-                      className="p-1 sm:p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 active:scale-95 transition-all cursor-pointer"
-                      title="Scroll Right"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+            <div className="space-y-4">
+              {/* Cumulative Trends Chart (Collapsible/Toggled from header) */}
+              {showTrendsChart && (
+                <YptPerformanceTrendsChart
+                  challenge={challenge}
+                  dailySnapshots={dailySnapshots}
+                  submissions={submissions}
+                  liveRosterMembers={liveRosterMembers}
+                  isSoloMode={isSoloMode}
+                />
               )}
 
-              {/* Side-by-side Teams Grid OR Horizontal Swipe Carousel */}
-              <div
-                ref={teamViewMode === 'swipe' ? carouselRef : undefined}
-                className={
-                  teamViewMode === 'swipe'
-                    ? "flex gap-3 sm:gap-4 overflow-x-auto pb-4 pt-1 touch-pan-x scrollbar-thin scrollbar-thumb-indigo-500/30 scrollbar-track-transparent"
-                    : "grid grid-cols-1 md:grid-cols-2 gap-5"
-                }
-              >
+              {/* INDIVIDUAL SOLO ROYALE ARENA */}
+              {isSoloMode ? (
+                <YptIndividualStandings
+                  participants={processedParticipants}
+                  filterPeriodLabel={filterPeriodLabel}
+                  filterTitleLabel={filterTitleLabel}
+                  dateFilter={dateFilter}
+                  viewMode={soloViewMode}
+                  canEdit={canManageYptChallenges}
+                  customRules={challenge.rules?.customRules || []}
+                  onEditMember={(handleRaw) => {
+                    setEditingMemberHandle(handleRaw);
+                  }}
+                  onAwardQuickRule={(handleRaw, rule) => {
+                    handleApplyQuickRule(handleRaw, {
+                      id: rule.id,
+                      name: rule.name,
+                      emoji: rule.emoji || (rule.type === 'bonus' ? '☀️' : '📱'),
+                      points: rule.type === 'bonus' ? Math.abs(rule.points) : -Math.abs(rule.points),
+                    });
+                  }}
+                  onRemoveBadge={(handleRaw, badge) => {
+                    handleRemoveBadge(handleRaw, badge);
+                  }}
+                />
+              ) : (
+                /* TEAM BATTLE ARENA */
+                <div className="space-y-3 sm:space-y-4">
+                  {/* Optional Navigation controls for Swipe mode */}
+                  {teamViewMode === 'swipe' && rankedTeams.length > 1 && (
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1 pt-0.5">
+                      <span className="text-[11px] font-semibold flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                        <span>↔️</span> Swipe horizontally to view all {rankedTeams.length} teams
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => scrollCarousel('left')}
+                          className="p-1 sm:p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 active:scale-95 transition-all cursor-pointer"
+                          title="Scroll Left"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollCarousel('right')}
+                          className="p-1 sm:p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 active:scale-95 transition-all cursor-pointer"
+                          title="Scroll Right"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Side-by-side Teams Grid OR Horizontal Swipe Carousel */}
+                  <div
+                    ref={teamViewMode === 'swipe' ? carouselRef : undefined}
+                    className={
+                      teamViewMode === 'swipe'
+                        ? "flex gap-3 sm:gap-4 overflow-x-auto pb-4 pt-1 touch-pan-x scrollbar-thin scrollbar-thumb-indigo-500/30 scrollbar-track-transparent"
+                        : "grid grid-cols-1 md:grid-cols-2 gap-5"
+                    }
+                  >
                 {rankedTeams.map((team, teamIdx) => {
                   const teamPeriodGain = team.teamPeriodGain;
                   const teamPeriodHours = team.teamPeriodHours;
@@ -1684,9 +1909,11 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 })}
               </div>
             </div>
-          );
-        })()}
-      </div>
+          )}
+        </div>
+      );
+    })()}
+  </div>
 
       {/* Admin Results Declaration Banner (Placed below Team Score Comparison Arena and above Audit Logs) */}
       {(() => {
@@ -1795,6 +2022,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               const memberDailyStats = getDeduplicatedDailyMemberStats(submissions);
               const teamMap = new Map<string, { name: string; color: string; points: number; hours: number }>();
               const memberHoursMap = new Map<string, number>();
+              const memberPointsMap = new Map<string, number>();
 
               (challenge.teams || []).forEach((t) => {
                 teamMap.set(t.id, { name: t.name, color: t.color || '#6366f1', points: 0, hours: 0 });
@@ -1811,6 +2039,9 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 const currMemberHours = memberHoursMap.get(memberHandle) || 0;
                 memberHoursMap.set(memberHandle, currMemberHours + hours);
 
+                const currMemberPoints = memberPointsMap.get(memberHandle) || 0;
+                memberPointsMap.set(memberHandle, currMemberPoints + pts);
+
                 const targetTeam = (challenge.teams || []).find((t) =>
                   (t.memberUids || []).some((m) => areYptHandlesMatching(m, memberHandle, stat.matchedUid))
                 );
@@ -1824,10 +2055,19 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 }
               });
 
-              // Champion Team
+              // Champion Team (for Team mode)
               const sortedTeamsList = Array.from(teamMap.entries()).map(([id, data]) => ({ id, ...data }));
               sortedTeamsList.sort((a, b) => b.points - a.points || b.hours - a.hours);
               const championTeam = sortedTeamsList.length > 0 ? sortedTeamsList[0] : null;
+
+              // Solo Champion (for Individual mode)
+              const sortedSoloList = Array.from(memberPointsMap.entries()).map(([handle, points]) => ({
+                handle,
+                points,
+                hours: memberHoursMap.get(handle) || 0,
+              }));
+              sortedSoloList.sort((a, b) => b.points - a.points || b.hours - a.hours);
+              const soloChampion = sortedSoloList.length > 0 ? sortedSoloList[0] : null;
 
               // Overall MVP
               const sortedMembersList = Array.from(memberHoursMap.entries()).map(([handle, hours]) => ({ handle, hours }));
@@ -1837,10 +2077,16 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               const handleConfirmComplete = async () => {
                 try {
                   setIsSubmittingResults(true);
+                  const matchingSoloRef = isSoloMode && soloChampion
+                    ? (challenge.participants || []).find((p) => areYptHandlesMatching(p.yptHandle, soloChampion.handle))
+                    : undefined;
+
                   await completeYptChallenge(challenge.id, {
                     completedBy: userProfile?.displayName || user?.email || 'admin',
-                    winningTeamId: championTeam?.id || '',
-                    finalMvpHandle: overallMvp?.handle || '',
+                    winningTeamId: isSoloMode ? '' : (championTeam?.id || ''),
+                    winningParticipantUd: matchingSoloRef?.yptUd,
+                    winningParticipantHandle: isSoloMode ? (soloChampion?.handle || '') : '',
+                    finalMvpHandle: isSoloMode ? (soloChampion?.handle || '') : (overallMvp?.handle || ''),
                   });
                   await recalculateTeamPointsFromSubmissions(challenge.id);
                   setIsDeclareResultsModalOpen(false);
@@ -1864,7 +2110,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                           Declare & Lock Final Results
                         </h3>
                         <p className="text-[11px] text-slate-500">
-                          {challenge.title} • End Date: {formatShortDate(getChallengeEndDateYmd(challenge))}
+                          {challenge.title} • {isSoloMode ? 'Solo Royale' : 'Team Battle'} • End Date: {formatShortDate(getChallengeEndDateYmd(challenge))}
                         </p>
                       </div>
                     </div>
@@ -1885,9 +2131,19 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
                         <div className="p-2.5 bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/60">
-                          <span className="text-[10px] text-slate-400 font-medium block">🏆 Champion Team</span>
+                          <span className="text-[10px] text-slate-400 font-medium block">
+                            {isSoloMode ? '👑 Solo Champion (1st Place)' : '🏆 Champion Team'}
+                          </span>
                           <span className="font-extrabold text-slate-900 dark:text-white text-xs flex items-center gap-1.5 mt-0.5">
-                            {championTeam ? (
+                            {isSoloMode ? (
+                              soloChampion ? (
+                                <span className="font-mono text-amber-500">
+                                  @{soloChampion.handle.replace(/^@/, '')} ({soloChampion.points} XP)
+                                </span>
+                              ) : (
+                                'No participant data'
+                              )
+                            ) : championTeam ? (
                               <>
                                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: championTeam.color }} />
                                 <span>{championTeam.name} ({championTeam.points} XP)</span>
@@ -1899,7 +2155,9 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                         </div>
 
                         <div className="p-2.5 bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/60">
-                          <span className="text-[10px] text-slate-400 font-medium block">👑 Challenge MVP</span>
+                          <span className="text-[10px] text-slate-400 font-medium block">
+                            {isSoloMode ? '⏱️ Top Study Time' : '👑 Challenge MVP'}
+                          </span>
                           <span className="font-extrabold text-slate-900 dark:text-white text-xs block mt-0.5 font-mono">
                             {overallMvp ? `@${overallMvp.handle.replace(/^@/, '')} (${formatStudyDuration(overallMvp.hours)})` : 'No MVP'}
                           </span>

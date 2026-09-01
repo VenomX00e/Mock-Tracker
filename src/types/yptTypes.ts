@@ -67,6 +67,7 @@ export interface YptRuleConfig {
 }
 
 export type YptChallengeScope = 'inner' | 'inter';
+export type YptChallengeMode = 'team' | 'individual';
 
 export interface YptTeamMemberRef {
   yptUd: number;             // Permanent YPT User ID
@@ -113,6 +114,7 @@ export interface YptExtractedMemberData {
 export interface YptDailyMemberSnapshot {
   handle: string;
   rawYptUd?: number;
+  appUserId?: string;
   hoursStudied: number; // Highest recorded hours for this date
   studyMs: number;
   maxContinuousMs?: number; // Highest continuous study ms recorded from dl.mm
@@ -144,6 +146,15 @@ export interface YptTeamStandingSnapshot {
   rank: number;
 }
 
+export interface YptParticipantStandingSnapshot {
+  yptUd?: number;
+  yptHandle: string;
+  appUserId?: string;
+  dayHours: number;
+  dayPoints: number;
+  rank: number;
+}
+
 /**
  * Module 1: Firestore Daily Snapshot Schema (yptDailySnapshots)
  * Each challenge day gets a permanent, date-keyed snapshot document in Firestore:
@@ -167,8 +178,11 @@ export interface YptDailySnapshotDoc {
     [yptHandle: string]: YptDailyMemberSnapshot;
   };
 
-  // Team Leaderboard Snapshot for that Day
+  // Team Leaderboard Snapshot for that Day (Team Mode)
   teamStandings: Array<YptTeamStandingSnapshot>;
+
+  // Individual Leaderboard Snapshot for that Day (Solo / Individual Mode)
+  participantStandings?: Array<YptParticipantStandingSnapshot>;
 
   // Backwards-compatible fields
   targetDateYmd?: string;
@@ -181,7 +195,7 @@ export interface YptDailySnapshotDoc {
   memberRecords?: Array<{
     yptHandle: string;
     userId?: string;
-    teamId: string;
+    teamId?: string;
     hoursStudied: number;
     basePoints: number;
     bonusPoints: number;
@@ -227,6 +241,7 @@ export interface YptChallenge {
   title: string;
   description?: string;
   scope?: YptChallengeScope;   // 'inner' (1 group) or 'inter' (multi-group)
+  mode?: YptChallengeMode;     // 'team' (default) or 'individual'
   targetGroupIds?: number[];   // YPT Group IDs involved
   nativeYptChallengeId?: number; // Optional linked YPT Native Challenge ID
   leaderUid: string;
@@ -235,11 +250,14 @@ export interface YptChallenge {
   status: 'active' | 'completed' | 'draft' | 'deleted';
   rules: YptRuleConfig;
   teams: YptTeam[];
+  participants?: YptTeamMemberRef[]; // Direct member roster when mode is 'individual' (teams is empty)
   createdAt: string | number;
   updatedAt?: string | number;
   completedAt?: string;             // ISO timestamp when results were published
   completedBy?: string;             // User UID or handle of the admin who declared results
-  winningTeamId?: string;           // Calculated top team ID at completion
+  winningTeamId?: string;           // Calculated top team ID at completion (team mode)
+  winningParticipantUd?: number;    // Calculated top participant YPT User ID at completion (individual mode)
+  winningParticipantHandle?: string;// Calculated top participant handle at completion (individual mode)
   finalMvpHandle?: string;          // MVP handle at completion
   isDeleted?: boolean;
   deletedAt?: string | number;

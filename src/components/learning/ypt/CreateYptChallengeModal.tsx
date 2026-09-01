@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Plus, Trash2, Award, Clock, Users, ShieldAlert, Sparkles, Crown, ChevronDown, Check, Building2, Swords, ChevronRight, ChevronLeft, RefreshCw, Image, Zap, Lock } from 'lucide-react';
-import { YptRuleConfig, YptTeam, YptRuleConditionType, YptChallengeScope, YptApiGroup, YptApiMember, YptApiNativeChallenge } from '../../../types/yptTypes';
-import { createYptChallenge, updateYptChallenge, getAllKnownYptNames, fetchYptGroups, fetchYptRoster, saveYptCredentials } from '../../../services/yptService';
+import { X, Plus, Trash2, Award, Clock, Users, ShieldAlert, Sparkles, Crown, ChevronDown, Check, Building2, Swords, ChevronRight, ChevronLeft, RefreshCw, Image, Zap, Lock, User, UserCheck, CheckSquare, Square, Search } from 'lucide-react';
+import { YptRuleConfig, YptTeam, YptRuleConditionType, YptChallengeScope, YptChallengeMode, YptTeamMemberRef, YptApiGroup, YptApiMember, YptApiNativeChallenge, YptChallenge } from '../../../types/yptTypes';
+import { createYptChallenge, updateYptChallenge, getAllKnownYptNames, fetchYptGroups, fetchYptRoster, saveYptCredentials, clearYptCredentials } from '../../../services/yptService';
 import { getYmdFromDateOrString } from '../../../utils/yptUtils';
 import { useAuthCtx } from '../../../context/AppContext';
 import { YptMemberPicker } from './YptMemberPicker';
-import { YptChallenge } from '../../../types/yptTypes';
 
 interface CustomSelectOption<T extends string | number> {
   value: T;
@@ -134,6 +133,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
   // Scope & Group selection
   const [scope, setScope] = useState<YptChallengeScope>('inner');
+  const [challengeMode, setChallengeMode] = useState<YptChallengeMode>('team');
   const [availableYptGroups, setAvailableYptGroups] = useState<YptApiGroup[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = useState(false);
@@ -143,6 +143,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
   const [yptPasswordInput, setYptPasswordInput] = useState(() => localStorage.getItem('ypt_password') || '');
   const [yptTokenInput, setYptTokenInput] = useState(() => localStorage.getItem('ypt_token') || '');
   const [yptAuthError, setYptAuthError] = useState<string | null>(null);
+  const [credsSaveMessage, setCredsSaveMessage] = useState<string | null>(null);
 
   // Manual Custom Group Entry
   const [showAddCustomGroup, setShowAddCustomGroup] = useState(false);
@@ -152,6 +153,12 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
   const [nativeChallenges, setNativeChallenges] = useState<YptApiNativeChallenge[]>([]);
   const [isLoadingRoster, setIsLoadingRoster] = useState(false);
   const [selectedNativeChallengeId, setSelectedNativeChallengeId] = useState<number | undefined>(undefined);
+
+  // Solo / Individual Mode Participants Selection State
+  const [selectedParticipantUds, setSelectedParticipantUds] = useState<number[]>([]);
+  const [customParticipantsList, setCustomParticipantsList] = useState<YptTeamMemberRef[]>([]);
+  const [customParticipantNameInput, setCustomParticipantNameInput] = useState('');
+  const [participantSearchQuery, setParticipantSearchQuery] = useState('');
 
   // Basic Challenge Info
   const [title, setTitle] = useState('');
@@ -229,6 +236,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         setTitle(challengeToEdit.title || '');
         setDescription(challengeToEdit.description || '');
         setScope(challengeToEdit.scope || 'inner');
+        setChallengeMode(challengeToEdit.mode || 'team');
         setSelectedGroupIds(challengeToEdit.targetGroupIds || []);
         setSelectedNativeChallengeId(challengeToEdit.nativeYptChallengeId);
 
@@ -294,6 +302,11 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
           }
         }
 
+        if (challengeToEdit.participants && challengeToEdit.participants.length > 0) {
+          setCustomParticipantsList(challengeToEdit.participants);
+          setSelectedParticipantUds(challengeToEdit.participants.map((p) => p.yptUd));
+        }
+
         if (challengeToEdit.teams && challengeToEdit.teams.length > 0) {
           setTeams(
             challengeToEdit.teams.map((t) => ({
@@ -308,6 +321,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         }
         setCurrentStep(2);
       } else {
+        setChallengeMode('team');
         setCurrentStep(1);
       }
     } else {
@@ -322,6 +336,13 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         .then(({ roster, nativeChallenges }) => {
           setLiveRoster(roster);
           setNativeChallenges(nativeChallenges);
+          // Auto-select all live roster members if not yet selected and not editing
+          if (!challengeToEdit) {
+            setSelectedParticipantUds((prev) => {
+              const newUds = new Set([...prev, ...roster.map((m) => m.ud)]);
+              return Array.from(newUds);
+            });
+          }
         })
         .catch((err) => {
           console.warn('Failed to load YPT roster for groups:', err);
@@ -390,6 +411,62 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
     });
 
     setTeams(updatedTeams);
+  };
+
+  // Solo / Individual mode roster helpers
+  const allAvailableRoster: Array<{ ud: number; n: string; dl?: { is?: boolean; sm?: number } }> = [
+    ...liveRoster.map((m) => ({ ud: m.ud, n: m.n, dl: m.dl })),
+    ...customParticipantsList
+      .filter((cp) => !liveRoster.some((m) => m.ud === cp.yptUd))
+      .map((cp) => ({ ud: cp.yptUd, n: cp.yptHandle, dl: undefined })),
+  ];
+
+  const filteredRoster = allAvailableRoster.filter((m) => {
+    if (!participantSearchQuery.trim()) return true;
+    const q = participantSearchQuery.toLowerCase();
+    return m.n.toLowerCase().includes(q) || String(m.ud).includes(q);
+  });
+
+  const handleToggleParticipant = (ud: number) => {
+    if (selectedParticipantUds.includes(ud)) {
+      setSelectedParticipantUds(selectedParticipantUds.filter((id) => id !== ud));
+    } else {
+      setSelectedParticipantUds([...selectedParticipantUds, ud]);
+    }
+  };
+
+  const handleSelectAllParticipants = () => {
+    const allUds = allAvailableRoster.map((m) => m.ud);
+    setSelectedParticipantUds(allUds);
+  };
+
+  const handleDeselectAllParticipants = () => {
+    setSelectedParticipantUds([]);
+  };
+
+  const handleAddCustomParticipant = () => {
+    const cleanName = customParticipantNameInput.trim();
+    if (!cleanName) return;
+
+    const existing = allAvailableRoster.find(
+      (m) => m.n.toLowerCase() === cleanName.toLowerCase()
+    );
+    if (existing) {
+      if (!selectedParticipantUds.includes(existing.ud)) {
+        setSelectedParticipantUds([...selectedParticipantUds, existing.ud]);
+      }
+      setCustomParticipantNameInput('');
+      return;
+    }
+
+    const pseudoUd = Math.floor(10000000 + Math.random() * 90000000);
+    const newMember: YptTeamMemberRef = {
+      yptUd: pseudoUd,
+      yptHandle: cleanName,
+    };
+    setCustomParticipantsList((prev) => [...prev, newMember]);
+    setSelectedParticipantUds((prev) => [...prev, pseudoUd]);
+    setCustomParticipantNameInput('');
   };
 
   const PRESET_EMOJIS = ['☀️', '🌻', '📱', '🔟', '🔥', '🎯', '⏰', '🏆', '⚡', '🏞️', '📑'];
@@ -571,14 +648,46 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
           }),
       };
 
-      const finalTeams: YptTeam[] = teams.map((t, idx) => ({
-        id: t.id || `team_${idx}_${Date.now()}`,
-        name: t.name.trim() || `Team ${idx + 1}`,
-        color: t.color,
-        memberUids: t.memberUids.map((s) => s.trim()).filter(Boolean),
-        teamLeaders: (t.teamLeaders || []).map((s) => s.trim()).filter(Boolean),
-        totalPoints: t.totalPoints || 0,
-      }));
+      let finalTeams: YptTeam[] = [];
+      let finalParticipants: YptTeamMemberRef[] = [];
+
+      if (challengeMode === 'individual') {
+        const participantMap = new Map<number, YptTeamMemberRef>();
+        
+        // Add selected from live roster
+        liveRoster.forEach((m) => {
+          if (selectedParticipantUds.includes(m.ud)) {
+            participantMap.set(m.ud, {
+              yptUd: m.ud,
+              yptHandle: m.n,
+            });
+          }
+        });
+
+        // Add selected from custom participants
+        customParticipantsList.forEach((cp) => {
+          if (selectedParticipantUds.includes(cp.yptUd)) {
+            participantMap.set(cp.yptUd, cp);
+          }
+        });
+
+        finalParticipants = Array.from(participantMap.values());
+
+        if (finalParticipants.length === 0) {
+          setError('Please select at least one participating member for the solo challenge.');
+          setIsSubmitting(false);
+          return;
+        }
+      } else {
+        finalTeams = teams.map((t, idx) => ({
+          id: t.id || `team_${idx}_${Date.now()}`,
+          name: t.name.trim() || `Team ${idx + 1}`,
+          color: t.color,
+          memberUids: t.memberUids.map((s) => s.trim()).filter(Boolean),
+          teamLeaders: (t.teamLeaders || []).map((s) => s.trim()).filter(Boolean),
+          totalPoints: t.totalPoints || 0,
+        }));
+      }
 
       const challengePayload = {
         title: title.trim(),
@@ -586,10 +695,12 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         startDate: finalStartDate,
         endDate: finalEndDate,
         scope,
+        mode: challengeMode,
         targetGroupIds: selectedGroupIds,
         nativeYptChallengeId: selectedNativeChallengeId,
         rules,
         teams: finalTeams,
+        participants: finalParticipants,
       };
 
       if (challengeToEdit) {
@@ -665,21 +776,21 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             {challengeToEdit ? (
-              currentStep === 2 ? 'Challenge Rules & Settings' : 'Team Rosters & Member Assignment'
+              currentStep === 2 ? 'Challenge Rules & Settings' : (challengeMode === 'individual' ? 'Solo Participant Selection' : 'Team Rosters & Member Assignment')
             ) : (
-              currentStep === 1 ? 'Select Challenge Scope' :
+              currentStep === 1 ? 'Select Challenge Mode & Scope' :
               currentStep === 2 ? 'Group & Point Rules Configuration' :
-              'Team Roster & Direct Member Assignment'
+              (challengeMode === 'individual' ? 'Solo Participant Roster' : 'Team Roster & Direct Member Assignment')
             )}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {challengeToEdit ? (
               currentStep === 2 ? 'Update study intervals, threshold penalties, point rules, missions, and challenge dates.' :
-              'Reassign members across teams, designate team leaders, or update team configurations.'
+              (challengeMode === 'individual' ? 'Select or remove participating members from the solo leaderboard.' : 'Reassign members across teams, designate team leaders, or update team configurations.')
             ) : (
-              currentStep === 1 ? 'Choose whether this is an Inner-Group challenge or an Inter-Group War.' :
+              currentStep === 1 ? 'Choose between Team Battle or Solo Royale, and select single or multi-group scope.' :
               currentStep === 2 ? 'Select target YPT groups, linked photo challenge, dates, and point rules.' :
-              'Pick members directly from live YPT group rosters or auto-balance teams.'
+              (challengeMode === 'individual' ? 'Select participating members from your YPT group for the individual leaderboard.' : 'Pick members directly from live YPT group rosters or auto-balance teams.')
             )}
           </p>
         </div>
@@ -697,72 +808,140 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
               </div>
             )}
 
-            {/* STEP 1: SCOPE SELECTION MODE CARDS */}
+            {/* STEP 1: MODE & SCOPE SELECTION CARDS */}
             {currentStep === 1 && (
-              <div className="space-y-4 py-2">
-                <label className="block text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Choose Competition Type
-                </label>
+              <div className="space-y-6 py-2">
+                {/* 1. Competition Format: Team vs Solo */}
+                <div className="space-y-3">
+                  <label className="block text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    1. Competition Format (Mode) *
+                  </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Inner-Group Card */}
-                  <div
-                    onClick={() => {
-                      setScope('inner');
-                      if (availableYptGroups.length > 0) {
-                        setSelectedGroupIds([availableYptGroups[0].id]);
-                      }
-                    }}
-                    className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
-                      scope === 'inner'
-                        ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-600 dark:border-indigo-500 shadow-lg shadow-indigo-500/10 ring-2 ring-indigo-500/20'
-                        : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                        <Building2 className="w-6 h-6" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Team Battle Card */}
+                    <div
+                      onClick={() => setChallengeMode('team')}
+                      className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
+                        challengeMode === 'team'
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-600 dark:border-indigo-500 shadow-lg shadow-indigo-500/10 ring-2 ring-indigo-500/20'
+                          : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                          <Users className="w-6 h-6" />
+                        </div>
+                        <h4 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>🧑‍🤝‍🧑 Team Battle</span>
+                          {challengeMode === 'team' && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Divide members into competing squads with custom team names, colors, and assigned team leaders.
+                        </p>
                       </div>
-                      <h4 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>🏢 Inner-Group Challenge</span>
-                        {scope === 'inner' && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Compete within a single YPT study group. Create custom internal teams or an individual free-for-all leaderboard.
-                      </p>
+
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                        <span>Squad vs Squad</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-                      <span>Single YPT Group</span>
-                      <ChevronRight className="w-4 h-4" />
+                    {/* Solo Royale Card */}
+                    <div
+                      onClick={() => setChallengeMode('individual')}
+                      className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
+                        challengeMode === 'individual'
+                          ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-500 dark:border-amber-400 shadow-lg shadow-amber-500/10 ring-2 ring-amber-500/20'
+                          : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                          <User className="w-6 h-6" />
+                        </div>
+                        <h4 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>👤 Solo Royale (Individual)</span>
+                          {challengeMode === 'individual' && <Check className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Every member competes on an individual leaderboard. No teams needed—rank everyone by personal XP and study hours!
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                        <span>Individual Leaderboard</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Inter-Group War Card */}
-                  <div
-                    onClick={() => setScope('inter')}
-                    className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
-                      scope === 'inter'
-                        ? 'bg-purple-50/80 dark:bg-purple-950/40 border-purple-600 dark:border-purple-500 shadow-lg shadow-purple-500/10 ring-2 ring-purple-500/20'
-                        : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                        <Swords className="w-6 h-6" />
+                {/* 2. Group Competition Scope */}
+                <div className="space-y-3">
+                  <label className="block text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    2. Group Competition Scope *
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Inner-Group Card */}
+                    <div
+                      onClick={() => {
+                        setScope('inner');
+                        if (availableYptGroups.length > 0) {
+                          setSelectedGroupIds([availableYptGroups[0].id]);
+                        }
+                      }}
+                      className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
+                        scope === 'inner'
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-600 dark:border-indigo-500 shadow-lg shadow-indigo-500/10 ring-2 ring-indigo-500/20'
+                          : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                          <Building2 className="w-6 h-6" />
+                        </div>
+                        <h4 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>🏢 Inner-Group Challenge</span>
+                          {scope === 'inner' && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Compete within a single YPT study group. Perfect for internal guild challenges.
+                        </p>
                       </div>
-                      <h4 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>⚔️ Inter-Group War</span>
-                        {scope === 'inter' && <Check className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Pits multiple YPT study groups against each other in a Group vs. Group tournament!
-                      </p>
+
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                        <span>Single YPT Group</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-bold text-purple-600 dark:text-purple-400">
-                      <span>Multi-Group Tournament</span>
-                      <ChevronRight className="w-4 h-4" />
+                    {/* Inter-Group War Card */}
+                    <div
+                      onClick={() => setScope('inter')}
+                      className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
+                        scope === 'inter'
+                          ? 'bg-purple-50/80 dark:bg-purple-950/40 border-purple-600 dark:border-purple-500 shadow-lg shadow-purple-500/10 ring-2 ring-purple-500/20'
+                          : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                          <Swords className="w-6 h-6" />
+                        </div>
+                        <h4 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                          <span>⚔️ Inter-Group War</span>
+                          {scope === 'inter' && <Check className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          Pits multiple YPT study groups against each other in a Group vs. Group tournament!
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-bold text-purple-600 dark:text-purple-400">
+                        <span>Multi-Group Tournament</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -868,6 +1047,13 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                         />
                       </div>
 
+                      {credsSaveMessage && (
+                        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 animate-fadeIn">
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                          <span>{credsSaveMessage}</span>
+                        </div>
+                      )}
+
                       {yptAuthError && (
                         <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-600 dark:text-red-400 space-y-1">
                           <div className="font-bold flex items-center gap-1.5">
@@ -878,7 +1064,42 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                         </div>
                       )}
 
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              saveYptCredentials(yptEmailInput, yptPasswordInput, yptTokenInput);
+                              setYptAuthError(null);
+                              const isBlank = !yptEmailInput.trim() && !yptPasswordInput && !yptTokenInput.trim();
+                              setCredsSaveMessage(isBlank ? 'Saved as blank (Optional / Server Env will be used)' : 'Saved locally');
+                              setTimeout(() => setCredsSaveMessage(null), 3500);
+                            }}
+                            className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-semibold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Save Settings (Keep Blank as Optional)</span>
+                          </button>
+
+                          {(yptEmailInput || yptPasswordInput || yptTokenInput) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setYptEmailInput('');
+                                setYptPasswordInput('');
+                                setYptTokenInput('');
+                                clearYptCredentials();
+                                setYptAuthError(null);
+                                setCredsSaveMessage('Cleared & saved as blank (Optional)');
+                                setTimeout(() => setCredsSaveMessage(null), 3500);
+                              }}
+                              className="px-2.5 py-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+                            >
+                              Clear Fields
+                            </button>
+                          )}
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => {
@@ -899,7 +1120,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                               })
                               .finally(() => setIsLoadingGroups(false));
                           }}
-                          className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all cursor-pointer flex items-center gap-1.5"
+                          className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all cursor-pointer flex items-center gap-1.5 ml-auto"
                         >
                           <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
                           <span>Connect & Fetch Live Groups</span>
@@ -1432,8 +1653,154 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
               </div>
             )}
 
-            {/* STEP 3: TEAMS & DIRECT MEMBER PICKER */}
-            {currentStep === 3 && (
+            {/* STEP 3 (INDIVIDUAL MODE): SOLO PARTICIPANT PICKER */}
+            {currentStep === 3 && challengeMode === 'individual' && (
+              <div className="space-y-5">
+                {/* Header & Batch Selection Controls */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                        Solo Competitors Roster
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {selectedParticipantUds.length} of {allAvailableRoster.length} participants selected
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllParticipants}
+                      className="px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-xl transition-colors border border-amber-500/20 cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllParticipants}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search Bar & Manual Add Input */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={participantSearchQuery}
+                      onChange={(e) => setParticipantSearchQuery(e.target.value)}
+                      placeholder="Search live roster by name or ID..."
+                      className="w-full pl-9.5 pr-4 py-2 text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={customParticipantNameInput}
+                      onChange={(e) => setCustomParticipantNameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomParticipant();
+                        }
+                      }}
+                      placeholder="Add custom handle..."
+                      className="w-36 sm:w-44 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomParticipant}
+                      className="px-3 py-2 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-xl shrink-0 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Participant Checklist Grid */}
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {isLoadingRoster ? (
+                    <div className="p-8 text-center text-xs text-slate-400">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-amber-500" />
+                      Loading group members from YPT API...
+                    </div>
+                  ) : filteredRoster.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                      No members match your search or roster is empty.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {filteredRoster.map((m) => {
+                        const isSelected = selectedParticipantUds.includes(m.ud);
+                        return (
+                          <div
+                            key={m.ud}
+                            onClick={() => handleToggleParticipant(m.ud)}
+                            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none ${
+                              isSelected
+                                ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-400 dark:border-amber-600 shadow-sm'
+                                : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className={`w-4 h-4 rounded-md flex items-center justify-center transition-colors shrink-0 ${
+                                  isSelected
+                                    ? 'bg-amber-500 text-white'
+                                    : 'border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+
+                              <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-black text-slate-700 dark:text-slate-300 shrink-0">
+                                {m.n.charAt(0).toUpperCase()}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                  {m.n}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  #{m.ud}
+                                </div>
+                              </div>
+                            </div>
+
+                            {m.dl && (
+                              <div className="shrink-0 text-right">
+                                {m.dl.is ? (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-md">
+                                    Studying
+                                  </span>
+                                ) : m.dl.sm !== undefined && m.dl.sm > 0 ? (
+                                  <span className="text-[10px] font-semibold text-slate-500">
+                                    {(m.dl.sm / 3600000).toFixed(1)}h
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3 (TEAM MODE): TEAMS & DIRECT MEMBER PICKER */}
+            {currentStep === 3 && challengeMode === 'team' && (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-extrabold text-xs uppercase tracking-wider">
