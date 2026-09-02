@@ -1156,13 +1156,13 @@ export function YptHubView() {
                             {soloWinnerHandle.replace(/^@/, '').slice(0, 1).toUpperCase()}
                           </div>
                           <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          <span className="font-mono">Champion: {soloWinnerHandle}</span>
+                          <span className="font-mono">Champion: {soloWinnerHandle.replace(/^@/, '')}</span>
                         </div>
                       )}
                       {isSolo && mvpHandle && mvpHandle !== soloWinnerHandle && (
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[11px] font-extrabold font-mono">
                           <Crown className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                          <span>MVP: {mvpHandle}</span>
+                          <span>MVP: {mvpHandle.replace(/^@/, '')}</span>
                         </div>
                       )}
                       {!isSolo && winningTeam && (
@@ -1174,7 +1174,7 @@ export function YptHubView() {
                       {!isSolo && mvpHandle && (
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-[11px] font-extrabold font-mono">
                           <Crown className="w-3.5 h-3.5 text-amber-400" />
-                          <span>MVP: {mvpHandle}</span>
+                          <span>MVP: {mvpHandle.replace(/^@/, '')}</span>
                         </div>
                       )}
                     </div>

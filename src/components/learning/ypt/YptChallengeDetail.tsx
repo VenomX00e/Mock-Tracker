@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, User, UserCheck, ShieldAlert, Clock, ArrowLeft, CheckCircle2, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, LayoutGrid, Columns, Zap, Lock, Unlock, AlertCircle, TrendingUp, Flame, Medal, Sparkles } from 'lucide-react';
+import { Trophy, Users, User, UserCheck, ShieldAlert, Clock, ArrowLeft, CheckCircle2, Award, RefreshCw, Calendar, Settings, Trash2, Crown, Pencil, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, LayoutGrid, Columns, Zap, Lock, Unlock, AlertCircle, TrendingUp, Flame, Medal, Sparkles, Pause, Play } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { useAppStateCtx, useUserProfileCtx, useAuthCtx } from '../../../context/AppContext';
 import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam, YptApiMember, YptDailyDaySnapshot, YptTeamMemberRef, YptParticipantStandingSnapshot } from '../../../types/yptTypes';
@@ -89,6 +89,33 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const [isLockingDay, setIsLockingDay] = useState(false);
   const [lockTargetDateYmd, setLockTargetDateYmd] = useState<string>(getYesterdayYptDayYmd());
   const [isSyncingDayLog, setIsSyncingDayLog] = useState(false);
+  const [isAutoFetchPaused, setIsAutoFetchPaused] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ypt_auto_fetch_paused') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleAutoFetchPause = () => {
+    setIsAutoFetchPaused((prev) => {
+      const next = !prev;
+      try {
+        if (next) {
+          localStorage.setItem('ypt_auto_fetch_paused', 'true');
+        } else {
+          localStorage.removeItem('ypt_auto_fetch_paused');
+        }
+      } catch (e) {
+        console.warn('Could not save auto-fetch pause state to localStorage', e);
+      }
+      if (!next) {
+        // Trigger live fetch immediately upon resume
+        fetchLiveRoster();
+      }
+      return next;
+    });
+  };
   const [dayLogFeedback, setDayLogFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -342,7 +369,9 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
       ]);
       setSubmissions(logs);
       setDailySnapshots(snapshots || []);
-      await fetchLiveRoster();
+      if (!isAutoFetchPaused) {
+        await fetchLiveRoster();
+      }
     } catch (e) {
       console.error('Error fetching YPT submission logs:', e);
     } finally {
@@ -562,7 +591,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                       <Crown className="w-4 h-4 text-amber-500 shrink-0" />
                       <span>Champion:</span>
                       <span className="text-amber-600 dark:text-amber-400 font-mono">
-                        {challenge.winningParticipantHandle ? `@${challenge.winningParticipantHandle.replace(/^@/, '')}` : (challenge.finalMvpHandle ? `@${challenge.finalMvpHandle.replace(/^@/, '')}` : 'Individual Winner')}
+                        {challenge.winningParticipantHandle ? challenge.winningParticipantHandle.replace(/^@/, '') : (challenge.finalMvpHandle ? challenge.finalMvpHandle.replace(/^@/, '') : 'Individual Winner')}
                       </span>
                     </h2>
                   </div>
@@ -578,7 +607,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                     {challenge.finalMvpHandle && (
                       <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 text-xs font-bold font-mono flex items-center gap-1">
                         <Crown className="w-3 h-3 text-amber-400" />
-                        MVP: @{challenge.finalMvpHandle.replace(/^@/, '')}
+                        MVP: {challenge.finalMvpHandle.replace(/^@/, '')}
                       </span>
                     )}
                   </div>
@@ -625,19 +654,62 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                   )}
                   {isSoloMode ? 'Individual Standings Arena' : 'Team Score Comparison Arena'}
                 </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5 shrink-0">
-                  <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isLiveRosterLoading ? 'animate-ping' : 'animate-pulse'}`} />
-                  <span>Sync</span>
+                <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 border transition-colors ${
+                      isAutoFetchPaused
+                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isAutoFetchPaused
+                          ? 'bg-amber-500'
+                          : isLiveRosterLoading
+                          ? 'bg-emerald-500 animate-ping'
+                          : 'bg-emerald-500 animate-pulse'
+                      }`}
+                    />
+                    <span>{isAutoFetchPaused ? 'Auto-Sync Paused' : 'Sync'}</span>
+                    <button
+                      type="button"
+                      onClick={fetchLiveRoster}
+                      disabled={isLiveRosterLoading}
+                      className="ml-1 p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                      title="Manual one-off refresh from YPT API"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLiveRosterLoading ? 'animate-spin text-indigo-500' : ''}`} />
+                    </button>
+                  </span>
+
                   <button
                     type="button"
-                    onClick={fetchLiveRoster}
-                    disabled={isLiveRosterLoading}
-                    className="ml-1 p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-                    title="Refresh direct live YPT API study times"
+                    onClick={toggleAutoFetchPause}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full transition-all cursor-pointer border ${
+                      isAutoFetchPaused
+                        ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                    title={
+                      isAutoFetchPaused
+                        ? 'Auto-fetch is currently PAUSED. Click to resume automatic in-app syncing.'
+                        : 'Pause in-app auto-fetching (allows isolating and testing cron-job.org background runs).'
+                    }
                   >
-                    <RefreshCw className={`w-3 h-3 ${isLiveRosterLoading ? 'animate-spin text-indigo-500' : ''}`} />
+                    {isAutoFetchPaused ? (
+                      <>
+                        <Play className="w-2.5 h-2.5 fill-current" />
+                        <span>Resume Auto</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="w-2.5 h-2.5" />
+                        <span>Pause Auto</span>
+                      </>
+                    )}
                   </button>
-                </span>
+                </div>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                 {isSoloMode ? 'Live performance ranking & participant standings' : 'Live performance ranking & team standings'}
