@@ -9,36 +9,13 @@ import { TinyFish, FetchFormat } from '@tiny-fish/sdk';
 
 const require = createRequire(import.meta.url);
 
-let firebaseConfig: any = {};
-try {
-  firebaseConfig = require("./firebase-applet-config.json");
-} catch (e: any) {
-  console.warn("Could not lazily read firebase config:", e.message);
-}
+import { initFirebaseAdmin, getAdminDb as getUnifiedAdminDb, getFirebaseConfig } from "./firebase-admin-init.js";
 
-if (!admin.apps.length && firebaseConfig.projectId) {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    try {
-      const serviceAccount = JSON.parse(
-        process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
-      );
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: firebaseConfig.projectId,
-      });
-    } catch (e: any) {
-      console.error("Error parsing FIREBASE_SERVICE_ACCOUNT_KEY:", e.message);
-      admin.initializeApp({ projectId: firebaseConfig.projectId });
-    }
-  } else {
-    admin.initializeApp({ projectId: firebaseConfig.projectId });
-  }
-}
+const firebaseConfig = getFirebaseConfig();
+initFirebaseAdmin();
 
 const getAdminDb = () => {
-  return firebaseConfig.firestoreDatabaseId
-    ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId)
-    : admin.firestore();
+  return getUnifiedAdminDb();
 };
 
 const customWebSearchDeclaration = {

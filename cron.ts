@@ -5,36 +5,11 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 
-let firebaseConfig: any = null;
-try {
-  const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
-  firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
-} catch (e) {
-  console.error("Could not load firebase-applet-config.json", e);
-}
+import { initFirebaseAdmin, getAdminDb as getUnifiedAdminDb, getFirebaseConfig } from "./firebase-admin-init.js";
 
-if (firebaseConfig && !admin.apps.length) {
-  try {
-    let credential = admin.credential.applicationDefault();
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      try {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-        credential = admin.credential.cert(serviceAccount);
-      } catch (e) {
-        console.error("Invalid FIREBASE_SERVICE_ACCOUNT_KEY format", e);
-      }
-    }
-    
-    admin.initializeApp({
-      credential,
-      projectId: firebaseConfig?.projectId // explicitly pass to ensure verifyIdToken works for the right project
-    });
-  } catch(e) {
-    console.error("Failed to initialize firebase-admin:", e);
-  }
-}
-
-const db = firebaseConfig && admin.apps.length ? getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId) : null;
+const firebaseConfig = getFirebaseConfig();
+const { db: initializedDb } = initFirebaseAdmin();
+const db = initializedDb;
 
 // Helper to calculate stats safely
 function calculateUserStats(mocks: any[]) {
@@ -577,7 +552,8 @@ export interface YptSyncDiagnosticReport {
  * Regular 15-Minute Continuous Sync logic:
  * Updates the open snapshot with High-Water Mark peak hours and returns structured diagnostic logs.
  */
-async function execute15MinYptSync(adminDb: admin.firestore.Firestore): Promise<YptSyncDiagnosticReport> {
+async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise<YptSyncDiagnosticReport> {
+  const targetDb = adminDb || getUnifiedAdminDb();
   const startTimeMs = Date.now();
   const results: YptSyncDiagnosticResult[] = [];
   const errors: string[] = [];
@@ -586,7 +562,7 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore): Promise<
     const activeYmd = getYptDayYmdNode();
     console.log(`[YPT 15-MIN CRON] Starting live sync for active date: ${activeYmd}...`);
 
-    const challengesSnap = await adminDb.collection("yptChallenges").get();
+    const challengesSnap = await targetDb.collection("yptChallenges").get();
     const activeChallenges = challengesSnap.docs
       .map((d) => ({ id: d.id, ...d.data() } as any))
       .filter((c) => !c.isDeleted && c.status !== 'completed');
@@ -602,7 +578,7 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore): Promise<
     }
 
     // Phase 4 Batching: Initialize a Firestore writeBatch to commit all updates across all active challenges simultaneously
-    const writeBatch = adminDb.batch();
+    const writeBatch = targetDb.batch();
     let batchOperationCount = 0;
 
     for (const challenge of activeChallenges) {

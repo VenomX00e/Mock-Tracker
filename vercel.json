@@ -5,7 +5,9 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/api/cron/ypt-sync", "destination": "/api/cron/ypt-sync" },
+    { "source": "/api/cron/ypt_sync", "destination": "/api/cron/ypt_sync" },
+    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
