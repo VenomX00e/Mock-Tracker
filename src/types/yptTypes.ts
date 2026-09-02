@@ -73,6 +73,12 @@ export interface YptTeamMemberRef {
   yptUd: number;             // Permanent YPT User ID
   yptHandle: string;          // Latest known YPT Nickname
   appUserId?: string;         // Linked Firebase User ID (if registered)
+  hours?: number;             // Current peak daily study hours (high-water mark)
+  studyMs?: number;           // Current peak daily study milliseconds
+  isStudying?: boolean;       // Live study status from member.dl.is
+  hasCompleted?: boolean;     // True if user completed the active challenge (st === 1 in cls)
+  completedChallengeIds?: number[]; // Array of completed native challenge IDs from cls map
+  lastSyncedAt?: string;      // ISO timestamp of last update
 }
 
 export interface YptTeam {
@@ -251,6 +257,11 @@ export interface YptChallenge {
   rules: YptRuleConfig;
   teams: YptTeam[];
   participants?: YptTeamMemberRef[]; // Direct member roster when mode is 'individual' (teams is empty)
+  dailyHighWaterMarks?: Record<string, number>; // Permanent ud -> peak study milliseconds for active date
+  dailyMaxContinuousHighWaterMarks?: Record<string, number>; // Permanent ud -> peak max continuous session ms for active date
+  lastDailySnapshotDate?: string;
+  lastCronSyncAt?: any;             // Timestamp/FieldValue of last automated cron sync
+  lastSyncedAt?: string;            // ISO timestamp of last sync
   createdAt: string | number;
   updatedAt?: string | number;
   completedAt?: string;             // ISO timestamp when results were published

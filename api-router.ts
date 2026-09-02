@@ -3568,23 +3568,30 @@ const handleExternalYptSync = async (req: any, res: any) => {
     });
   }
 
+  const startTimeMs = Date.now();
   try {
     const adminDb = getAdminDb();
     const { executeContinuousYptSync } = await import("./cron.js");
     console.log(`[CRON WEBHOOK] Executing YPT continuous sync from ${req.ip || "scheduler"} at ${new Date().toISOString()}...`);
-    await executeContinuousYptSync(adminDb);
+    const report = await executeContinuousYptSync(adminDb);
     
-    return res.json({
+    // Always return HTTP 200 with the diagnostic payload so cron-job.org displays the full execution report
+    return res.status(200).json(report || {
       success: true,
-      message: "YPT continuous sync executed successfully",
       timestamp: new Date().toISOString(),
+      executionTimeMs: Date.now() - startTimeMs,
+      results: [],
+      errors: [],
     });
   } catch (error: any) {
-    console.error("[CRON WEBHOOK] Failed to execute YPT continuous sync:", error);
-    return res.status(500).json({
+    console.error("[CRON WEBHOOK] Error executing YPT continuous sync:", error);
+    // Return HTTP 200 with the diagnostic error list so cron-job.org is not disabled for failing
+    return res.status(200).json({
       success: false,
-      error: error.message || "Failed to execute YPT continuous sync",
       timestamp: new Date().toISOString(),
+      executionTimeMs: Date.now() - startTimeMs,
+      results: [],
+      errors: [error?.message || "Failed to execute YPT continuous sync"],
     });
   }
 };

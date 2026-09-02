@@ -18,6 +18,28 @@ interface YptChallengeDetailProps {
   onRefresh: () => void;
 }
 
+function formatSyncTimeAgo(val: any): string {
+  if (!val) return '';
+  let millis = 0;
+  if (typeof val === 'number') {
+    millis = val;
+  } else if (typeof val === 'string') {
+    millis = new Date(val).getTime();
+  } else if (val && typeof val.toDate === 'function') {
+    millis = val.toDate().getTime();
+  } else if (val && typeof val.seconds === 'number') {
+    millis = val.seconds * 1000;
+  }
+  if (!millis || isNaN(millis)) return '';
+  const diffSec = Math.max(0, Math.floor((Date.now() - millis) / 1000));
+  if (diffSec < 45) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
+}
+
 export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChallengeDetailProps) {
   const { isOwner, isAdmin } = useAppStateCtx();
   const { profile: userProfile } = useUserProfileCtx();
@@ -489,6 +511,12 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                 <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-300 shrink-0" />
                 {formatDisplayYmd(challenge.startDate)} — {formatDisplayYmd(challenge.endDate)}
               </span>
+              {(challenge.lastCronSyncAt || challenge.lastSyncedAt) && (
+                <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium text-emerald-300 bg-emerald-500/15 backdrop-blur-md border border-emerald-500/30">
+                  <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
+                  Auto-synced {formatSyncTimeAgo(challenge.lastCronSyncAt || challenge.lastSyncedAt)}
+                </span>
+              )}
             </div>
 
             <h2 className="text-xl sm:text-3xl font-black text-white tracking-tight drop-shadow-xs">

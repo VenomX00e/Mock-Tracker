@@ -184,23 +184,52 @@ let nodeYptTokenCache: { token: string; coid: string; expiresAt: number } | null
 
 /**
  * Authenticates with YPT API on backend using environment variables, system settings, or fallback.
+ * Implements Phase 2: Autonomous Backend Authentication:
+ * 1. Checks environment variables YPT_JWT / YPT_TOKEN / YPT_EMAIL / YPT_PASSWORD
+ * 2. If credentials are in env or Firestore, performs POST https://pi.tgclab.com/user/sign-in-jwt
+ * 3. Extracts JWT and Country ID (coid). If coid is 0 or missing, queries /user/v2/reload/info or defaults to "89" (India) to prevent YPT HTTP 500.
  */
-async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | null> {
+async function getYptAuthTokenNode(adminDb?: any): Promise<{ token: string; coid: string } | null> {
   const now = Date.now();
   if (nodeYptTokenCache && nodeYptTokenCache.expiresAt > now) {
     return { token: nodeYptTokenCache.token, coid: nodeYptTokenCache.coid };
   }
 
   const explicitJwt = process.env.YPT_JWT || process.env.YPT_TOKEN;
-  const explicitCoid = process.env.YPT_COID || "IN";
+  const configuredCoid = process.env.YPT_COID || "89";
   if (explicitJwt) {
-    nodeYptTokenCache = { token: explicitJwt, coid: explicitCoid, expiresAt: now + 60 * 60 * 1000 };
+    nodeYptTokenCache = { token: explicitJwt, coid: configuredCoid, expiresAt: now + 60 * 60 * 1000 };
     return nodeYptTokenCache;
   }
 
-  const email = (process.env.YPT_EMAIL || "").trim();
-  const password = process.env.YPT_PASSWORD || "";
-  if (!email || !password) return null;
+  let email = (process.env.YPT_EMAIL || "").trim();
+  let password = process.env.YPT_PASSWORD || "";
+
+  // Fallback: If env vars are absent, check Firestore system/ypt config document
+  if ((!email || !password) && adminDb) {
+    try {
+      const yptSysDoc = await adminDb.collection("system").doc("ypt").get();
+      if (yptSysDoc.exists) {
+        const sysData = yptSysDoc.data();
+        if (sysData?.jwt) {
+          nodeYptTokenCache = {
+            token: sysData.jwt,
+            coid: String(sysData.coid || sysData.countryId || configuredCoid),
+            expiresAt: now + 60 * 60 * 1000,
+          };
+          return nodeYptTokenCache;
+        }
+        if (sysData?.email && sysData?.password) {
+          email = String(sysData.email).trim();
+          password = String(sysData.password);
+        }
+      }
+    } catch (_dbErr) {}
+  }
+
+  if (!email || !password || email === "bot@example.com" || password === "YOUR_YPT_PASSWORD" || !email.includes("@")) {
+    return null;
+  }
 
   const md5Pass = crypto.createHash("md5").update(password).digest("hex");
   const sha256Pass = crypto.createHash("sha256").update(password).digest("hex");
@@ -234,6 +263,7 @@ async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | 
       let coid = data.coid || data.country_id;
 
       if (token) {
+        // Crucial: If coid is missing, 0, or null, query /user/v2/reload/info to get the real country ID
         if (!coid || coid === "0" || coid === 0) {
           try {
             const infoRes = await fetch("https://pi.tgclab.com/user/v2/reload/info", {
@@ -258,7 +288,14 @@ async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | 
           } catch (_e) {}
         }
 
-        nodeYptTokenCache = { token, coid: String(coid || process.env.YPT_COID || "8"), expiresAt: now + 50 * 60 * 1000 };
+        // Default coid to "89" (India) if still absent/zero to prevent YPT HTTP 500
+        const resolvedCoid = String(coid && coid !== "0" && coid !== 0 ? coid : (process.env.YPT_COID || "89"));
+
+        nodeYptTokenCache = {
+          token,
+          coid: resolvedCoid,
+          expiresAt: now + 50 * 60 * 1000,
+        };
         return nodeYptTokenCache;
       }
     } catch (_err) {}
@@ -270,18 +307,23 @@ async function getYptAuthTokenNode(): Promise<{ token: string; coid: string } | 
 /**
  * Fetches group roster directly from YPT API for specified group IDs.
  */
-async function fetchYptRosterForChallengeNode(groupIds: (string | number)[]): Promise<{ members: any[]; nativeChallenges: any[] }> {
-  const auth = await getYptAuthTokenNode();
+async function fetchYptRosterForChallengeNode(groupIds: (string | number)[], adminDb?: any): Promise<{ members: any[]; nativeChallenges: any[]; errors: string[] }> {
+  const errors: string[] = [];
+  const auth = await getYptAuthTokenNode(adminDb);
   if (!auth) {
-    // If no credentials, return empty
-    return { members: [], nativeChallenges: [] };
+    const errMsg = "YPT authentication failed: No valid YPT credentials found or login rejected by pi.tgclab.com.";
+    console.warn(`[YPT Cron] ${errMsg}`);
+    errors.push(errMsg);
+    return { members: [], nativeChallenges: [], errors };
   }
 
   const yptHeaders = {
     authorization: `JWT ${auth.token}`,
     "User-Agent": "Dart/3.11 (dart:io)",
     "Content-Type": "application/json",
-    coid: auth.coid,
+    "Accept": "application/json",
+    "Accept-Encoding": "gzip",
+    coid: String(auth.coid),
   };
 
   let gids = groupIds.map(String).filter(Boolean);
@@ -292,12 +334,19 @@ async function fetchYptRosterForChallengeNode(groupIds: (string | number)[]): Pr
         const gData: any = await gRes.json();
         const rawGroups = [...(gData.gs || []), ...(gData.ms || []), ...(gData.cs || []), ...(gData.ps || [])];
         gids = rawGroups.map((g: any) => String(g.id)).filter(Boolean);
+      } else {
+        errors.push(`Failed to fetch user groups list from YPT: HTTP ${gRes.status} ${gRes.statusText}`);
       }
-    } catch {}
+    } catch (gErr: any) {
+      errors.push(`Network error fetching YPT groups list: ${gErr?.message || String(gErr)}`);
+    }
   }
 
   if (gids.length === 0) {
-    return { members: [], nativeChallenges: [] };
+    if (errors.length === 0) {
+      errors.push("No YPT group IDs specified in challenge configuration or associated with bot account.");
+    }
+    return { members: [], nativeChallenges: [], errors };
   }
 
   const allMembers: any[] = [];
@@ -325,9 +374,15 @@ async function fetchYptRosterForChallengeNode(groupIds: (string | number)[]): Pr
               }
             }
           }
+        } else {
+          const errText = `Failed to fetch YPT group ${gid}: HTTP ${mRes.status} ${mRes.statusText}`;
+          console.warn(`[YPT Cron] ${errText}`);
+          errors.push(errText);
         }
-      } catch (err) {
-        console.warn(`[YPT Cron] Failed to fetch group members for ${gid}:`, err);
+      } catch (err: any) {
+        const errText = `Network error fetching YPT group ${gid}: ${err?.message || String(err)}`;
+        console.warn(`[YPT Cron] ${errText}`);
+        errors.push(errText);
       }
     })
   );
@@ -344,6 +399,7 @@ async function fetchYptRosterForChallengeNode(groupIds: (string | number)[]): Pr
   return {
     members: Array.from(memberMap.values()),
     nativeChallenges: rawChallenges,
+    errors,
   };
 }
 
@@ -501,11 +557,31 @@ function calculatePointsFromRulesNode(
   };
 }
 
+export interface YptSyncDiagnosticResult {
+  challengeId: string;
+  challengeName: string;
+  yptGroupId: number | string | null;
+  participantsFound: number;
+  participantsUpdated: number;
+}
+
+export interface YptSyncDiagnosticReport {
+  success: boolean;
+  timestamp: string;
+  executionTimeMs: number;
+  results: YptSyncDiagnosticResult[];
+  errors: string[];
+}
+
 /**
  * Regular 15-Minute Continuous Sync logic:
- * Updates the open snapshot with High-Water Mark peak hours.
+ * Updates the open snapshot with High-Water Mark peak hours and returns structured diagnostic logs.
  */
-async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
+async function execute15MinYptSync(adminDb: admin.firestore.Firestore): Promise<YptSyncDiagnosticReport> {
+  const startTimeMs = Date.now();
+  const results: YptSyncDiagnosticResult[] = [];
+  const errors: string[] = [];
+
   try {
     const activeYmd = getYptDayYmdNode();
     console.log(`[YPT 15-MIN CRON] Starting live sync for active date: ${activeYmd}...`);
@@ -516,8 +592,18 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
       .filter((c) => !c.isDeleted && c.status !== 'completed');
 
     if (activeChallenges.length === 0) {
-      return;
+      return {
+        success: true,
+        timestamp: new Date().toISOString(),
+        executionTimeMs: Date.now() - startTimeMs,
+        results: [],
+        errors: [],
+      };
     }
+
+    // Phase 4 Batching: Initialize a Firestore writeBatch to commit all updates across all active challenges simultaneously
+    const writeBatch = adminDb.batch();
+    let batchOperationCount = 0;
 
     for (const challenge of activeChallenges) {
       try {
@@ -531,12 +617,33 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
           .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
           .concat(challenge.groupIds || []);
 
-        const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds);
+        const rawGroupId = challenge.yptGroupId || (challenge.groups?.[0]?.id || challenge.groups?.[0]?.gid) || (challenge.groupIds?.[0]) || (groupIds.length > 0 ? groupIds[0] : null);
+        const resolvedYptGroupId = rawGroupId ? (!isNaN(Number(rawGroupId)) ? Number(rawGroupId) : rawGroupId) : null;
 
-        // Fetch existing snapshot to preserve High-Water Marks
+        const { members: liveMembers, errors: rosterErrors } = await fetchYptRosterForChallengeNode(groupIds, adminDb);
+        if (rosterErrors && rosterErrors.length > 0) {
+          errors.push(...rosterErrors);
+        }
+
+        // Fetch existing snapshot & main challenge document to preserve High-Water Marks across stateless invocations
         let existingHwms: Record<string, number> = {};
         let existingMaxContHwms: Record<string, number> = {};
-        const snapDocRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("dailySnapshots").doc(activeYmd);
+        let challengeDailyHwms: Record<string, number> = {};
+        let challengeDailyMaxContHwms: Record<string, number> = {};
+
+        const challengeDocRef = adminDb.collection("yptChallenges").doc(challenge.id);
+        const freshChallengeDoc = await challengeDocRef.get();
+        if (freshChallengeDoc.exists) {
+          const chData = freshChallengeDoc.data() as any;
+          if (chData?.dailyHighWaterMarks && typeof chData.dailyHighWaterMarks === 'object') {
+            challengeDailyHwms = { ...chData.dailyHighWaterMarks };
+          }
+          if (chData?.dailyMaxContinuousHighWaterMarks && typeof chData.dailyMaxContinuousHighWaterMarks === 'object') {
+            challengeDailyMaxContHwms = { ...chData.dailyMaxContinuousHighWaterMarks };
+          }
+        }
+
+        const snapDocRef = challengeDocRef.collection("dailySnapshots").doc(activeYmd);
         const existingSnap = await snapDocRef.get();
 
         if (existingSnap.exists) {
@@ -564,12 +671,26 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
 
         const updatedHwms: Record<string, number> = { ...existingHwms };
         const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
+        const updatedChallengeHwms: Record<string, number> = { ...challengeDailyHwms };
+        const updatedChallengeMaxContHwms: Record<string, number> = { ...challengeDailyMaxContHwms };
         const memberSnapshots: Record<string, any> = {};
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
         let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
         let dayTotalPoints = 0;
         let activeMemberCount = 0;
+
+        const updatedParticipants: Array<{
+          yptUd: number;
+          yptHandle: string;
+          appUserId?: string;
+          hours: number;
+          studyMs: number;
+          isStudying: boolean;
+          hasCompleted: boolean;
+          completedChallengeIds: number[];
+          lastSyncedAt: string;
+        }> = [];
 
         if (isSoloMode) {
           // SOLO / INDIVIDUAL MODE: Process flat list of participating members
@@ -580,20 +701,32 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
 
           participantsList.forEach((p) => {
             const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
-            if (!cleanHandle && !p.yptUd) return;
+            const memberUdStr = p.yptUd ? String(p.yptUd) : '';
+            if (!cleanHandle && !memberUdStr) return;
 
-            const liveMember = liveMembers.find((m: any) =>
-              areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''))
-            );
+            // Phase 3 Strict ID Matching: Loop through YPT roster array (ms[])
+            // Match against Firestore challenge participant strictly via numeric ID if available: participant.ud === member.ud
+            const liveMember = liveMembers.find((m: any) => {
+              if (p.yptUd && m.ud && Number(m.ud) === Number(p.yptUd)) return true;
+              if (memberUdStr && String(m.ud) === memberUdStr) return true;
+              return areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''));
+            });
 
+            const resolvedUd = liveMember?.ud || p.yptUd || 0;
+            const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+            let apiLiveSm = 0;
             let apiLiveHours = 0;
             let apiLiveMaxContMs = 0;
             const completedChallengeIds: number[] = [];
+            let hasCompletedActiveChallenge = false;
 
             if (liveMember) {
               if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                apiLiveSm = liveMember.dl.sm;
                 apiLiveHours = liveMember.dl.sm / 3600000;
               } else if (typeof liveMember.sm === 'number') {
+                apiLiveSm = liveMember.sm;
                 apiLiveHours = liveMember.sm / 3600000;
               }
 
@@ -601,23 +734,38 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
                 apiLiveMaxContMs = liveMember.dl.mm;
               }
 
+              // Phase 3 Challenge Status: Check the cls (challenge submission) dictionary in the YPT response
+              // to see if they completed the specific active challenge (st === 1)
               if (liveMember.cls && typeof liveMember.cls === 'object') {
                 for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
                   if (cItem && (cItem as any).st === 1) {
-                    completedChallengeIds.push(Number(cIdStr));
+                    const cNum = Number(cIdStr);
+                    completedChallengeIds.push(cNum);
+                    if (challenge.nativeYptChallengeId && Number(challenge.nativeYptChallengeId) === cNum) {
+                      hasCompletedActiveChallenge = true;
+                    }
                   }
+                }
+                // If no specific nativeYptChallengeId was configured, having any completed challenge counts as true
+                if (!challenge.nativeYptChallengeId && completedChallengeIds.length > 0) {
+                  hasCompletedActiveChallenge = true;
                 }
               }
             }
 
-            // Principle B: High-Water Mark Non-Destructive Update
-            const prevHwm = existingHwms[cleanHandle] || 0;
-            const peakHours = Math.round(Math.max(prevHwm, apiLiveHours) * 100) / 100;
-            updatedHwms[cleanHandle] = peakHours;
+            // Phase 1 & 3 High-Water Mark Calculation Logic:
+            // peak_ms = Math.max(stored_peak_ms, member.dl.sm)
+            // hours = peak_ms / 3600000
+            const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+            const peakSm = Math.max(prevStoredSm, apiLiveSm);
+            updatedChallengeHwms[resolvedUdKey] = peakSm;
 
-            // Track max continuous study session (dl.mm) High-Water Mark
-            const prevMaxContHwm = existingMaxContHwms[cleanHandle] || 0;
-            const peakMaxContMs = Math.max(prevMaxContHwm, apiLiveMaxContMs);
+            const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+            const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
+            updatedChallengeMaxContHwms[resolvedUdKey] = peakMaxContMs;
+
+            const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
+            updatedHwms[cleanHandle] = peakHours;
             updatedMaxContHwms[cleanHandle] = peakMaxContMs;
 
             if (peakHours > 0) activeMemberCount++;
@@ -635,15 +783,31 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
 
             dayTotalPoints += calculated.netPoints;
 
+            const isCurrentlyStudying = Boolean(liveMember?.dl?.is);
+
+            // Phase 3 Constructing the Update: Build updatedParticipants record in memory
+            updatedParticipants.push({
+              yptUd: Number(resolvedUd) || 0,
+              yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
+              appUserId: p.appUserId,
+              hours: peakHours,
+              studyMs: peakSm,
+              isStudying: isCurrentlyStudying,
+              hasCompleted: hasCompletedActiveChallenge,
+              completedChallengeIds,
+              lastSyncedAt: new Date().toISOString(),
+            });
+
             memberSnapshots[cleanHandle] = {
               handle: liveMember?.n || p.yptHandle || cleanHandle,
-              rawYptUd: liveMember?.ud || p.yptUd,
+              rawYptUd: resolvedUd,
               appUserId: p.appUserId,
               hoursStudied: peakHours,
-              studyMs: Math.round(peakHours * 3600000),
+              studyMs: peakSm,
               maxContinuousMs: peakMaxContMs,
-              isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+              isCurrentlyStudying,
               completedNativeChallengeIds: completedChallengeIds,
+              hasCompleted: hasCompletedActiveChallenge,
               basePoints: calculated.baseStudyPoints,
               bonusPoints: calculated.bonusPoints,
               penaltyPoints: 0,
@@ -672,16 +836,30 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
 
             (team.memberUids || []).forEach((memberHandleOrUid: string) => {
               const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
-              const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+              const isNumUid = !isNaN(Number(memberHandleOrUid));
 
+              // Phase 3 Strict ID Matching for Team Roster
+              const liveMember = liveMembers.find((m: any) => {
+                if (isNumUid && m.ud && Number(m.ud) === Number(memberHandleOrUid)) return true;
+                if (m.ud && String(m.ud) === memberHandleOrUid) return true;
+                return areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''));
+              });
+
+              const resolvedUd = liveMember?.ud || (isNumUid ? Number(memberHandleOrUid) : undefined);
+              const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+              let apiLiveSm = 0;
               let apiLiveHours = 0;
               let apiLiveMaxContMs = 0;
               const completedChallengeIds: number[] = [];
+              let hasCompletedActiveChallenge = false;
 
               if (liveMember) {
                 if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                  apiLiveSm = liveMember.dl.sm;
                   apiLiveHours = liveMember.dl.sm / 3600000;
                 } else if (typeof liveMember.sm === 'number') {
+                  apiLiveSm = liveMember.sm;
                   apiLiveHours = liveMember.sm / 3600000;
                 }
 
@@ -692,20 +870,30 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
                 if (liveMember.cls && typeof liveMember.cls === 'object') {
                   for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
                     if (cItem && (cItem as any).st === 1) {
-                      completedChallengeIds.push(Number(cIdStr));
+                      const cNum = Number(cIdStr);
+                      completedChallengeIds.push(cNum);
+                      if (challenge.nativeYptChallengeId && Number(challenge.nativeYptChallengeId) === cNum) {
+                        hasCompletedActiveChallenge = true;
+                      }
                     }
+                  }
+                  if (!challenge.nativeYptChallengeId && completedChallengeIds.length > 0) {
+                    hasCompletedActiveChallenge = true;
                   }
                 }
               }
 
-              // Principle B: High-Water Mark Non-Destructive Update
-              const prevHwm = existingHwms[cleanHandle] || 0;
-              const peakHours = Math.round(Math.max(prevHwm, apiLiveHours) * 100) / 100;
-              updatedHwms[cleanHandle] = peakHours;
+              // Phase 1 & 3 High-Water Mark Calculation Logic
+              const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+              const peakSm = Math.max(prevStoredSm, apiLiveSm);
+              updatedChallengeHwms[resolvedUdKey] = peakSm;
 
-              // Track max continuous study session (dl.mm) High-Water Mark
-              const prevMaxContHwm = existingMaxContHwms[cleanHandle] || 0;
-              const peakMaxContMs = Math.max(prevMaxContHwm, apiLiveMaxContMs);
+              const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+              const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
+              updatedChallengeMaxContHwms[resolvedUdKey] = peakMaxContMs;
+
+              const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
+              updatedHwms[cleanHandle] = peakHours;
               updatedMaxContHwms[cleanHandle] = peakMaxContMs;
 
               if (peakHours > 0) activeMemberCount++;
@@ -724,14 +912,29 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
 
               teamDailyPoints += calculated.netPoints;
 
+              const isCurrentlyStudying = Boolean(liveMember?.dl?.is);
+
+              // Phase 3 Constructing the Update: Add to updatedParticipants
+              updatedParticipants.push({
+                yptUd: Number(resolvedUd) || 0,
+                yptHandle: liveMember?.n || cleanHandle,
+                hours: peakHours,
+                studyMs: peakSm,
+                isStudying: isCurrentlyStudying,
+                hasCompleted: hasCompletedActiveChallenge,
+                completedChallengeIds,
+                lastSyncedAt: new Date().toISOString(),
+              });
+
               memberSnapshots[cleanHandle] = {
                 handle: liveMember?.n || cleanHandle,
-                rawYptUd: liveMember?.ud,
+                rawYptUd: resolvedUd,
                 hoursStudied: peakHours,
-                studyMs: Math.round(peakHours * 3600000),
+                studyMs: peakSm,
                 maxContinuousMs: peakMaxContMs,
-                isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+                isCurrentlyStudying,
                 completedNativeChallengeIds: completedChallengeIds,
+                hasCompleted: hasCompletedActiveChallenge,
                 basePoints: calculated.baseStudyPoints,
                 bonusPoints: calculated.bonusPoints,
                 penaltyPoints: 0,
@@ -774,26 +977,91 @@ async function execute15MinYptSync(adminDb: admin.firestore.Firestore) {
           lastSyncedAt: new Date().toISOString(),
         };
 
-        // 1. Save to canonical dailySnapshots
-        await snapDocRef.set(snapshotData, { merge: true });
+        // Phase 4 Direct Firestore Write Execution via Batch:
+        // 1. Stage canonical dailySnapshots write in batch
+        writeBatch.set(snapDocRef, snapshotData, { merge: true });
+        batchOperationCount++;
 
-        // 2. Mirror to legacy daily_snapshots
+        // 2. Stage legacy daily_snapshots write in batch
         try {
           const legacyRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${activeYmd}`);
-          await legacyRef.set(snapshotData, { merge: true });
+          writeBatch.set(legacyRef, snapshotData, { merge: true });
+          batchOperationCount++;
         } catch {}
 
-        console.log(`[YPT 15-MIN CRON] Successfully synced open snapshot for challenge: ${challenge.name || challenge.id} (${activeYmd}).`);
-      } catch (chErr) {
-        console.error(`[YPT 15-MIN CRON] Error syncing challenge ${challenge.id}:`, chErr);
+        // 3. Phase 4 The Update Payload:
+        // Direct write execution targeting doc(db, 'challenges' / 'yptChallenges', challengeId)
+        // Includes:
+        // - participants: The newly calculated array from Phase 3
+        // - dailyHighWaterMarks: The updated peak times map from Phase 1
+        // - lastCronSyncAt: Firestore FieldValue.serverTimestamp()
+        const challengeUpdatePayload: any = {
+          dailyHighWaterMarks: updatedChallengeHwms,
+          dailyMaxContinuousHighWaterMarks: updatedChallengeMaxContHwms,
+          lastDailySnapshotDate: activeYmd,
+          lastSyncedAt: new Date().toISOString(),
+          lastCronSyncAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (updatedParticipants.length > 0) {
+          challengeUpdatePayload.participants = updatedParticipants;
+        }
+
+        // Target doc(db, 'yptChallenges', challengeId)
+        writeBatch.update(challengeDocRef, challengeUpdatePayload);
+        batchOperationCount++;
+
+        // Target doc(db, 'challenges', challengeId) to ensure universal reactivity across all client query patterns
+        try {
+          const altChallengeRef = adminDb.collection("challenges").doc(challenge.id);
+          writeBatch.set(altChallengeRef, challengeUpdatePayload, { merge: true });
+          batchOperationCount++;
+        } catch {}
+
+        // Phase 5 Diagnostic tracking per challenge
+        results.push({
+          challengeId: challenge.id,
+          challengeName: challenge.title || challenge.name || "Untitled Challenge",
+          yptGroupId: resolvedYptGroupId,
+          participantsFound: liveMembers.length,
+          participantsUpdated: updatedParticipants.length,
+        });
+
+        console.log(`[YPT 15-MIN CRON] Staged snapshot & challenge doc updates for challenge: ${challenge.title || challenge.name || challenge.id} (${activeYmd}).`);
+      } catch (chErr: any) {
+        const errDesc = `Error processing challenge ${challenge.id} (${challenge.title || challenge.name}): ${chErr?.message || String(chErr)}`;
+        console.error(`[YPT 15-MIN CRON] ${errDesc}`, chErr);
+        errors.push(errDesc);
       }
     }
+
+    // Phase 4 Batch Commit: Commit all updates across all active challenges simultaneously
+    if (batchOperationCount > 0) {
+      await writeBatch.commit();
+      console.log(`[YPT 15-MIN CRON] Phase 4 Batch Commit: Successfully committed ${batchOperationCount} write operations across ${activeChallenges.length} active challenge(s) simultaneously.`);
+    }
+
+    return {
+      success: errors.length === 0,
+      timestamp: new Date().toISOString(),
+      executionTimeMs: Date.now() - startTimeMs,
+      results,
+      errors,
+    };
   } catch (err: any) {
     if (err && err.code === 7) {
       // Sandbox environment notice
     } else {
       console.error("[YPT 15-MIN CRON] Encountered unexpected error:", err);
     }
+    errors.push(err?.message || String(err));
+    return {
+      success: false,
+      timestamp: new Date().toISOString(),
+      executionTimeMs: Date.now() - startTimeMs,
+      results,
+      errors,
+    };
   }
 }
 
@@ -822,13 +1090,28 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
           .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
           .concat(challenge.groupIds || []);
 
-        const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds);
+        const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds, adminDb);
 
         // STEP A: Lock & Finalize Yesterday's Snapshot
-        const yesterdaySnapRef = adminDb.collection("yptChallenges").doc(challenge.id).collection("dailySnapshots").doc(yesterdayYmd);
+        const challengeDocRef = adminDb.collection("yptChallenges").doc(challenge.id);
+        const yesterdaySnapRef = challengeDocRef.collection("dailySnapshots").doc(yesterdayYmd);
         const yesterdaySnap = await yesterdaySnapRef.get();
         let existingHwms: Record<string, number> = {};
         let existingMaxContHwms: Record<string, number> = {};
+
+        // Also retrieve main challenge doc dailyHighWaterMarks to prevent data loss across stateless restarts
+        let challengeDailyHwms: Record<string, number> = {};
+        let challengeDailyMaxContHwms: Record<string, number> = {};
+        const freshChallengeDoc = await challengeDocRef.get();
+        if (freshChallengeDoc.exists) {
+          const chData = freshChallengeDoc.data() as any;
+          if (chData?.dailyHighWaterMarks && typeof chData.dailyHighWaterMarks === 'object') {
+            challengeDailyHwms = { ...chData.dailyHighWaterMarks };
+          }
+          if (chData?.dailyMaxContinuousHighWaterMarks && typeof chData.dailyMaxContinuousHighWaterMarks === 'object') {
+            challengeDailyMaxContHwms = { ...chData.dailyMaxContinuousHighWaterMarks };
+          }
+        }
 
         if (yesterdaySnap.exists) {
           const sData = yesterdaySnap.data() as any;
@@ -861,18 +1144,25 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
           participantsList.forEach((p) => {
             const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
-            if (!cleanHandle && !p.yptUd) return;
+            const memberUdStr = p.yptUd ? String(p.yptUd) : '';
+            if (!cleanHandle && !memberUdStr) return;
 
             const liveMember = liveMembers.find((m: any) =>
+              (memberUdStr && String(m.ud) === memberUdStr) ||
               areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''))
             );
 
+            const resolvedUd = liveMember?.ud || p.yptUd;
+            const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+            let apiLiveSm = 0;
             let apiLiveHours = 0;
             let apiLiveMaxContMs = 0;
             const completedChallengeIds: number[] = [];
 
             if (liveMember) {
               if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                apiLiveSm = liveMember.dl.sm;
                 apiLiveHours = liveMember.dl.sm / 3600000;
               }
               if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
@@ -885,10 +1175,13 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
               }
             }
 
-            const peakHours = Math.round(Math.max(existingHwms[cleanHandle] || 0, apiLiveHours) * 100) / 100;
+            const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+            const peakSm = Math.max(prevStoredSm, apiLiveSm, Math.round(apiLiveHours * 3600000));
+            const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
             existingHwms[cleanHandle] = peakHours;
 
-            const peakMaxContMs = Math.max(existingMaxContHwms[cleanHandle] || 0, apiLiveMaxContMs);
+            const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+            const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
             existingMaxContHwms[cleanHandle] = peakMaxContMs;
 
             if (peakHours > 0) activeMemberCount++;
@@ -908,10 +1201,10 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
             finalizedMemberSnapshots[cleanHandle] = {
               handle: liveMember?.n || p.yptHandle || cleanHandle,
-              rawYptUd: liveMember?.ud || p.yptUd,
+              rawYptUd: resolvedUd,
               appUserId: p.appUserId,
               hoursStudied: peakHours,
-              studyMs: Math.round(peakHours * 3600000),
+              studyMs: peakSm,
               maxContinuousMs: peakMaxContMs,
               isCurrentlyStudying: false, // Day concluded
               completedNativeChallengeIds: completedChallengeIds,
@@ -943,14 +1236,22 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
             (team.memberUids || []).forEach((memberHandleOrUid: string) => {
               const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
-              const liveMember = liveMembers.find((m: any) => areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud)));
+              const liveMember = liveMembers.find((m: any) =>
+                (m.ud && String(m.ud) === memberHandleOrUid) ||
+                areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud))
+              );
 
+              const resolvedUd = liveMember?.ud || (!isNaN(Number(memberHandleOrUid)) ? Number(memberHandleOrUid) : undefined);
+              const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+              let apiLiveSm = 0;
               let apiLiveHours = 0;
               let apiLiveMaxContMs = 0;
               const completedChallengeIds: number[] = [];
 
               if (liveMember) {
                 if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                  apiLiveSm = liveMember.dl.sm;
                   apiLiveHours = liveMember.dl.sm / 3600000;
                 }
                 if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
@@ -963,10 +1264,13 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
                 }
               }
 
-              const peakHours = Math.round(Math.max(existingHwms[cleanHandle] || 0, apiLiveHours) * 100) / 100;
+              const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+              const peakSm = Math.max(prevStoredSm, apiLiveSm, Math.round(apiLiveHours * 3600000));
+              const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
               existingHwms[cleanHandle] = peakHours;
 
-              const peakMaxContMs = Math.max(existingMaxContHwms[cleanHandle] || 0, apiLiveMaxContMs);
+              const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+              const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
               existingMaxContHwms[cleanHandle] = peakMaxContMs;
 
               if (peakHours > 0) activeMemberCount++;
@@ -1230,6 +1534,14 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
             try {
               await adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${todayYmd}`).set(freshDayData);
             } catch {}
+
+            // Reset the main challenge document's daily high-water marks for the brand new day
+            await adminDb.collection("yptChallenges").doc(challenge.id).update({
+              dailyHighWaterMarks: {},
+              dailyMaxContinuousHighWaterMarks: {},
+              lastDailySnapshotDate: todayYmd,
+              lastSyncedAt: new Date().toISOString(),
+            });
           }
 
           console.log(`[YPT 5:15 AM IST FINALIZER] Successfully finalized ${yesterdayYmd} and created open snapshot for ${todayYmd} in ${challenge.id}.`);
