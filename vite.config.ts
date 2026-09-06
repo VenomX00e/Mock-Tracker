@@ -14,6 +14,7 @@ export default defineConfig(({mode}) => {
         registerType: 'autoUpdate',
         workbox: {
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallbackDenylist: [/^\/api/],
         },
         manifest: {
           name: 'MockSight',

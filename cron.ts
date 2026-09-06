@@ -651,7 +651,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         const updatedChallengeMaxContHwms: Record<string, number> = { ...challengeDailyMaxContHwms };
         const memberSnapshots: Record<string, any> = {};
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
-        let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
+        let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
         let dayTotalPoints = 0;
         let activeMemberCount = 0;
@@ -659,7 +659,6 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         const updatedParticipants: Array<{
           yptUd: number;
           yptHandle: string;
-          appUserId?: string;
           hours: number;
           studyMs: number;
           isStudying: boolean;
@@ -670,7 +669,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
 
         if (isSoloMode) {
           // SOLO / INDIVIDUAL MODE: Process flat list of participating members
-          const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+          const participantsList: Array<{ yptUd?: number; yptHandle: string }> =
             challenge.participants && challenge.participants.length > 0
               ? challenge.participants
               : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
@@ -765,7 +764,6 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
             updatedParticipants.push({
               yptUd: Number(resolvedUd) || 0,
               yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
-              appUserId: p.appUserId,
               hours: peakHours,
               studyMs: peakSm,
               isStudying: isCurrentlyStudying,
@@ -774,14 +772,16 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
               lastSyncedAt: new Date().toISOString(),
             });
 
-            memberSnapshots[cleanHandle] = {
+            const currentSnapshotItem = {
               handle: liveMember?.n || p.yptHandle || cleanHandle,
+              nickname: liveMember?.n || p.yptHandle || cleanHandle,
               rawYptUd: resolvedUd,
-              appUserId: p.appUserId,
+              yptUd: resolvedUd,
               hoursStudied: peakHours,
               studyMs: peakSm,
               maxContinuousMs: peakMaxContMs,
               isCurrentlyStudying,
+              isStudying: isCurrentlyStudying,
               completedNativeChallengeIds: completedChallengeIds,
               hasCompleted: hasCompletedActiveChallenge,
               basePoints: calculated.baseStudyPoints,
@@ -792,16 +792,28 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
               status: 'active',
               lastSyncedAt: new Date().toISOString(),
             };
+
+            memberSnapshots[cleanHandle] = currentSnapshotItem;
+            if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
+              memberSnapshots[resolvedUdKey] = currentSnapshotItem;
+            }
           });
 
           // Build solo leaderboard participant standings sorted by dayPoints desc, then dayHours desc
-          const participantDraft = Object.values(memberSnapshots).map((m: any) => ({
-            yptUd: m.rawYptUd,
-            yptHandle: m.handle,
-            appUserId: m.appUserId,
-            dayHours: m.hoursStudied,
-            dayPoints: m.netPoints,
-          }));
+          const seenMemberKeys = new Set<string>();
+          const participantDraft = Object.values(memberSnapshots)
+            .filter((m: any) => {
+              const uniqueKey = m.rawYptUd ? `ud_${m.rawYptUd}` : `h_${m.handle}`;
+              if (seenMemberKeys.has(uniqueKey)) return false;
+              seenMemberKeys.add(uniqueKey);
+              return true;
+            })
+            .map((m: any) => ({
+              yptUd: m.rawYptUd,
+              yptHandle: m.handle,
+              dayHours: m.hoursStudied,
+              dayPoints: m.netPoints,
+            }));
           participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
           participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
         } else {
@@ -1106,14 +1118,14 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
         const finalizedMemberSnapshots: Record<string, any> = {};
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
-        let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
+        let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
         let dayTotalPoints = 0;
         let activeMemberCount = 0;
 
         if (isSoloMode) {
           // SOLO / INDIVIDUAL MODE: Finalize member snapshots with penalties
-          const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+          const participantsList: Array<{ yptUd?: number; yptHandle: string }> =
             challenge.participants && challenge.participants.length > 0
               ? challenge.participants
               : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
@@ -1175,10 +1187,11 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
             dayTotalPoints += calculated.netPoints;
 
-            finalizedMemberSnapshots[cleanHandle] = {
+            const finalSnapshotItem = {
               handle: liveMember?.n || p.yptHandle || cleanHandle,
+              nickname: liveMember?.n || p.yptHandle || cleanHandle,
               rawYptUd: resolvedUd,
-              appUserId: p.appUserId,
+              yptUd: resolvedUd,
               hoursStudied: peakHours,
               studyMs: peakSm,
               maxContinuousMs: peakMaxContMs,
@@ -1192,16 +1205,28 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
               status: 'active',
               lastSyncedAt: new Date().toISOString(),
             };
+
+            finalizedMemberSnapshots[cleanHandle] = finalSnapshotItem;
+            if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
+              finalizedMemberSnapshots[resolvedUdKey] = finalSnapshotItem;
+            }
           });
 
           // Build solo leaderboard participant standings sorted by dayPoints desc, then dayHours desc
-          const participantDraft = Object.values(finalizedMemberSnapshots).map((m: any) => ({
-            yptUd: m.rawYptUd,
-            yptHandle: m.handle,
-            appUserId: m.appUserId,
-            dayHours: m.hoursStudied,
-            dayPoints: m.netPoints,
-          }));
+          const seenKeys = new Set<string>();
+          const participantDraft = Object.values(finalizedMemberSnapshots)
+            .filter((m: any) => {
+              const uKey = m.rawYptUd ? `ud_${m.rawYptUd}` : `h_${m.handle}`;
+              if (seenKeys.has(uKey)) return false;
+              seenKeys.add(uKey);
+              return true;
+            })
+            .map((m: any) => ({
+              yptUd: m.rawYptUd,
+              yptHandle: m.handle,
+              dayHours: m.hoursStudied,
+              dayPoints: m.netPoints,
+            }));
           participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
           participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
         } else {
@@ -1421,20 +1446,22 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
           if (!todaySnap.exists) {
             const initialMemberSnapshots: Record<string, any> = {};
             const initialTeamStandings: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number; rank: number }> = [];
-            let initialParticipantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
+            let initialParticipantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
 
             if (isSoloMode) {
-              const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
+              const participantsList: Array<{ yptUd?: number; yptHandle: string }> =
                 challenge.participants && challenge.participants.length > 0
                   ? challenge.participants
                   : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
 
               initialParticipantStandings = participantsList.map((p, idx) => {
                 const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
-                initialMemberSnapshots[cleanHandle] = {
+                const resolvedUdKey = p.yptUd ? String(p.yptUd) : cleanHandle;
+                const freshSnapshotItem = {
                   handle: p.yptHandle || cleanHandle,
+                  nickname: p.yptHandle || cleanHandle,
                   rawYptUd: p.yptUd,
-                  appUserId: p.appUserId,
+                  yptUd: p.yptUd,
                   hoursStudied: 0,
                   studyMs: 0,
                   maxContinuousMs: 0,
@@ -1449,10 +1476,14 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
                   lastSyncedAt: new Date().toISOString(),
                 };
 
+                initialMemberSnapshots[cleanHandle] = freshSnapshotItem;
+                if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
+                  initialMemberSnapshots[resolvedUdKey] = freshSnapshotItem;
+                }
+
                 return {
                   yptUd: p.yptUd,
                   yptHandle: p.yptHandle || cleanHandle,
-                  appUserId: p.appUserId,
                   dayHours: 0,
                   dayPoints: 0,
                   rank: idx + 1,

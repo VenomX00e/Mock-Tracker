@@ -102,6 +102,13 @@ export function initFirebaseAdmin(): { app: admin.app.App; db: admin.firestore.F
     cachedFirestoreDb = admin.firestore(cachedAdminApp);
   }
 
+  try {
+    cachedFirestoreDb.settings({ ignoreUndefinedProperties: true });
+  } catch (settingsErr: any) {
+    // In case settings were already locked or applied
+    console.debug("[Firebase Admin] Note on firestore settings:", settingsErr?.message);
+  }
+
   return { app: cachedAdminApp, db: cachedFirestoreDb };
 }
 
