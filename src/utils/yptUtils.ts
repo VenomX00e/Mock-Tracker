@@ -452,16 +452,23 @@ export function evaluateMemberDailyPoints(
       const ruleEmoji = cr.emoji ? String(cr.emoji).trim() : '';
       const nameLower = cr.name.toLowerCase();
 
+      const hasNativeId = Boolean(cr.nativeChallengeId);
+      const targetCid = Number(cr.nativeChallengeId);
+
       const isNativeChallengeCompleted = Boolean(
-        cr.nativeChallengeId &&
-        (completedNativeChallengeIds.includes(Number(cr.nativeChallengeId)) ||
-         completedNativeChallengeIds.map(String).includes(String(cr.nativeChallengeId)))
+        hasNativeId &&
+        !isNaN(targetCid) &&
+        (completedNativeChallengeIds.includes(targetCid) ||
+         completedNativeChallengeIds.map(String).includes(String(targetCid)))
       );
 
-      const emojiMatched =
-        isNativeChallengeCompleted ||
-        Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
-        Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'));
+      // If linked to a native challenge ID, strictly evaluate that challenge ID completion!
+      const missionMatched = hasNativeId
+        ? isNativeChallengeCompleted
+        : (
+            Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
+            Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'))
+          );
 
       const minHours = cr.minHoursNeeded ?? 0;
       const hoursMatched = safeHours >= minHours;
@@ -474,14 +481,14 @@ export function evaluateMemberDailyPoints(
           isMet = hoursMatched;
           break;
         case 'both':
-          isMet = emojiMatched && hoursMatched;
+          isMet = missionMatched && hoursMatched;
           break;
         case 'either':
-          isMet = emojiMatched || hoursMatched;
+          isMet = missionMatched || hoursMatched;
           break;
         case 'emoji_only':
         default:
-          isMet = emojiMatched;
+          isMet = missionMatched;
           break;
       }
 

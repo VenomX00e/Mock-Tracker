@@ -157,7 +157,16 @@ export function YptSyncModal({
     setError('');
 
     try {
-      let targetGids = currentChallenge.targetGroupIds || [];
+      const legacyGids = [
+        ...(currentChallenge.targetGroupIds || []),
+        ...((currentChallenge as any).groupIds || []),
+        ...((currentChallenge as any).yptGroupId ? [(currentChallenge as any).yptGroupId] : []),
+        ...(((currentChallenge as any).groups || []).map((g: any) => g.id || g.gid || g)),
+      ]
+        .map(Number)
+        .filter((id) => !isNaN(id) && id > 0);
+
+      let targetGids = Array.from(new Set(legacyGids));
       if (targetGids.length === 0) {
         // Fallback to all joined groups
         const { groups } = await fetchYptGroups();

@@ -430,15 +430,47 @@ function calculatePointsFromRulesNode(
       const targetMins = Number(cr.targetMinutes || cr.minutes) || 0;
       const effectiveTargetHours = targetHours + (targetMins / 60);
 
-      if (cr.type === 'milestone') {
-        isMet = effectiveTargetHours > 0 && hoursStudied >= effectiveTargetHours;
-      } else if (cr.criteriaType === 'study_hours' || cr.category === 'study_hours') {
+      const hasNativeId = Boolean(cr.nativeChallengeId || cr.challengeId);
+      const targetCid = Number(cr.nativeChallengeId || cr.challengeId);
+      
+      const isNativeChallengeCompleted = Boolean(
+        hasNativeId &&
+        !isNaN(targetCid) &&
+        (completedNativeChallengeIds.includes(targetCid) ||
+         completedNativeChallengeIds.map(String).includes(String(targetCid)))
+      );
+
+      const ruleEmoji = cr.emoji ? String(cr.emoji).trim() : '';
+      const nameLower = (cr.name || '').toLowerCase();
+
+      // If linked to a native challenge ID, strictly evaluate that challenge ID completion!
+      const missionMatched = hasNativeId
+        ? isNativeChallengeCompleted
+        : (
+            Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
+            Boolean(nameLower.includes('snap') && detectedEmojis.includes('☀️'))
+          );
+
+      const minHours = cr.minHoursNeeded ?? 0;
+      const hoursMatched = hoursStudied >= minHours;
+      const condition = cr.conditionType || 'emoji_only';
+
+      if (cr.type === 'milestone' || cr.criteriaType === 'study_hours' || cr.category === 'study_hours') {
         isMet = effectiveTargetHours > 0 && hoursStudied >= effectiveTargetHours;
       } else if (cr.criteriaType === 'native_challenge' || cr.category === 'native_challenge') {
-        const targetCid = Number(cr.nativeChallengeId || cr.challengeId);
-        isMet = targetCid > 0 && completedNativeChallengeIds.includes(targetCid);
-      } else if (cr.emoji) {
-        isMet = detectedEmojis.includes(cr.emoji);
+        isMet = isNativeChallengeCompleted;
+      } else {
+        if (condition === 'emoji_only') {
+          isMet = missionMatched;
+        } else if (condition === 'hours_only') {
+          isMet = hoursMatched;
+        } else if (condition === 'both') {
+          isMet = missionMatched && hoursMatched;
+        } else if (condition === 'either') {
+          isMet = missionMatched || hoursMatched;
+        } else {
+          isMet = missionMatched;
+        }
       }
 
       if (isMet) {

@@ -344,7 +344,16 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     setIsLiveRosterLoading(true);
     setLiveRosterError(null);
     try {
-      const gids = challenge.targetGroupIds && challenge.targetGroupIds.length > 0 ? challenge.targetGroupIds : undefined;
+      const resolvedGids = [
+        ...(challenge.targetGroupIds || []),
+        ...((challenge as any).groupIds || []),
+        ...((challenge as any).yptGroupId ? [(challenge as any).yptGroupId] : []),
+        ...(((challenge as any).groups || []).map((g: any) => g.id || g.gid || g)),
+      ]
+        .map(Number)
+        .filter((id) => !isNaN(id) && id > 0);
+
+      const gids = resolvedGids.length > 0 ? Array.from(new Set(resolvedGids)) : undefined;
       const { roster } = await fetchYptRoster(gids);
       const activeRoster = roster || [];
       setLiveRosterMembers(activeRoster);

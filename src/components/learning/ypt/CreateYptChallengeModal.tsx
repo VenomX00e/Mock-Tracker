@@ -215,10 +215,17 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
       setIsLoadingGroups(true);
       fetchYptGroups()
         .then(({ groups, isDemo }) => {
-          setAvailableYptGroups(groups);
+          setAvailableYptGroups((prev) => {
+            const map = new Map<number, YptApiGroup>();
+            groups.forEach((g) => map.set(Number(g.id), g));
+            prev.forEach((g) => {
+              if (!map.has(Number(g.id))) map.set(Number(g.id), g);
+            });
+            return Array.from(map.values());
+          });
           setIsDemoGroups(Boolean(isDemo));
-          if (groups.length > 0 && selectedGroupIds.length === 0) {
-            setSelectedGroupIds([groups[0].id]);
+          if (!challengeToEdit && groups.length > 0) {
+            setSelectedGroupIds((prev) => (prev.length === 0 ? [Number(groups[0].id)] : prev));
           }
         })
         .catch((err) => {
@@ -237,7 +244,37 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         setDescription(challengeToEdit.description || '');
         setScope(challengeToEdit.scope || 'inner');
         setChallengeMode(challengeToEdit.mode || 'team');
-        setSelectedGroupIds(challengeToEdit.targetGroupIds || []);
+
+        // Robust extraction from all possible group ID properties (targetGroupIds, groupIds, yptGroupId, groups)
+        const legacyGroupIds = [
+          ...(challengeToEdit.targetGroupIds || []),
+          ...((challengeToEdit as any).groupIds || []),
+          ...((challengeToEdit as any).yptGroupId ? [(challengeToEdit as any).yptGroupId] : []),
+          ...(((challengeToEdit as any).groups || []).map((g: any) => g.id || g.gid || g)),
+        ]
+          .map((id: any) => Number(id))
+          .filter((id: number) => !isNaN(id) && id > 0);
+
+        const resolvedGroupIds = Array.from(new Set(legacyGroupIds));
+        setSelectedGroupIds(resolvedGroupIds);
+
+        // Pre-populate availableYptGroups if challenge has group titles stored
+        if ((challengeToEdit as any).groups && Array.isArray((challengeToEdit as any).groups)) {
+          const chGroups: YptApiGroup[] = (challengeToEdit as any).groups.map((cg: any) => ({
+            id: Number(cg.id || cg.gid),
+            t: cg.title || cg.name || cg.t || `Group ${cg.id}`,
+            jc: 0,
+            mc: 0,
+          })).filter((g: any) => !isNaN(g.id) && g.id > 0);
+          if (chGroups.length > 0) {
+            setAvailableYptGroups((prev) => {
+              const existingIds = new Set(prev.map((g) => Number(g.id)));
+              const toAdd = chGroups.filter((cg) => !existingIds.has(cg.id));
+              return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+            });
+          }
+        }
+
         setSelectedNativeChallengeId(challengeToEdit.nativeYptChallengeId);
 
         let sYmd = getTodayYmd();
@@ -362,17 +399,23 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
   if (!isOpen) return null;
 
-  const toggleGroupSelection = (groupId: number) => {
+  const toggleGroupSelection = (groupId: number | string) => {
+    const numericGid = Number(groupId);
+    if (isNaN(numericGid) || numericGid <= 0) return;
     if (scope === 'inner') {
-      setSelectedGroupIds([groupId]);
+      setSelectedGroupIds([numericGid]);
     } else {
-      if (selectedGroupIds.includes(groupId)) {
-        if (selectedGroupIds.length > 1) {
-          setSelectedGroupIds(selectedGroupIds.filter((id) => id !== groupId));
+      setSelectedGroupIds((prev) => {
+        const exists = prev.some((id) => Number(id) === numericGid);
+        if (exists) {
+          if (prev.length > 1) {
+            return prev.filter((id) => Number(id) !== numericGid);
+          }
+          return prev;
+        } else {
+          return [...prev, numericGid];
         }
-      } else {
-        setSelectedGroupIds([...selectedGroupIds, groupId]);
-      }
+      });
     }
   };
 
@@ -471,19 +514,23 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
 
   const PRESET_EMOJIS = ['☀️', '🌻', '📱', '🔟', '🔥', '🎯', '⏰', '🏆', '⚡', '🏞️', '📑'];
 
-  const getConditionLabel = (rule: { conditionType?: YptRuleConditionType; minHoursNeeded?: string }) => {
+  const getConditionLabel = (rule: { conditionType?: YptRuleConditionType; minHoursNeeded?: string; nativeChallengeId?: number; name?: string }) => {
     const cond = rule.conditionType || 'emoji_only';
     const hrs = rule.minHoursNeeded || '10';
+    const hasId = Boolean(rule.nativeChallengeId);
+    const linkedNative = hasId ? nativeChallenges.find((nc) => nc.id === rule.nativeChallengeId) : undefined;
+    const challengeName = linkedNative?.t || (rule.name ? rule.name.trim() : '') || (hasId ? `Challenge #${rule.nativeChallengeId}` : 'Emoji');
+    const idLabel = challengeName;
     switch (cond) {
       case 'hours_only':
         return `Req: ≥${hrs}h`;
       case 'both':
-        return `Req: Mission + ≥${hrs}h`;
+        return `Req: ${idLabel} + ≥${hrs}h`;
       case 'either':
-        return `Req: Mission or ≥${hrs}h`;
+        return `Req: ${idLabel} or ≥${hrs}h`;
       case 'emoji_only':
       default:
-        return `Req: Mission / Emoji`;
+        return hasId ? `Req: ${idLabel}` : `Req: Emoji`;
     }
   };
 
@@ -697,6 +744,12 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
         scope,
         mode: challengeMode,
         targetGroupIds: selectedGroupIds,
+        groupIds: selectedGroupIds,
+        yptGroupId: selectedGroupIds[0] || null,
+        groups: selectedGroupIds.map((gid) => {
+          const matched = availableYptGroups.find((g) => Number(g.id) === Number(gid));
+          return { id: Number(gid), title: matched?.t || `Group ${gid}`, name: matched?.t || `Group ${gid}` };
+        }),
         nativeYptChallengeId: selectedNativeChallengeId,
         rules,
         teams: finalTeams,
@@ -887,9 +940,11 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                     <div
                       onClick={() => {
                         setScope('inner');
-                        if (availableYptGroups.length > 0) {
-                          setSelectedGroupIds([availableYptGroups[0].id]);
-                        }
+                        setSelectedGroupIds((prev) => {
+                          if (prev.length > 0) return [Number(prev[0])];
+                          if (availableYptGroups.length > 0) return [Number(availableYptGroups[0].id)];
+                          return prev;
+                        });
                       }}
                       className={`p-5 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 ${
                         scope === 'inner'
@@ -1111,8 +1166,8 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                                 setAvailableYptGroups(groups);
                                 setIsDemoGroups(Boolean(isDemo));
                                 setYptAuthError(null);
-                                if (groups.length > 0 && selectedGroupIds.length === 0) {
-                                  setSelectedGroupIds([groups[0].id]);
+                                if (!challengeToEdit && groups.length > 0) {
+                                  setSelectedGroupIds((prev) => (prev.length === 0 ? [Number(groups[0].id)] : prev));
                                 }
                               })
                               .catch((err) => {
@@ -1140,7 +1195,7 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {availableYptGroups.map((g) => {
-                        const isSelected = selectedGroupIds.includes(g.id);
+                        const isSelected = selectedGroupIds.some((id) => Number(id) === Number(g.id));
                         return (
                           <div
                             key={g.id}
@@ -1459,6 +1514,9 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                     ) : (
                       <div className="space-y-3">
                         {customRules.map((rule) => {
+                          const linkedNativeChallenge = nativeChallenges.find((nc) => nc.id === rule.nativeChallengeId);
+                          const challengeDisplayName = linkedNativeChallenge?.t || (rule.name ? rule.name.trim() : '') || (rule.nativeChallengeId ? `Challenge #${rule.nativeChallengeId}` : 'Challenge');
+
                           return (
                             <div
                               key={rule.id}
@@ -1487,10 +1545,10 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                                   value={rule.conditionType || 'emoji_only'}
                                   onChange={(val) => handleUpdateCustomRule(rule.id, 'conditionType', val)}
                                   options={[
-                                    { value: 'emoji_only', label: 'Emoji Present Only' },
+                                    { value: 'emoji_only', label: rule.nativeChallengeId ? `🎯 ${challengeDisplayName} Only` : 'Emoji Present Only' },
                                     { value: 'hours_only', label: 'Hours Met Only' },
-                                    { value: 'both', label: 'Both (Emoji + Hours)' },
-                                    { value: 'either', label: 'Either (Emoji or Hours)' },
+                                    { value: 'both', label: rule.nativeChallengeId ? `Both (${challengeDisplayName} + Hours)` : 'Both (Emoji + Hours)' },
+                                    { value: 'either', label: rule.nativeChallengeId ? `Either (${challengeDisplayName} or Hours)` : 'Either (Emoji or Hours)' },
                                   ]}
                                 />
 
@@ -1614,6 +1672,47 @@ export function CreateYptChallengeModal({ isOpen, onClose, onSuccess, challengeT
                                     </span>
                                   </div>
                                 )}
+
+                                {/* Linked Challenge ID Display & Input */}
+                                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-dashed border-slate-200/60 dark:border-slate-800/60">
+                                  <span className="text-[11px] font-semibold text-slate-500">
+                                    {rule.nativeChallengeId ? '🎯 Linked Challenge:' : 'Link YPT Challenge ID:'}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {rule.nativeChallengeId && (linkedNativeChallenge?.t || rule.name) && (
+                                      <span className="px-2 py-0.5 text-xs font-semibold rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                        <span>{rule.emoji || linkedNativeChallenge?.e || '📸'}</span>
+                                        <span>{linkedNativeChallenge?.t || rule.name}</span>
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-slate-400 font-mono">#</span>
+                                    <input
+                                      type="number"
+                                      value={rule.nativeChallengeId || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                                        handleUpdateCustomRule(rule.id, 'nativeChallengeId', val);
+                                      }}
+                                      placeholder="e.g. 347458"
+                                      className="w-24 px-2 py-0.5 text-xs font-mono font-bold bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-md text-indigo-600 dark:text-indigo-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                                    />
+                                    {rule.nativeChallengeId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateCustomRule(rule.id, 'nativeChallengeId', undefined)}
+                                        className="text-[10px] text-slate-400 hover:text-rose-500 transition-colors cursor-pointer px-1 py-0.5 rounded"
+                                        title="Clear linked Challenge ID"
+                                      >
+                                        ✕ Clear ID
+                                      </button>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-slate-400">
+                                    {rule.nativeChallengeId
+                                      ? `(ID #${rule.nativeChallengeId} — strictly tracked by YPT challenge ID)`
+                                      : '(Optional: pick from above or enter ID for strict challenge tracking)'}
+                                  </span>
+                                </div>
                               </div>
 
                               {/* Row 4: Live Preview Pill */}

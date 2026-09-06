@@ -315,17 +315,23 @@ export function evaluatePointRule(
   const ruleEmoji = rule.emoji ? String(rule.emoji).trim() : '';
   const nameLower = rule.name.toLowerCase();
 
-  const isNativeChallengeCompleted =
-    Boolean(
-      rule.nativeChallengeId &&
-      (completedNativeChallengeIds.includes(Number(rule.nativeChallengeId)) ||
-       completedNativeChallengeIds.map(String).includes(String(rule.nativeChallengeId)))
-    );
+  const hasNativeId = Boolean(rule.nativeChallengeId);
+  const targetCid = Number(rule.nativeChallengeId);
 
-  const emojiMatched =
-    isNativeChallengeCompleted ||
-    Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
-    Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'));
+  const isNativeChallengeCompleted = Boolean(
+    hasNativeId &&
+    !isNaN(targetCid) &&
+    (completedNativeChallengeIds.includes(targetCid) ||
+     completedNativeChallengeIds.map(String).includes(String(targetCid)))
+  );
+
+  // If linked to a native challenge ID, strictly evaluate that challenge ID completion!
+  const missionMatched = hasNativeId
+    ? isNativeChallengeCompleted
+    : (
+        Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
+        Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'))
+      );
 
   const minHours = rule.minHoursNeeded ?? 0;
   const hoursMatched = hoursStudied >= minHours;
@@ -336,12 +342,12 @@ export function evaluatePointRule(
     case 'hours_only':
       return hoursMatched;
     case 'both':
-      return emojiMatched && hoursMatched;
+      return missionMatched && hoursMatched;
     case 'either':
-      return emojiMatched || hoursMatched;
+      return missionMatched || hoursMatched;
     case 'emoji_only':
     default:
-      return emojiMatched;
+      return missionMatched;
   }
 }
 
