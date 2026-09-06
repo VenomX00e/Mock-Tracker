@@ -165,6 +165,9 @@ const normalizeGeminiModel = (rawModel?: string): string => {
   const m = rawModel.trim().toLowerCase();
 
   if (
+    m === "gemini-3.8-flash" ||
+    m === "gemini-3.7-flash" ||
+    m === "gemini-3.7-flash-preview" ||
     m === "gemini-2.5-flash" ||
     m === "gemini-2.5-flash-lite" ||
     m === "gemini-2.5-pro" ||

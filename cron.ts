@@ -591,9 +591,10 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
 
         const groupIds = (challenge.groups || []).map((g: any) => g.id || g.gid || g)
           .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
-          .concat(challenge.groupIds || []);
+          .concat(challenge.groupIds || [])
+          .concat(challenge.targetGroupIds || []);
 
-        const rawGroupId = challenge.yptGroupId || (challenge.groups?.[0]?.id || challenge.groups?.[0]?.gid) || (challenge.groupIds?.[0]) || (groupIds.length > 0 ? groupIds[0] : null);
+        const rawGroupId = challenge.yptGroupId || (challenge.groups?.[0]?.id || challenge.groups?.[0]?.gid) || (challenge.groupIds?.[0]) || (challenge.targetGroupIds?.[0]) || (groupIds.length > 0 ? groupIds[0] : null);
         const resolvedYptGroupId = rawGroupId ? (!isNaN(Number(rawGroupId)) ? Number(rawGroupId) : rawGroupId) : null;
 
         const { members: liveMembers, errors: rosterErrors } = await fetchYptRosterForChallengeNode(groupIds, adminDb);
@@ -1076,7 +1077,8 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
       try {
         const groupIds = (challenge.groups || []).map((g: any) => g.id || g.gid || g)
           .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
-          .concat(challenge.groupIds || []);
+          .concat(challenge.groupIds || [])
+          .concat(challenge.targetGroupIds || []);
 
         const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds, adminDb);
 
