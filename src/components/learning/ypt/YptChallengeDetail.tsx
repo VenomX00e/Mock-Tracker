@@ -3,7 +3,7 @@ import { Trophy, Users, User, UserCheck, ShieldAlert, Clock, ArrowLeft, CheckCir
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { useAppStateCtx, useUserProfileCtx, useAuthCtx } from '../../../context/AppContext';
 import { YptChallenge, YptExtractedMemberData, YptSubmissionLog, YptTeam, YptApiMember, YptDailyDaySnapshot, YptTeamMemberRef, YptParticipantStandingSnapshot } from '../../../types/yptTypes';
-import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog, completeYptChallenge, reopenYptChallenge, fetchYptRoster, calculatePointsFromRules, autoCloseMissingDays, getAllDailySnapshots, lockDaySnapshot, deleteDailySnapshot, fetchYptDayLog, syncDayLogToChallenge, syncChallengeDaySnapshotWithHighWaterMark } from '../../../services/yptService';
+import { getYptSubmissionLogs, recalculateTeamPointsFromSubmissions, softDeleteYptChallenge, getDeduplicatedDailyMemberStats, addYptSubmissionLog, completeYptChallenge, reopenYptChallenge, fetchYptRoster, calculatePointsFromRules, autoCloseMissingDays, getAllDailySnapshots, lockDaySnapshot, deleteDailySnapshot, resetTodayChallengeData, fetchYptDayLog, syncDayLogToChallenge, syncChallengeDaySnapshotWithHighWaterMark } from '../../../services/yptService';
 import { formatStudyDuration, getLocalYmd, getYptDayYmd, getYesterdayYptDayYmd, applyHighWaterMark, isYptReconciliationWindow, areYptHandlesMatching, getChallengeStartDateYmd, getChallengeEndDateYmd, formatDisplayYmd, getMemberStudyHoursFromApi, evaluateMemberDailyPoints } from '../../../utils/yptUtils';
 import { CreateYptChallengeModal } from './CreateYptChallengeModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -111,6 +111,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const [isLockingDay, setIsLockingDay] = useState(false);
   const [lockTargetDateYmd, setLockTargetDateYmd] = useState<string>(getYesterdayYptDayYmd());
   const [isSyncingDayLog, setIsSyncingDayLog] = useState(false);
+  const [isResettingToday, setIsResettingToday] = useState(false);
   const [isAutoFetchPaused, setIsAutoFetchPaused] = useState<boolean>(() => {
     try {
       return localStorage.getItem('ypt_auto_fetch_paused') === 'true';
@@ -387,9 +388,12 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      // Auto-close any unfinalized past days into daily snapshot records
+      // Auto-close any unfinalized past days into daily snapshot records (Frontend Self-Healing)
       try {
-        await autoCloseMissingDays(challenge);
+        const { closedCount } = await autoCloseMissingDays(challenge);
+        if (closedCount > 0) {
+          onRefresh();
+        }
       } catch (autoErr) {
         console.warn('Auto-closer engine check encountered non-fatal error:', autoErr);
       }
@@ -432,6 +436,30 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     setShowDeleteConfirm(true);
   };
 
+  const handleResetTodayData = async () => {
+    if (!challenge) return;
+    const todayYmd = getYptDayYmd();
+    if (
+      !window.confirm(
+        `⚠️ ADMIN RESET: This will purge leaked hours for Today (${todayYmd}), clear challenge High-Water Marks, and reset Today's leaderboard back to 0:00.\n\nYesterday's data remains untouched.\n\nProceed with reset?`
+      )
+    ) {
+      return;
+    }
+    try {
+      setIsResettingToday(true);
+      await resetTodayChallengeData(challenge.id, todayYmd);
+      await onRefresh();
+      // Re-trigger live fetch to get clean current live data
+      fetchLiveRoster();
+    } catch (err) {
+      console.error('Failed to reset today data:', err);
+      alert('Failed to reset today data: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsResettingToday(false);
+    }
+  };
+
   const confirmSoftDelete = async () => {
     setIsDeleting(true);
     try {
@@ -462,6 +490,16 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {canManageYptChallenges && (
             <>
+              <button
+                onClick={handleResetTodayData}
+                disabled={isResettingToday}
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer"
+                title="Purge leaked 12:01 hours and reset Today's leaderboard back to 0:00"
+              >
+                <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 shrink-0 ${isResettingToday ? 'animate-spin' : ''}`} />
+                <span>{isResettingToday ? 'Resetting...' : "Reset Today's Data"}</span>
+              </button>
+
               <button
                 onClick={() => setIsEditModalOpen(true)}
                 className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors whitespace-nowrap cursor-pointer"

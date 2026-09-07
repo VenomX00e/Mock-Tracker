@@ -140,6 +140,203 @@ function normalizeHandleNode(str: string): string {
 }
 
 /**
+ * ============================================================================
+ * FIRESTORE REST API ENCODING / DECODING & AUTONOMOUS FALLBACK ENGINE
+ * Enables the 5:15 AM finalizer and continuous cron to execute seamlessly
+ * even when Cloud Run fails to mount the default Firebase Admin Service Account (Error 7).
+ * ============================================================================
+ */
+
+function encodeFirestoreRestValue(val: any): any {
+  if (val === null || val === undefined) {
+    return { nullValue: null };
+  }
+  if (typeof val === 'boolean') {
+    return { booleanValue: val };
+  }
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) {
+      return { integerValue: String(val) };
+    }
+    return { doubleValue: val };
+  }
+  if (typeof val === 'string') {
+    return { stringValue: val };
+  }
+  if (Array.isArray(val)) {
+    return {
+      arrayValue: {
+        values: val.map(encodeFirestoreRestValue),
+      },
+    };
+  }
+  if (typeof val === 'object') {
+    if (val._methodName === 'serverTimestamp' || val.constructor?.name === 'FieldValue') {
+      return { timestampValue: new Date().toISOString() };
+    }
+    if (typeof val.toDate === 'function') {
+      return { timestampValue: val.toDate().toISOString() };
+    }
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (v !== undefined) {
+        fields[k] = encodeFirestoreRestValue(v);
+      }
+    }
+    return {
+      mapValue: {
+        fields,
+      },
+    };
+  }
+  return { stringValue: String(val) };
+}
+
+function encodeFirestoreRestFields(obj: Record<string, any>): Record<string, any> {
+  const fields: Record<string, any> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) {
+      fields[k] = encodeFirestoreRestValue(v);
+    }
+  }
+  return fields;
+}
+
+function parseFirestoreRestFields(fields: any): any {
+  if (!fields || typeof fields !== 'object') return null;
+  const result: any = {};
+  for (const [key, value] of Object.entries(fields) as [string, any][]) {
+    if (!value || typeof value !== 'object') continue;
+    if ('stringValue' in value) result[key] = value.stringValue;
+    else if ('booleanValue' in value) result[key] = value.booleanValue;
+    else if ('integerValue' in value) result[key] = parseInt(value.integerValue, 10);
+    else if ('doubleValue' in value) result[key] = parseFloat(value.doubleValue);
+    else if ('timestampValue' in value) result[key] = value.timestampValue;
+    else if ('mapValue' in value) result[key] = parseFirestoreRestFields(value.mapValue?.fields);
+    else if ('arrayValue' in value) {
+      result[key] = (value.arrayValue?.values || []).map((item: any) =>
+        parseFirestoreRestFields({ temp: item })?.temp
+      );
+    } else if ('nullValue' in value) result[key] = null;
+  }
+  return result;
+}
+
+function getFirestoreRestConfig(): { baseUrl: string; apiKey: string; projectId: string; dbId: string } {
+  const fbConfig = getFirebaseConfig();
+  const projectId = fbConfig.projectId || "project-8cd430e4-1498-4f8c-b8f";
+  const dbId = fbConfig.firestoreDatabaseId || "(default)";
+  const apiKey = fbConfig.apiKey || process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || "AIzaSyD_6GOGVqF_DJqhalF0gocMOjckhhWoWRI";
+  const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents`;
+  return { baseUrl, apiKey, projectId, dbId };
+}
+
+async function fetchFirestoreRestDoc(docPath: string): Promise<any | null> {
+  const { baseUrl, apiKey } = getFirestoreRestConfig();
+  const cleanPath = docPath.replace(/^\//, '');
+  const url = `${baseUrl}/${cleanPath}${apiKey ? `?key=${apiKey}` : ''}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      return null;
+    }
+    const data: any = await res.json();
+    return data?.fields ? parseFirestoreRestFields(data.fields) : null;
+  } catch (err) {
+    console.warn(`[Firestore REST] Error reading doc ${docPath}:`, err);
+    return null;
+  }
+}
+
+async function fetchFirestoreRestCollection(collectionPath: string): Promise<Array<{ id: string; data: any }>> {
+  const { baseUrl, apiKey } = getFirestoreRestConfig();
+  const cleanPath = collectionPath.replace(/^\//, '');
+  const url = `${baseUrl}/${cleanPath}?pageSize=300${apiKey ? `&key=${apiKey}` : ''}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (res.status === 404) return [];
+      return [];
+    }
+    const data: any = await res.json();
+    const docs: Array<{ id: string; data: any }> = [];
+    if (Array.isArray(data.documents)) {
+      for (const doc of data.documents) {
+        const docName = doc.name || '';
+        const docId = docName.split('/').pop() || '';
+        docs.push({
+          id: docId,
+          data: doc.fields ? parseFirestoreRestFields(doc.fields) : {},
+        });
+      }
+    }
+    return docs;
+  } catch (err) {
+    console.warn(`[Firestore REST] Error listing collection ${collectionPath}:`, err);
+    return [];
+  }
+}
+
+async function setFirestoreRestDoc(docPath: string, data: any, merge: boolean = true): Promise<any> {
+  const { apiKey, projectId, dbId } = getFirestoreRestConfig();
+  const cleanPath = docPath.replace(/^\//, '');
+  const docFullName = `projects/${projectId}/databases/${dbId}/documents/${cleanPath}`;
+  const commitUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents:commit${apiKey ? `?key=${apiKey}` : ''}`;
+
+  const fields = encodeFirestoreRestFields(data);
+  const writePayload: any = {
+    update: {
+      name: docFullName,
+      fields,
+    },
+  };
+
+  if (merge) {
+    writePayload.updateMask = {
+      fieldPaths: Object.keys(data),
+    };
+  }
+
+  try {
+    const res = await fetch(commitUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        writes: [writePayload],
+      }),
+    });
+
+    if (!res.ok) {
+      // Direct PATCH fallback
+      const fieldMaskParams = merge
+        ? Object.keys(data).map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&')
+        : '';
+      const patchUrl = `https://firestore.googleapis.com/v1/${docFullName}?${fieldMaskParams ? `${fieldMaskParams}&` : ''}${apiKey ? `key=${apiKey}` : ''}`;
+      const patchRes = await fetch(patchUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields }),
+      });
+      if (!patchRes.ok) {
+        const txt = await patchRes.text();
+        throw new Error(`Firestore REST write failed: ${patchRes.status} ${txt}`);
+      }
+      return await patchRes.json();
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.error(`[Firestore REST] Failed writing doc ${docPath}:`, err);
+    throw err;
+  }
+}
+
+async function updateFirestoreRestDoc(docPath: string, data: any): Promise<any> {
+  return setFirestoreRestDoc(docPath, data, true);
+}
+
+/**
  * Compares two handles with multi-tier matching.
  */
 function areHandlesMatchingNode(handleA?: string, handleB?: string, uidA?: string, uidB?: string): boolean {
@@ -639,6 +836,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         let existingMaxContHwms: Record<string, number> = {};
         let challengeDailyHwms: Record<string, number> = {};
         let challengeDailyMaxContHwms: Record<string, number> = {};
+        let challengeDailyCompletedChallenges: Record<string, number[]> = {};
 
         const challengeDocRef = adminDb.collection("yptChallenges").doc(challenge.id);
         const freshChallengeDoc = await challengeDocRef.get();
@@ -649,6 +847,9 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
           }
           if (chData?.dailyMaxContinuousHighWaterMarks && typeof chData.dailyMaxContinuousHighWaterMarks === 'object') {
             challengeDailyMaxContHwms = { ...chData.dailyMaxContinuousHighWaterMarks };
+          }
+          if (chData?.dailyCompletedChallenges && typeof chData.dailyCompletedChallenges === 'object') {
+            challengeDailyCompletedChallenges = { ...chData.dailyCompletedChallenges };
           }
         }
 
@@ -671,6 +872,10 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
             for (const [h, m] of Object.entries(sData.memberSnapshots)) {
               existingHwms[h] = Math.max(existingHwms[h] || 0, (m as any).hoursStudied || 0);
               existingMaxContHwms[h] = Math.max(existingMaxContHwms[h] || 0, (m as any).maxContinuousMs || 0);
+              if (Array.isArray((m as any).completedNativeChallengeIds) && (m as any).completedNativeChallengeIds.length > 0) {
+                const prev = challengeDailyCompletedChallenges[h] || [];
+                challengeDailyCompletedChallenges[h] = Array.from(new Set([...prev, ...(m as any).completedNativeChallengeIds]));
+              }
             }
           }
         }
@@ -682,6 +887,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
         const updatedChallengeHwms: Record<string, number> = { ...challengeDailyHwms };
         const updatedChallengeMaxContHwms: Record<string, number> = { ...challengeDailyMaxContHwms };
+        const updatedChallengeCompletedChallenges: Record<string, number[]> = { ...challengeDailyCompletedChallenges };
         const memberSnapshots: Record<string, any> = {};
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
         let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
@@ -749,16 +955,27 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
                   if (cItem && (cItem as any).st === 1) {
                     const cNum = Number(cIdStr);
                     completedChallengeIds.push(cNum);
-                    if (challenge.nativeYptChallengeId && Number(challenge.nativeYptChallengeId) === cNum) {
-                      hasCompletedActiveChallenge = true;
-                    }
                   }
                 }
-                // If no specific nativeYptChallengeId was configured, having any completed challenge counts as true
-                if (!challenge.nativeYptChallengeId && completedChallengeIds.length > 0) {
-                  hasCompletedActiveChallenge = true;
-                }
               }
+            }
+
+            // Merge newly completed challenge IDs with whatever was already stored in dailyCompletedChallenges
+            const prevStoredCompleted = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+            const mergedCompletedSet = new Set<number>([
+              ...prevStoredCompleted,
+              ...completedChallengeIds,
+            ]);
+            const finalCompletedList = Array.from(mergedCompletedSet);
+            updatedChallengeCompletedChallenges[resolvedUdKey] = finalCompletedList;
+            if (cleanHandle && cleanHandle !== resolvedUdKey) {
+              updatedChallengeCompletedChallenges[cleanHandle] = finalCompletedList;
+            }
+
+            if (challenge.nativeYptChallengeId && finalCompletedList.includes(Number(challenge.nativeYptChallengeId))) {
+              hasCompletedActiveChallenge = true;
+            } else if (!challenge.nativeYptChallengeId && finalCompletedList.length > 0) {
+              hasCompletedActiveChallenge = true;
             }
 
             // Phase 1 & 3 High-Water Mark Calculation Logic:
@@ -784,7 +1001,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
               peakHours,
               challenge.rules,
               [],
-              completedChallengeIds,
+              finalCompletedList,
               false, // No penalty during live open day
               peakMaxContMs
             );
@@ -801,7 +1018,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
               studyMs: peakSm,
               isStudying: isCurrentlyStudying,
               hasCompleted: hasCompletedActiveChallenge,
-              completedChallengeIds,
+              completedChallengeIds: finalCompletedList,
               lastSyncedAt: new Date().toISOString(),
             });
 
@@ -815,7 +1032,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
               maxContinuousMs: peakMaxContMs,
               isCurrentlyStudying,
               isStudying: isCurrentlyStudying,
-              completedNativeChallengeIds: completedChallengeIds,
+              completedNativeChallengeIds: finalCompletedList,
               hasCompleted: hasCompletedActiveChallenge,
               basePoints: calculated.baseStudyPoints,
               bonusPoints: calculated.bonusPoints,
@@ -893,15 +1110,27 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
                     if (cItem && (cItem as any).st === 1) {
                       const cNum = Number(cIdStr);
                       completedChallengeIds.push(cNum);
-                      if (challenge.nativeYptChallengeId && Number(challenge.nativeYptChallengeId) === cNum) {
-                        hasCompletedActiveChallenge = true;
-                      }
                     }
                   }
-                  if (!challenge.nativeYptChallengeId && completedChallengeIds.length > 0) {
-                    hasCompletedActiveChallenge = true;
-                  }
                 }
+              }
+
+              // Merge newly completed challenge IDs with whatever was already stored in dailyCompletedChallenges
+              const prevStoredCompleted = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+              const mergedCompletedSet = new Set<number>([
+                ...prevStoredCompleted,
+                ...completedChallengeIds,
+              ]);
+              const finalCompletedList = Array.from(mergedCompletedSet);
+              updatedChallengeCompletedChallenges[resolvedUdKey] = finalCompletedList;
+              if (cleanHandle && cleanHandle !== resolvedUdKey) {
+                updatedChallengeCompletedChallenges[cleanHandle] = finalCompletedList;
+              }
+
+              if (challenge.nativeYptChallengeId && finalCompletedList.includes(Number(challenge.nativeYptChallengeId))) {
+                hasCompletedActiveChallenge = true;
+              } else if (!challenge.nativeYptChallengeId && finalCompletedList.length > 0) {
+                hasCompletedActiveChallenge = true;
               }
 
               // Phase 1 & 3 High-Water Mark Calculation Logic
@@ -926,7 +1155,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
                 peakHours,
                 challenge.rules,
                 [],
-                completedChallengeIds,
+                finalCompletedList,
                 false, // No penalty during live open day
                 peakMaxContMs
               );
@@ -943,7 +1172,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
                 studyMs: peakSm,
                 isStudying: isCurrentlyStudying,
                 hasCompleted: hasCompletedActiveChallenge,
-                completedChallengeIds,
+                completedChallengeIds: finalCompletedList,
                 lastSyncedAt: new Date().toISOString(),
               });
 
@@ -954,7 +1183,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
                 studyMs: peakSm,
                 maxContinuousMs: peakMaxContMs,
                 isCurrentlyStudying,
-                completedNativeChallengeIds: completedChallengeIds,
+                completedNativeChallengeIds: finalCompletedList,
                 hasCompleted: hasCompletedActiveChallenge,
                 basePoints: calculated.baseStudyPoints,
                 bonusPoints: calculated.bonusPoints,
@@ -1015,10 +1244,12 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         // Includes:
         // - participants: The newly calculated array from Phase 3
         // - dailyHighWaterMarks: The updated peak times map from Phase 1
+        // - dailyCompletedChallenges: The merged map of completed challenge IDs
         // - lastCronSyncAt: Firestore FieldValue.serverTimestamp()
         const challengeUpdatePayload: any = {
           dailyHighWaterMarks: updatedChallengeHwms,
           dailyMaxContinuousHighWaterMarks: updatedChallengeMaxContHwms,
+          dailyCompletedChallenges: updatedChallengeCompletedChallenges,
           lastDailySnapshotDate: activeYmd,
           lastSyncedAt: new Date().toISOString(),
           lastCronSyncAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1058,8 +1289,17 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
 
     // Phase 4 Batch Commit: Commit all updates across all active challenges simultaneously
     if (batchOperationCount > 0) {
-      await writeBatch.commit();
-      console.log(`[YPT 15-MIN CRON] Phase 4 Batch Commit: Successfully committed ${batchOperationCount} write operations across ${activeChallenges.length} active challenge(s) simultaneously.`);
+      try {
+        await writeBatch.commit();
+        console.log(`[YPT 15-MIN CRON] Phase 4 Batch Commit: Successfully committed ${batchOperationCount} write operations across ${activeChallenges.length} active challenge(s) simultaneously.`);
+      } catch (commitErr: any) {
+        if (commitErr && (commitErr.code === 7 || commitErr.code === 16 || commitErr.message?.includes("PERMISSION_DENIED") || commitErr.message?.includes("ADC") || commitErr.message?.includes("UNAUTHENTICATED"))) {
+          console.warn("[YPT 15-MIN CRON] Admin writeBatch.commit() encountered Error 7 (PERMISSION_DENIED). Synchronizing challenge states via authenticated Firestore REST API fallback...");
+          return await executeContinuousYptSyncViaRest();
+        } else {
+          throw commitErr;
+        }
+      }
     }
 
     return {
@@ -1070,11 +1310,483 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
       errors,
     };
   } catch (err: any) {
-    if (err && err.code === 7) {
-      // Sandbox environment notice
+    if (err && (err.code === 7 || err.code === 16 || err.message?.includes("PERMISSION_DENIED") || err.message?.includes("ADC") || err.message?.includes("UNAUTHENTICATED"))) {
+      console.warn("[YPT 15-MIN CRON] Admin Firestore encountered PERMISSION_DENIED (Error 7). Delegating to authenticated Firestore REST API sync...");
+      return await executeContinuousYptSyncViaRest();
     } else {
-      console.error("[YPT 15-MIN CRON] Encountered unexpected error:", err);
+      console.error("[YPT 15-MIN CRON] Encountered unexpected error, attempting REST fallback:", err);
+      try {
+        return await executeContinuousYptSyncViaRest();
+      } catch (restErr: any) {
+        errors.push(err?.message || String(err));
+        return {
+          success: false,
+          timestamp: new Date().toISOString(),
+          executionTimeMs: Date.now() - startTimeMs,
+          results,
+          errors,
+        };
+      }
     }
+  }
+}
+
+/**
+ * Executes 15-Minute Continuous Sync directly via authenticated Google Cloud Firestore REST API.
+ * Uses apiKey from firebase-applet-config.json to authenticate even when Vercel or Cloud Run fails to mount
+ * the default Firebase Admin Service Account (Error 7: PERMISSION_DENIED).
+ */
+async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticReport> {
+  const startTimeMs = Date.now();
+  const results: YptSyncDiagnosticResult[] = [];
+  const errors: string[] = [];
+  const activeYmd = getYptDayYmdNode();
+  console.log(`[YPT 15-MIN REST SYNC] Starting live sync for active date: ${activeYmd} via REST API fallback...`);
+
+  try {
+    const rawChallenges = await fetchFirestoreRestCollection("yptChallenges");
+    const activeChallenges = rawChallenges
+      .map((d) => ({ id: d.id, ...d.data } as any))
+      .filter((c) => !c.isDeleted && c.status !== 'completed');
+
+    if (activeChallenges.length === 0) {
+      return {
+        success: true,
+        timestamp: new Date().toISOString(),
+        executionTimeMs: Date.now() - startTimeMs,
+        results: [],
+        errors: [],
+      };
+    }
+
+    for (const challenge of activeChallenges) {
+      try {
+        const challengeEndDateYmd = getChallengeEndDateYmdNode(challenge);
+        if (activeYmd > challengeEndDateYmd) {
+          continue;
+        }
+
+        const groupIds = (challenge.groups || []).map((g: any) => g.id || g.gid || g)
+          .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
+          .concat(challenge.groupIds || [])
+          .concat(challenge.targetGroupIds || []);
+
+        const rawGroupId = challenge.yptGroupId || (challenge.groups?.[0]?.id || challenge.groups?.[0]?.gid) || (challenge.groupIds?.[0]) || (challenge.targetGroupIds?.[0]) || (groupIds.length > 0 ? groupIds[0] : null);
+        const resolvedYptGroupId = rawGroupId ? (!isNaN(Number(rawGroupId)) ? Number(rawGroupId) : rawGroupId) : null;
+
+        const { members: liveMembers, errors: rosterErrors } = await fetchYptRosterForChallengeNode(groupIds);
+        if (rosterErrors && rosterErrors.length > 0) {
+          errors.push(...rosterErrors);
+        }
+
+        let existingHwms: Record<string, number> = {};
+        let existingMaxContHwms: Record<string, number> = {};
+        let challengeDailyHwms: Record<string, number> = {};
+        let challengeDailyMaxContHwms: Record<string, number> = {};
+        let challengeDailyCompletedChallenges: Record<string, number[]> = {};
+
+        const freshChallengeData = await fetchFirestoreRestDoc(`yptChallenges/${challenge.id}`);
+        if (freshChallengeData) {
+          if (freshChallengeData.dailyHighWaterMarks && typeof freshChallengeData.dailyHighWaterMarks === 'object') {
+            challengeDailyHwms = { ...freshChallengeData.dailyHighWaterMarks };
+          }
+          if (freshChallengeData.dailyMaxContinuousHighWaterMarks && typeof freshChallengeData.dailyMaxContinuousHighWaterMarks === 'object') {
+            challengeDailyMaxContHwms = { ...freshChallengeData.dailyMaxContinuousHighWaterMarks };
+          }
+          if (freshChallengeData.dailyCompletedChallenges && typeof freshChallengeData.dailyCompletedChallenges === 'object') {
+            challengeDailyCompletedChallenges = { ...freshChallengeData.dailyCompletedChallenges };
+          }
+        }
+
+        const existingSnapData = await fetchFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${activeYmd}`);
+        if (existingSnapData) {
+          if (existingSnapData.isLocked) {
+            continue;
+          }
+          if (existingSnapData.highWaterMarks) {
+            existingHwms = { ...existingSnapData.highWaterMarks };
+          }
+          if (existingSnapData.maxContinuousHighWaterMarks) {
+            existingMaxContHwms = { ...existingSnapData.maxContinuousHighWaterMarks };
+          }
+          if (existingSnapData.memberSnapshots) {
+            for (const [h, m] of Object.entries(existingSnapData.memberSnapshots)) {
+              existingHwms[h] = Math.max(existingHwms[h] || 0, (m as any).hoursStudied || 0);
+              existingMaxContHwms[h] = Math.max(existingMaxContHwms[h] || 0, (m as any).maxContinuousMs || 0);
+              if (Array.isArray((m as any).completedNativeChallengeIds) && (m as any).completedNativeChallengeIds.length > 0) {
+                const prev = challengeDailyCompletedChallenges[h] || [];
+                challengeDailyCompletedChallenges[h] = Array.from(new Set([...prev, ...(m as any).completedNativeChallengeIds]));
+              }
+            }
+          }
+        }
+
+        const mode = challenge.mode || 'team';
+        const isSoloMode = mode === 'individual';
+
+        const updatedHwms: Record<string, number> = { ...existingHwms };
+        const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
+        const updatedChallengeHwms: Record<string, number> = { ...challengeDailyHwms };
+        const updatedChallengeMaxContHwms: Record<string, number> = { ...challengeDailyMaxContHwms };
+        const updatedChallengeCompletedChallenges: Record<string, number[]> = { ...challengeDailyCompletedChallenges };
+        const memberSnapshots: Record<string, any> = {};
+        const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+        let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
+        let dayTotalHours = 0;
+        let dayTotalPoints = 0;
+        let activeMemberCount = 0;
+
+        const updatedParticipants: Array<{
+          yptUd: number;
+          yptHandle: string;
+          hours: number;
+          studyMs: number;
+          isStudying: boolean;
+          hasCompleted: boolean;
+          completedChallengeIds: number[];
+          lastSyncedAt: string;
+        }> = [];
+
+        if (isSoloMode) {
+          const participantsList: Array<{ yptUd?: number; yptHandle: string }> =
+            challenge.participants && challenge.participants.length > 0
+              ? challenge.participants
+              : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
+
+          participantsList.forEach((p) => {
+            const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+            const memberUdStr = p.yptUd ? String(p.yptUd) : '';
+            if (!cleanHandle && !memberUdStr) return;
+
+            const liveMember = liveMembers.find((m: any) => {
+              if (p.yptUd && m.ud && Number(m.ud) === Number(p.yptUd)) return true;
+              if (memberUdStr && String(m.ud) === memberUdStr) return true;
+              return areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''));
+            });
+
+            const resolvedUd = liveMember?.ud || p.yptUd || 0;
+            const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+            let apiLiveSm = 0;
+            let apiLiveHours = 0;
+            let apiLiveMaxContMs = 0;
+            const completedChallengeIds: number[] = [];
+            let hasCompletedActiveChallenge = false;
+
+            if (liveMember) {
+              if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                apiLiveSm = liveMember.dl.sm;
+                apiLiveHours = liveMember.dl.sm / 3600000;
+              } else if (typeof liveMember.sm === 'number') {
+                apiLiveSm = liveMember.sm;
+                apiLiveHours = liveMember.sm / 3600000;
+              }
+
+              if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
+                apiLiveMaxContMs = liveMember.dl.mm;
+              }
+
+              if (liveMember.cls && typeof liveMember.cls === 'object') {
+                for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
+                  if (cItem && (cItem as any).st === 1) {
+                    const cNum = Number(cIdStr);
+                    completedChallengeIds.push(cNum);
+                  }
+                }
+              }
+            }
+
+            const prevStoredCompleted = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+            const mergedCompletedSet = new Set<number>([
+              ...prevStoredCompleted,
+              ...completedChallengeIds,
+            ]);
+            const finalCompletedList = Array.from(mergedCompletedSet);
+            updatedChallengeCompletedChallenges[resolvedUdKey] = finalCompletedList;
+            if (cleanHandle && cleanHandle !== resolvedUdKey) {
+              updatedChallengeCompletedChallenges[cleanHandle] = finalCompletedList;
+            }
+
+            if (challenge.nativeYptChallengeId && finalCompletedList.includes(Number(challenge.nativeYptChallengeId))) {
+              hasCompletedActiveChallenge = true;
+            } else if (!challenge.nativeYptChallengeId && finalCompletedList.length > 0) {
+              hasCompletedActiveChallenge = true;
+            }
+
+            const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+            const peakSm = Math.max(prevStoredSm, apiLiveSm);
+            updatedChallengeHwms[resolvedUdKey] = peakSm;
+
+            const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+            const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
+            updatedChallengeMaxContHwms[resolvedUdKey] = peakMaxContMs;
+
+            const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
+            updatedHwms[cleanHandle] = peakHours;
+            updatedMaxContHwms[cleanHandle] = peakMaxContMs;
+
+            if (peakHours > 0) activeMemberCount++;
+            dayTotalHours += peakHours;
+
+            const calculated = calculatePointsFromRulesNode(
+              peakHours,
+              challenge.rules,
+              [],
+              finalCompletedList,
+              false, // No penalties on live open day
+              peakMaxContMs
+            );
+
+            dayTotalPoints += calculated.netPoints;
+
+            const isCurrentlyStudying = Boolean(liveMember?.dl?.is);
+
+            const snapItem = {
+              handle: liveMember?.n || p.yptHandle || cleanHandle,
+              nickname: liveMember?.n || p.yptHandle || cleanHandle,
+              rawYptUd: resolvedUd,
+              yptUd: resolvedUd,
+              hoursStudied: peakHours,
+              studyMs: peakSm,
+              maxContinuousMs: peakMaxContMs,
+              isCurrentlyStudying,
+              isStudying: isCurrentlyStudying,
+              completedNativeChallengeIds: finalCompletedList,
+              hasCompleted: hasCompletedActiveChallenge,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: calculated.penaltyPoints,
+              netPoints: calculated.netPoints,
+              appliedRuleBreakdown: calculated.appliedRules,
+              status: 'active',
+              lastSyncedAt: new Date().toISOString(),
+            };
+
+            memberSnapshots[cleanHandle] = snapItem;
+            if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
+              memberSnapshots[resolvedUdKey] = snapItem;
+            }
+
+            updatedParticipants.push({
+              yptUd: resolvedUd,
+              yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
+              hours: peakHours,
+              studyMs: peakSm,
+              isStudying: isCurrentlyStudying,
+              hasCompleted: hasCompletedActiveChallenge,
+              completedChallengeIds: finalCompletedList,
+              lastSyncedAt: new Date().toISOString(),
+            });
+          });
+
+          const seenKeys = new Set<string>();
+          const participantDraft = Object.values(memberSnapshots)
+            .filter((m: any) => {
+              const uKey = m.rawYptUd ? `ud_${m.rawYptUd}` : `h_${m.handle}`;
+              if (seenKeys.has(uKey)) return false;
+              seenKeys.add(uKey);
+              return true;
+            })
+            .map((m: any) => ({
+              yptUd: m.rawYptUd,
+              yptHandle: m.handle,
+              dayHours: m.hoursStudied,
+              dayPoints: m.netPoints,
+            }));
+          participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+          participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
+        } else {
+          (challenge.teams || []).forEach((team: any) => {
+            let teamDailyHours = 0;
+            let teamDailyPoints = 0;
+
+            (team.memberUids || []).forEach((memberHandleOrUid: string) => {
+              const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+              const liveMember = liveMembers.find((m: any) => {
+                if (m.ud && String(m.ud) === memberHandleOrUid) return true;
+                return areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud));
+              });
+
+              const resolvedUd = liveMember?.ud || (!isNaN(Number(memberHandleOrUid)) ? Number(memberHandleOrUid) : 0);
+              const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+              let apiLiveSm = 0;
+              let apiLiveHours = 0;
+              let apiLiveMaxContMs = 0;
+              const completedChallengeIds: number[] = [];
+              let hasCompletedActiveChallenge = false;
+
+              if (liveMember) {
+                if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
+                  apiLiveSm = liveMember.dl.sm;
+                  apiLiveHours = liveMember.dl.sm / 3600000;
+                } else if (typeof liveMember.sm === 'number') {
+                  apiLiveSm = liveMember.sm;
+                  apiLiveHours = liveMember.sm / 3600000;
+                }
+
+                if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
+                  apiLiveMaxContMs = liveMember.dl.mm;
+                }
+
+                if (liveMember.cls && typeof liveMember.cls === 'object') {
+                  for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
+                    if (cItem && (cItem as any).st === 1) {
+                      const cNum = Number(cIdStr);
+                      completedChallengeIds.push(cNum);
+                    }
+                  }
+                }
+              }
+
+              const prevStoredCompleted = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+              const mergedCompletedSet = new Set<number>([
+                ...prevStoredCompleted,
+                ...completedChallengeIds,
+              ]);
+              const finalCompletedList = Array.from(mergedCompletedSet);
+              updatedChallengeCompletedChallenges[resolvedUdKey] = finalCompletedList;
+              if (cleanHandle && cleanHandle !== resolvedUdKey) {
+                updatedChallengeCompletedChallenges[cleanHandle] = finalCompletedList;
+              }
+
+              if (challenge.nativeYptChallengeId && finalCompletedList.includes(Number(challenge.nativeYptChallengeId))) {
+                hasCompletedActiveChallenge = true;
+              } else if (!challenge.nativeYptChallengeId && finalCompletedList.length > 0) {
+                hasCompletedActiveChallenge = true;
+              }
+
+              const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+              const peakSm = Math.max(prevStoredSm, apiLiveSm);
+              updatedChallengeHwms[resolvedUdKey] = peakSm;
+
+              const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+              const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
+              updatedChallengeMaxContHwms[resolvedUdKey] = peakMaxContMs;
+
+              const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
+              updatedHwms[cleanHandle] = peakHours;
+              updatedMaxContHwms[cleanHandle] = peakMaxContMs;
+
+              if (peakHours > 0) activeMemberCount++;
+              dayTotalHours += peakHours;
+              teamDailyHours += peakHours;
+
+              const calculated = calculatePointsFromRulesNode(
+                peakHours,
+                challenge.rules,
+                [],
+                finalCompletedList,
+                false, // No penalties on live open day
+                peakMaxContMs
+              );
+
+              teamDailyPoints += calculated.netPoints;
+
+              const isCurrentlyStudying = Boolean(liveMember?.dl?.is);
+
+              memberSnapshots[cleanHandle] = {
+                handle: liveMember?.n || cleanHandle,
+                rawYptUd: liveMember?.ud,
+                hoursStudied: peakHours,
+                studyMs: peakSm,
+                maxContinuousMs: peakMaxContMs,
+                isCurrentlyStudying,
+                isStudying: isCurrentlyStudying,
+                completedNativeChallengeIds: finalCompletedList,
+                hasCompleted: hasCompletedActiveChallenge,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: calculated.penaltyPoints,
+                netPoints: calculated.netPoints,
+                appliedRuleBreakdown: calculated.appliedRules,
+                status: 'active',
+                lastSyncedAt: new Date().toISOString(),
+              };
+
+              updatedParticipants.push({
+                yptUd: resolvedUd,
+                yptHandle: liveMember?.n || cleanHandle,
+                hours: peakHours,
+                studyMs: peakSm,
+                isStudying: isCurrentlyStudying,
+                hasCompleted: hasCompletedActiveChallenge,
+                completedChallengeIds: finalCompletedList,
+                lastSyncedAt: new Date().toISOString(),
+              });
+            });
+
+            teamStandingsDraft.push({
+              teamId: team.id,
+              teamName: team.name || `Team ${team.id}`,
+              dayHours: Math.round(teamDailyHours * 100) / 100,
+              dayPoints: teamDailyPoints,
+            });
+
+            dayTotalPoints += teamDailyPoints;
+          });
+
+          teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+        }
+
+        const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+        const snapshotData: any = {
+          dateYmd: activeYmd,
+          isLocked: false,
+          totalHoursStudied: Math.round(dayTotalHours * 100) / 100,
+          totalChallengePoints: dayTotalPoints,
+          activeMemberCount,
+          memberSnapshots,
+          teamStandings: isSoloMode ? [] : teamStandings,
+          participantStandings: isSoloMode ? participantStandings : undefined,
+          highWaterMarks: updatedHwms,
+          maxContinuousHighWaterMarks: updatedMaxContHwms,
+          lastSyncedAt: new Date().toISOString(),
+        };
+
+        // Write daily snapshot via REST
+        await setFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${activeYmd}`, snapshotData);
+
+        // Update challenge doc via REST
+        const challengeUpdatePayload: any = {
+          dailyHighWaterMarks: updatedChallengeHwms,
+          dailyMaxContinuousHighWaterMarks: updatedChallengeMaxContHwms,
+          dailyCompletedChallenges: updatedChallengeCompletedChallenges,
+          lastDailySnapshotDate: activeYmd,
+          lastSyncedAt: new Date().toISOString(),
+          lastCronSyncAt: new Date().toISOString(),
+        };
+        if (updatedParticipants.length > 0) {
+          challengeUpdatePayload.participants = updatedParticipants;
+        }
+        await updateFirestoreRestDoc(`yptChallenges/${challenge.id}`, challengeUpdatePayload);
+
+        results.push({
+          challengeId: challenge.id,
+          challengeName: challenge.title || challenge.name || "Untitled Challenge",
+          yptGroupId: resolvedYptGroupId,
+          participantsFound: liveMembers.length,
+          participantsUpdated: updatedParticipants.length,
+        });
+
+        console.log(`[YPT 15-MIN REST SYNC] Successfully synced challenge ${challenge.title || challenge.name || challenge.id} (${activeYmd}) via REST.`);
+      } catch (chErr: any) {
+        const errDesc = `Error in REST sync for challenge ${challenge.id}: ${chErr?.message || String(chErr)}`;
+        console.error(`[YPT 15-MIN REST SYNC] ${errDesc}`, chErr);
+        errors.push(errDesc);
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      timestamp: new Date().toISOString(),
+      executionTimeMs: Date.now() - startTimeMs,
+      results,
+      errors,
+    };
+  } catch (err: any) {
+    console.error("[YPT 15-MIN REST SYNC] Top-level REST sync error:", err);
     errors.push(err?.message || String(err));
     return {
       success: false,
@@ -1087,12 +1799,423 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
 }
 
 /**
+ * Executes 5:15 AM IST Daily Finalizer directly via authenticated Google Cloud Firestore REST API.
+ * Uses apiKey from firebase-applet-config.json to authenticate even when Cloud Run fails to mount
+ * the default Firebase Admin Service Account (Error 7: PERMISSION_DENIED).
+ */
+async function execute515AmYptFinalizerViaRest(): Promise<void> {
+  const yesterdayYmd = getYesterdayYptDayYmdNode();
+  const todayYmd = getYptDayYmdNode();
+  console.log(`[YPT 5:15 AM REST FINALIZER] Executing Day Transition via REST API fallback. Concluded: ${yesterdayYmd}, Fresh: ${todayYmd}...`);
+
+  try {
+    const rawChallenges = await fetchFirestoreRestCollection("yptChallenges");
+    const activeChallenges = rawChallenges
+      .map((d) => ({ id: d.id, ...d.data } as any))
+      .filter((c) => !c.isDeleted && c.status !== 'completed');
+
+    if (activeChallenges.length === 0) {
+      console.log("[YPT 5:15 AM REST FINALIZER] No active challenges found.");
+      return;
+    }
+
+    for (const challenge of activeChallenges) {
+      try {
+        const groupIds = (challenge.groups || []).map((g: any) => g.id || g.gid || g)
+          .concat(challenge.yptGroupId ? [challenge.yptGroupId] : [])
+          .concat(challenge.groupIds || [])
+          .concat(challenge.targetGroupIds || []);
+
+        const { members: liveMembers } = await fetchYptRosterForChallengeNode(groupIds);
+
+        // STEP A: Lock & Finalize Yesterday's Snapshot
+        const yesterdaySnapData = await fetchFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${yesterdayYmd}`);
+        const freshChallengeData = await fetchFirestoreRestDoc(`yptChallenges/${challenge.id}`);
+
+        let existingHwms: Record<string, number> = {};
+        let existingMaxContHwms: Record<string, number> = {};
+        let challengeDailyHwms: Record<string, number> = {};
+        let challengeDailyMaxContHwms: Record<string, number> = {};
+        let challengeDailyCompletedChallenges: Record<string, number[]> = {};
+
+        if (freshChallengeData) {
+          if (freshChallengeData.dailyHighWaterMarks && typeof freshChallengeData.dailyHighWaterMarks === 'object') {
+            challengeDailyHwms = { ...freshChallengeData.dailyHighWaterMarks };
+          }
+          if (freshChallengeData.dailyMaxContinuousHighWaterMarks && typeof freshChallengeData.dailyMaxContinuousHighWaterMarks === 'object') {
+            challengeDailyMaxContHwms = { ...freshChallengeData.dailyMaxContinuousHighWaterMarks };
+          }
+          if (freshChallengeData.dailyCompletedChallenges && typeof freshChallengeData.dailyCompletedChallenges === 'object') {
+            challengeDailyCompletedChallenges = { ...freshChallengeData.dailyCompletedChallenges };
+          }
+        }
+
+        if (yesterdaySnapData) {
+          if (yesterdaySnapData.highWaterMarks) existingHwms = { ...yesterdaySnapData.highWaterMarks };
+          if (yesterdaySnapData.maxContinuousHighWaterMarks) existingMaxContHwms = { ...yesterdaySnapData.maxContinuousHighWaterMarks };
+          if (yesterdaySnapData.memberSnapshots) {
+            for (const [h, m] of Object.entries(yesterdaySnapData.memberSnapshots)) {
+              existingHwms[h] = Math.max(existingHwms[h] || 0, (m as any).hoursStudied || 0);
+              existingMaxContHwms[h] = Math.max(existingMaxContHwms[h] || 0, (m as any).maxContinuousMs || 0);
+              if (Array.isArray((m as any).completedNativeChallengeIds) && (m as any).completedNativeChallengeIds.length > 0) {
+                const prev = challengeDailyCompletedChallenges[h] || [];
+                challengeDailyCompletedChallenges[h] = Array.from(new Set([...prev, ...(m as any).completedNativeChallengeIds]));
+              }
+            }
+          }
+        }
+
+        const mode = challenge.mode || 'team';
+        const isSoloMode = mode === 'individual';
+
+        const finalizedMemberSnapshots: Record<string, any> = {};
+        const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
+        let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
+        let dayTotalHours = 0;
+        let dayTotalPoints = 0;
+        let activeMemberCount = 0;
+
+        if (isSoloMode) {
+          const participantsList: Array<{ yptUd?: number; yptHandle: string }> =
+            challenge.participants && challenge.participants.length > 0
+              ? challenge.participants
+              : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
+
+          participantsList.forEach((p) => {
+            const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+            const memberUdStr = p.yptUd ? String(p.yptUd) : '';
+            if (!cleanHandle && !memberUdStr) return;
+
+            const liveMember = liveMembers.find((m: any) =>
+              (memberUdStr && String(m.ud) === memberUdStr) ||
+              areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud || ''))
+            );
+
+            const resolvedUd = liveMember?.ud || p.yptUd;
+            const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+            // 4:59 AM Rule: Do not pull live running timer at 5:15 AM for yesterday
+            const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+            const peakSm = prevStoredSm;
+            const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
+            existingHwms[cleanHandle] = peakHours;
+
+            const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+            const peakMaxContMs = prevMaxContStored;
+            existingMaxContHwms[cleanHandle] = peakMaxContMs;
+
+            if (peakHours > 0) activeMemberCount++;
+            dayTotalHours += peakHours;
+
+            const memberCompletedChallenges = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+
+            const calculated = calculatePointsFromRulesNode(
+              peakHours,
+              challenge.rules,
+              [],
+              memberCompletedChallenges,
+              true, // Apply penalty on final lock
+              peakMaxContMs
+            );
+
+            dayTotalPoints += calculated.netPoints;
+
+            const hasCompletedActiveChallenge = challenge.nativeYptChallengeId
+              ? memberCompletedChallenges.includes(Number(challenge.nativeYptChallengeId))
+              : (memberCompletedChallenges.length > 0);
+
+            const finalSnapshotItem = {
+              handle: liveMember?.n || p.yptHandle || cleanHandle,
+              nickname: liveMember?.n || p.yptHandle || cleanHandle,
+              rawYptUd: resolvedUd,
+              yptUd: resolvedUd,
+              hoursStudied: peakHours,
+              studyMs: peakSm,
+              maxContinuousMs: peakMaxContMs,
+              isCurrentlyStudying: false,
+              isStudying: false,
+              completedNativeChallengeIds: memberCompletedChallenges,
+              hasCompleted: hasCompletedActiveChallenge,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: calculated.penaltyPoints,
+              netPoints: calculated.netPoints,
+              appliedRuleBreakdown: calculated.appliedRules,
+              status: 'active',
+              lastSyncedAt: new Date().toISOString(),
+            };
+
+            finalizedMemberSnapshots[cleanHandle] = finalSnapshotItem;
+            if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
+              finalizedMemberSnapshots[resolvedUdKey] = finalSnapshotItem;
+            }
+          });
+
+          const seenKeys = new Set<string>();
+          const participantDraft = Object.values(finalizedMemberSnapshots)
+            .filter((m: any) => {
+              const uKey = m.rawYptUd ? `ud_${m.rawYptUd}` : `h_${m.handle}`;
+              if (seenKeys.has(uKey)) return false;
+              seenKeys.add(uKey);
+              return true;
+            })
+            .map((m: any) => ({
+              yptUd: m.rawYptUd,
+              yptHandle: m.handle,
+              dayHours: m.hoursStudied,
+              dayPoints: m.netPoints,
+            }));
+          participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+          participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
+        } else {
+          (challenge.teams || []).forEach((team: any) => {
+            let teamDailyHours = 0;
+            let teamDailyPoints = 0;
+
+            (team.memberUids || []).forEach((memberHandleOrUid: string) => {
+              const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
+              const liveMember = liveMembers.find((m: any) =>
+                (m.ud && String(m.ud) === memberHandleOrUid) ||
+                areHandlesMatchingNode(m.n || m.nickname, cleanHandle, String(m.ud))
+              );
+
+              const resolvedUd = liveMember?.ud || (!isNaN(Number(memberHandleOrUid)) ? Number(memberHandleOrUid) : undefined);
+              const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
+
+              // 4:59 AM Rule: Use peak captured up to 4:59 AM
+              const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
+              const peakSm = prevStoredSm;
+              const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
+              existingHwms[cleanHandle] = peakHours;
+
+              const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
+              const peakMaxContMs = prevMaxContStored;
+              existingMaxContHwms[cleanHandle] = peakMaxContMs;
+
+              if (peakHours > 0) activeMemberCount++;
+              dayTotalHours += peakHours;
+              teamDailyHours += peakHours;
+
+              const memberCompletedChallenges = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+
+              const calculated = calculatePointsFromRulesNode(
+                peakHours,
+                challenge.rules,
+                [],
+                memberCompletedChallenges,
+                true, // Apply penalty on final lock
+                peakMaxContMs
+              );
+
+              teamDailyPoints += calculated.netPoints;
+
+              const hasCompletedActiveChallenge = challenge.nativeYptChallengeId
+                ? memberCompletedChallenges.includes(Number(challenge.nativeYptChallengeId))
+                : (memberCompletedChallenges.length > 0);
+
+              finalizedMemberSnapshots[cleanHandle] = {
+                handle: liveMember?.n || cleanHandle,
+                rawYptUd: liveMember?.ud,
+                hoursStudied: peakHours,
+                studyMs: Math.round(peakHours * 3600000),
+                maxContinuousMs: peakMaxContMs,
+                isCurrentlyStudying: false,
+                isStudying: false,
+                completedNativeChallengeIds: memberCompletedChallenges,
+                hasCompleted: hasCompletedActiveChallenge,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: calculated.penaltyPoints,
+                netPoints: calculated.netPoints,
+                appliedRuleBreakdown: calculated.appliedRules,
+                status: 'active',
+                lastSyncedAt: new Date().toISOString(),
+              };
+            });
+
+            teamStandingsDraft.push({
+              teamId: team.id,
+              teamName: team.name || `Team ${team.id}`,
+              dayHours: Math.round(teamDailyHours * 100) / 100,
+              dayPoints: teamDailyPoints,
+            });
+
+            dayTotalPoints += teamDailyPoints;
+          });
+
+          teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+        }
+
+        const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+        const lockedYesterdayData: any = {
+          id: yesterdayYmd,
+          challengeId: challenge.id,
+          dateYmd: yesterdayYmd,
+          targetDateYmd: yesterdayYmd,
+          isLocked: true,
+          lockedAt: new Date().toISOString(),
+          lockedBy: 'cron_system' as const,
+          totalChallengeHours: Math.round(dayTotalHours * 100) / 100,
+          totalChallengePoints: dayTotalPoints,
+          activeMemberCount,
+          memberSnapshots: finalizedMemberSnapshots,
+          teamStandings: isSoloMode ? [] : teamStandings,
+          participantStandings: isSoloMode ? participantStandings : undefined,
+          highWaterMarks: existingHwms,
+          maxContinuousHighWaterMarks: existingMaxContHwms,
+          isAutoClosed: true,
+          closedAt: Date.now(),
+        };
+
+        // Write locked snapshot for yesterday via REST
+        await setFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${yesterdayYmd}`, lockedYesterdayData, true);
+
+        // STEP B: Check if Challenge has reached its End Date
+        const challengeEndDateYmd = getChallengeEndDateYmdNode(challenge);
+        const isChallengeConcluded = yesterdayYmd >= challengeEndDateYmd;
+
+        if (isChallengeConcluded) {
+          await updateFirestoreRestDoc(`yptChallenges/${challenge.id}`, {
+            status: 'completed',
+            completedAt: new Date().toISOString(),
+            completedBy: 'cron_system',
+            autoCompletedReason: `Reached end date ${challengeEndDateYmd} and finalized last day ${yesterdayYmd}.`,
+          });
+          console.log(`[YPT 5:15 AM REST FINALIZER] Challenge ${challenge.id} auto-completed.`);
+        } else {
+          // STEP C: Create Fresh Open Snapshot for Today (dateYmd = todayYmd)
+          const todaySnapData = await fetchFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${todayYmd}`);
+          if (!todaySnapData) {
+            const initialMemberSnapshots: Record<string, any> = {};
+            const initialTeamStandings: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number; rank: number }> = [];
+            let initialParticipantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
+
+            if (isSoloMode) {
+              const participantsList: Array<{ yptUd?: number; yptHandle: string }> =
+                challenge.participants && challenge.participants.length > 0
+                  ? challenge.participants
+                  : liveMembers.map((m: any) => ({ yptUd: m.ud, yptHandle: m.n }));
+
+              initialParticipantStandings = participantsList.map((p, idx) => {
+                const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
+                const resolvedUdKey = p.yptUd ? String(p.yptUd) : cleanHandle;
+                const freshSnapshotItem = {
+                  handle: p.yptHandle || cleanHandle,
+                  nickname: p.yptHandle || cleanHandle,
+                  rawYptUd: p.yptUd,
+                  yptUd: p.yptUd,
+                  hoursStudied: 0,
+                  studyMs: 0,
+                  maxContinuousMs: 0,
+                  isCurrentlyStudying: false,
+                  completedNativeChallengeIds: [],
+                  basePoints: 0,
+                  bonusPoints: 0,
+                  penaltyPoints: 0,
+                  netPoints: 0,
+                  appliedRuleBreakdown: [],
+                  status: 'active',
+                  lastSyncedAt: new Date().toISOString(),
+                };
+
+                initialMemberSnapshots[cleanHandle] = freshSnapshotItem;
+                if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
+                  initialMemberSnapshots[resolvedUdKey] = freshSnapshotItem;
+                }
+
+                return {
+                  yptUd: p.yptUd,
+                  yptHandle: p.yptHandle || cleanHandle,
+                  dayHours: 0,
+                  dayPoints: 0,
+                  rank: idx + 1,
+                };
+              });
+            } else {
+              (challenge.teams || []).forEach((team: any, idx: number) => {
+                (team.memberUids || []).forEach((mHandle: string) => {
+                  const cleanHandle = mHandle.replace(/^@/, '').trim().toLowerCase();
+                  initialMemberSnapshots[cleanHandle] = {
+                    handle: cleanHandle,
+                    hoursStudied: 0,
+                    studyMs: 0,
+                    maxContinuousMs: 0,
+                    isCurrentlyStudying: false,
+                    completedNativeChallengeIds: [],
+                    basePoints: 0,
+                    bonusPoints: 0,
+                    penaltyPoints: 0,
+                    netPoints: 0,
+                    appliedRuleBreakdown: [],
+                    status: 'active',
+                    lastSyncedAt: new Date().toISOString(),
+                  };
+                });
+
+                initialTeamStandings.push({
+                  teamId: team.id,
+                  teamName: team.name || `Team ${team.id}`,
+                  dayHours: 0,
+                  dayPoints: 0,
+                  rank: idx + 1,
+                });
+              });
+            }
+
+            const freshDayData: any = {
+              id: todayYmd,
+              challengeId: challenge.id,
+              dateYmd: todayYmd,
+              targetDateYmd: todayYmd,
+              isLocked: false,
+              totalChallengeHours: 0,
+              totalChallengePoints: 0,
+              activeMemberCount: 0,
+              memberSnapshots: initialMemberSnapshots,
+              teamStandings: isSoloMode ? [] : initialTeamStandings,
+              participantStandings: isSoloMode ? initialParticipantStandings : undefined,
+              highWaterMarks: {},
+              maxContinuousHighWaterMarks: {},
+              lastSyncedAt: new Date().toISOString(),
+            };
+
+            await setFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${todayYmd}`, freshDayData, true);
+
+            // Reset daily high water marks on main challenge doc
+            await updateFirestoreRestDoc(`yptChallenges/${challenge.id}`, {
+              dailyHighWaterMarks: {},
+              dailyMaxContinuousHighWaterMarks: {},
+              dailyCompletedChallenges: {},
+              lastDailySnapshotDate: todayYmd,
+              lastSyncedAt: new Date().toISOString(),
+            });
+          }
+          console.log(`[YPT 5:15 AM REST FINALIZER] Successfully finalized ${yesterdayYmd} and created open snapshot for ${todayYmd} in challenge ${challenge.id} via REST API.`);
+        }
+      } catch (chErr) {
+        console.error(`[YPT 5:15 AM REST FINALIZER] Error processing challenge ${challenge.id}:`, chErr);
+      }
+    }
+  } catch (restErr) {
+    console.error("[YPT 5:15 AM REST FINALIZER] Fatal error in REST finalizer:", restErr);
+  }
+}
+
+/**
  * 5:15 AM IST Daily Finalizer & Day Transition Protocol:
  * - Runs daily at 5:15 AM IST (23:45 UTC).
  * - Finalizes yesterday's snapshot with full penalties and sets isLocked: true, lockedBy: 'cron_system'.
  * - Creates a fresh open snapshot for today.
+ * - Resilient Error 7 Handler: Automatically falls back to Google Cloud Firestore REST API with API Key.
  */
-async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
+async function execute515AmYptFinalizer(adminDb?: admin.firestore.Firestore) {
+  if (!adminDb) {
+    console.log("[YPT 5:15 AM IST FINALIZER] No Admin DB instance provided. Executing via Firestore REST API fallback...");
+    await execute515AmYptFinalizerViaRest();
+    return;
+  }
+
   try {
     const yesterdayYmd = getYesterdayYptDayYmdNode();
     const todayYmd = getYptDayYmdNode();
@@ -1124,6 +2247,7 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
         // Also retrieve main challenge doc dailyHighWaterMarks to prevent data loss across stateless restarts
         let challengeDailyHwms: Record<string, number> = {};
         let challengeDailyMaxContHwms: Record<string, number> = {};
+        let challengeDailyCompletedChallenges: Record<string, number[]> = {};
         const freshChallengeDoc = await challengeDocRef.get();
         if (freshChallengeDoc.exists) {
           const chData = freshChallengeDoc.data() as any;
@@ -1132,6 +2256,9 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
           }
           if (chData?.dailyMaxContinuousHighWaterMarks && typeof chData.dailyMaxContinuousHighWaterMarks === 'object') {
             challengeDailyMaxContHwms = { ...chData.dailyMaxContinuousHighWaterMarks };
+          }
+          if (chData?.dailyCompletedChallenges && typeof chData.dailyCompletedChallenges === 'object') {
+            challengeDailyCompletedChallenges = { ...chData.dailyCompletedChallenges };
           }
         }
 
@@ -1143,6 +2270,10 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
             for (const [h, m] of Object.entries(sData.memberSnapshots)) {
               existingHwms[h] = Math.max(existingHwms[h] || 0, (m as any).hoursStudied || 0);
               existingMaxContHwms[h] = Math.max(existingMaxContHwms[h] || 0, (m as any).maxContinuousMs || 0);
+              if (Array.isArray((m as any).completedNativeChallengeIds) && (m as any).completedNativeChallengeIds.length > 0) {
+                const prev = challengeDailyCompletedChallenges[h] || [];
+                challengeDailyCompletedChallenges[h] = Array.from(new Set([...prev, ...(m as any).completedNativeChallengeIds]));
+              }
             }
           }
         }
@@ -1177,49 +2308,36 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
             const resolvedUd = liveMember?.ud || p.yptUd;
             const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
 
-            let apiLiveSm = 0;
-            let apiLiveHours = 0;
-            let apiLiveMaxContMs = 0;
-            const completedChallengeIds: number[] = [];
-
-            if (liveMember) {
-              if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
-                apiLiveSm = liveMember.dl.sm;
-                apiLiveHours = liveMember.dl.sm / 3600000;
-              }
-              if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
-                apiLiveMaxContMs = liveMember.dl.mm;
-              }
-              if (liveMember.cls && typeof liveMember.cls === 'object') {
-                for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
-                  if (cItem && (cItem as any).st === 1) completedChallengeIds.push(Number(cIdStr));
-                }
-              }
-            }
-
+            // Phase 2 4:59 AM Rule: Do NOT pull live running timer at 5:15 AM for yesterday
             const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
-            const peakSm = Math.max(prevStoredSm, apiLiveSm, Math.round(apiLiveHours * 3600000));
+            const peakSm = prevStoredSm;
             const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
             existingHwms[cleanHandle] = peakHours;
 
             const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
-            const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
+            const peakMaxContMs = prevMaxContStored;
             existingMaxContHwms[cleanHandle] = peakMaxContMs;
 
             if (peakHours > 0) activeMemberCount++;
             dayTotalHours += peakHours;
+
+            const memberCompletedChallenges = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
 
             // Final lock applies penalties!
             const calculated = calculatePointsFromRulesNode(
               peakHours,
               challenge.rules,
               [],
-              completedChallengeIds,
+              memberCompletedChallenges,
               true, // Apply penalty on final lock
               peakMaxContMs
             );
 
             dayTotalPoints += calculated.netPoints;
+
+            const hasCompletedActiveChallenge = challenge.nativeYptChallengeId
+              ? memberCompletedChallenges.includes(Number(challenge.nativeYptChallengeId))
+              : (memberCompletedChallenges.length > 0);
 
             const finalSnapshotItem = {
               handle: liveMember?.n || p.yptHandle || cleanHandle,
@@ -1230,7 +2348,9 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
               studyMs: peakSm,
               maxContinuousMs: peakMaxContMs,
               isCurrentlyStudying: false, // Day concluded
-              completedNativeChallengeIds: completedChallengeIds,
+              isStudying: false,
+              completedNativeChallengeIds: memberCompletedChallenges,
+              hasCompleted: hasCompletedActiveChallenge,
               basePoints: calculated.baseStudyPoints,
               bonusPoints: calculated.bonusPoints,
               penaltyPoints: calculated.penaltyPoints,
@@ -1279,50 +2399,37 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
               const resolvedUd = liveMember?.ud || (!isNaN(Number(memberHandleOrUid)) ? Number(memberHandleOrUid) : undefined);
               const resolvedUdKey = resolvedUd ? String(resolvedUd) : cleanHandle;
 
-              let apiLiveSm = 0;
-              let apiLiveHours = 0;
-              let apiLiveMaxContMs = 0;
-              const completedChallengeIds: number[] = [];
-
-              if (liveMember) {
-                if (liveMember.dl && typeof liveMember.dl.sm === 'number') {
-                  apiLiveSm = liveMember.dl.sm;
-                  apiLiveHours = liveMember.dl.sm / 3600000;
-                }
-                if (liveMember.dl && typeof liveMember.dl.mm === 'number') {
-                  apiLiveMaxContMs = liveMember.dl.mm;
-                }
-                if (liveMember.cls && typeof liveMember.cls === 'object') {
-                  for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
-                    if (cItem && (cItem as any).st === 1) completedChallengeIds.push(Number(cIdStr));
-                  }
-                }
-              }
-
+              // Phase 2 4:59 AM Rule: Do NOT pull live running timer at 5:15 AM for yesterday
               const prevStoredSm = challengeDailyHwms[resolvedUdKey] || (existingHwms[cleanHandle] ? Math.round(existingHwms[cleanHandle] * 3600000) : 0);
-              const peakSm = Math.max(prevStoredSm, apiLiveSm, Math.round(apiLiveHours * 3600000));
+              const peakSm = prevStoredSm;
               const peakHours = Math.round((peakSm / 3600000) * 100) / 100;
               existingHwms[cleanHandle] = peakHours;
 
               const prevMaxContStored = challengeDailyMaxContHwms[resolvedUdKey] || existingMaxContHwms[cleanHandle] || 0;
-              const peakMaxContMs = Math.max(prevMaxContStored, apiLiveMaxContMs);
+              const peakMaxContMs = prevMaxContStored;
               existingMaxContHwms[cleanHandle] = peakMaxContMs;
 
               if (peakHours > 0) activeMemberCount++;
               dayTotalHours += peakHours;
               teamDailyHours += peakHours;
 
+              const memberCompletedChallenges = challengeDailyCompletedChallenges[resolvedUdKey] || challengeDailyCompletedChallenges[cleanHandle] || [];
+
               // Final lock applies penalties!
               const calculated = calculatePointsFromRulesNode(
                 peakHours,
                 challenge.rules,
                 [],
-                completedChallengeIds,
+                memberCompletedChallenges,
                 true, // Apply penalty on final lock
                 peakMaxContMs
               );
 
               teamDailyPoints += calculated.netPoints;
+
+              const hasCompletedActiveChallenge = challenge.nativeYptChallengeId
+                ? memberCompletedChallenges.includes(Number(challenge.nativeYptChallengeId))
+                : (memberCompletedChallenges.length > 0);
 
               finalizedMemberSnapshots[cleanHandle] = {
                 handle: liveMember?.n || cleanHandle,
@@ -1331,7 +2438,9 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
                 studyMs: Math.round(peakHours * 3600000),
                 maxContinuousMs: peakMaxContMs,
                 isCurrentlyStudying: false, // Day concluded
-                completedNativeChallengeIds: completedChallengeIds,
+                isStudying: false,
+                completedNativeChallengeIds: memberCompletedChallenges,
+                hasCompleted: hasCompletedActiveChallenge,
                 basePoints: calculated.baseStudyPoints,
                 bonusPoints: calculated.bonusPoints,
                 penaltyPoints: calculated.penaltyPoints,
@@ -1351,36 +2460,36 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
             dayTotalPoints += teamDailyPoints;
           });
+
+          teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
+          const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+          const lockedYesterdayData: any = {
+            id: yesterdayYmd,
+            challengeId: challenge.id,
+            dateYmd: yesterdayYmd,
+            targetDateYmd: yesterdayYmd,
+            isLocked: true,
+            lockedAt: new Date().toISOString(),
+            lockedBy: 'cron_system' as const,
+            totalChallengeHours: Math.round(dayTotalHours * 100) / 100,
+            totalChallengePoints: dayTotalPoints,
+            activeMemberCount,
+            memberSnapshots: finalizedMemberSnapshots,
+            teamStandings: isSoloMode ? [] : teamStandings,
+            participantStandings: isSoloMode ? participantStandings : undefined,
+            highWaterMarks: existingHwms,
+            maxContinuousHighWaterMarks: existingMaxContHwms,
+            isAutoClosed: true,
+            closedAt: Date.now(),
+          };
+
+          // Write locked snapshot for yesterday
+          await yesterdaySnapRef.set(lockedYesterdayData, { merge: true });
+          try {
+            await adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${yesterdayYmd}`).set(lockedYesterdayData, { merge: true });
+          } catch {}
         }
-
-        teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
-        const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
-
-        const lockedYesterdayData: any = {
-          id: yesterdayYmd,
-          challengeId: challenge.id,
-          dateYmd: yesterdayYmd,
-          targetDateYmd: yesterdayYmd,
-          isLocked: true,
-          lockedAt: new Date().toISOString(),
-          lockedBy: 'cron_system' as const,
-          totalChallengeHours: Math.round(dayTotalHours * 100) / 100,
-          totalChallengePoints: dayTotalPoints,
-          activeMemberCount,
-          memberSnapshots: finalizedMemberSnapshots,
-          teamStandings: isSoloMode ? [] : teamStandings,
-          participantStandings: isSoloMode ? participantStandings : undefined,
-          highWaterMarks: existingHwms,
-          maxContinuousHighWaterMarks: existingMaxContHwms,
-          isAutoClosed: true,
-          closedAt: Date.now(),
-        };
-
-        // Write locked snapshot for yesterday
-        await yesterdaySnapRef.set(lockedYesterdayData, { merge: true });
-        try {
-          await adminDb.collection("yptChallenges").doc(challenge.id).collection("daily_snapshots").doc(`daily_${yesterdayYmd}`).set(lockedYesterdayData, { merge: true });
-        } catch {}
 
         // STEP B: Check if Challenge has reached its End Date
         const challengeEndDateYmd = getChallengeEndDateYmdNode(challenge);
@@ -1462,7 +2571,7 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
             });
 
             const sortedTeams = Object.values(teamPointTotals).sort((a, b) => b.points - a.points || b.hours - a.hours);
-            const topTeam = sortedTeams[0] || teamStandings[0];
+            const topTeam = sortedTeams[0];
             const sortedMembers = Object.entries(memberHoursMap).sort((a, b) => b[1] - a[1]);
             const topMvp = sortedMembers[0];
 
@@ -1580,6 +2689,7 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
             await adminDb.collection("yptChallenges").doc(challenge.id).update({
               dailyHighWaterMarks: {},
               dailyMaxContinuousHighWaterMarks: {},
+              dailyCompletedChallenges: {},
               lastDailySnapshotDate: todayYmd,
               lastSyncedAt: new Date().toISOString(),
             });
@@ -1587,167 +2697,168 @@ async function execute515AmYptFinalizer(adminDb: admin.firestore.Firestore) {
 
           console.log(`[YPT 5:15 AM IST FINALIZER] Successfully finalized ${yesterdayYmd} and created open snapshot for ${todayYmd} in ${challenge.id}.`);
         }
-      } catch (chErr) {
+      } catch (chErr: any) {
+        if (chErr && (chErr.code === 7 || chErr.code === 16 || chErr.message?.includes("PERMISSION_DENIED") || chErr.message?.includes("ADC") || chErr.message?.includes("UNAUTHENTICATED"))) {
+          console.warn(`[YPT 5:15 AM IST FINALIZER] Challenge ${challenge.id} threw Error 7 (PERMISSION_DENIED). Falling back to REST API finalizer...`);
+          await execute515AmYptFinalizerViaRest();
+          return;
+        }
         console.error(`[YPT 5:15 AM IST FINALIZER] Error processing challenge ${challenge.id}:`, chErr);
       }
     }
   } catch (err: any) {
-    if (err && err.code === 7) {
-      // Sandbox environment notice
+    if (err && (err.code === 7 || err.code === 16 || err.message?.includes("PERMISSION_DENIED") || err.message?.includes("ADC") || err.message?.includes("UNAUTHENTICATED"))) {
+      console.warn("[YPT 5:15 AM IST FINALIZER] Admin Firestore encountered Error 7 (PERMISSION_DENIED). Seamlessly executing finalizer via authenticated Firestore REST API fallback...");
+      await execute515AmYptFinalizerViaRest();
     } else {
-      console.error("[YPT 5:15 AM IST FINALIZER] Encountered unexpected error:", err);
+      console.warn("[YPT 5:15 AM IST FINALIZER] Admin Firestore threw error. Executing via authenticated Firestore REST API fallback...", err);
+      await execute515AmYptFinalizerViaRest();
     }
   }
 }
 
 export function startCron() {
-  if (!db) {
-    console.warn("Cron not started: Admin DB is not initialized. Might be missing ADC credentials.");
-    return;
-  }
-  
-  console.log("Registered 2-hour leaderboard recalculation cron job.");
-
-  // Runs every 2 hours
-  cron.schedule("0 */2 * * *", async () => {
-    console.log("Running 2-hour leaderboard recalculation task...");
-    try {
-      // 1. Fetch all users
-      const usersSnap = await db.collection("users").get();
-      const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-
-      // 2. Fetch all mocks (using collectionGroup if possible, or individual queries)
-      const mocksSnap = await db.collectionGroup("mocks").get();
-      const allMocks = mocksSnap.docs.map(d => {
-           const data = d.data();
-           return { id: d.id, userId: d.ref.parent.parent?.id, ...data };
-      }).filter((m: any) => !m.isDeleted);
-
-      // Group mocks by user
-      const userMocks: Record<string, any[]> = {};
-      allMocks.forEach(m => {
-          if (m.userId) {
-              if (!userMocks[m.userId]) Object.assign(userMocks, { [m.userId]: [] });
-              userMocks[m.userId].push(m);
-          }
-      });
-
-      const batch = db.batch();
-      let updatesCount = 0;
-
-      for (const user of users) {
-          const mocks = userMocks[user.id] || [];
-          if (mocks.length === 0) continue;
-
-          const { avgPercentile, totalTests } = calculateUserStats(mocks);
-
-          if (user.avgPercentile !== avgPercentile || user.totalTests !== totalTests) {
-              const ref = db.collection("users").doc(user.id);
-              batch.update(ref, { 
-                  avgPercentile, 
-                  totalTests, 
-              });
-              updatesCount++;
-          }
-          
-          if (updatesCount >= 400) {
-              await batch.commit();
-              updatesCount = 0;
-          }
-      }
-      
-      if (updatesCount > 0) {
-          await batch.commit();
-      }
-
-      console.log(`Leaderboard recalculation finished. Updated ${updatesCount} users.`);
-    } catch (error: any) {
-      if (error && error.code === 7) {
-        console.warn("\n[WARNING] Leaderboard Cron skipped due to PERMISSION_DENIED.");
-      } else {
-        console.error("Leaderboard Cron failed:", error);
-      }
-    }
-  });
-
-  console.log("Registered nightly search API log auto-delete cron job.");
-  // Runs every day at midnight (00:00)
-  cron.schedule("0 0 * * *", async () => {
-    console.log("Running nightly search API log auto-delete task...");
-    try {
-      const settingsDoc = await db.collection("system").doc("settings").get();
-      const settings = settingsDoc.data();
-      
-      const searchLogAutoDeleteDays = settings?.searchLogAutoDeleteDays;
-      
-      if (typeof searchLogAutoDeleteDays === "number" && searchLogAutoDeleteDays > 0) {
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - searchLogAutoDeleteDays);
-        
-        const oldLogsSnap = await db
-          .collection("search_api_logs")
-          .where("createdAt", "<", admin.firestore.Timestamp.fromDate(cutoffDate))
-          .get();
-          
-        if (!oldLogsSnap.empty) {
-          console.log(`Found ${oldLogsSnap.size} search API logs to delete.`);
-          
-          let batch = db.batch();
-          let deletesCount = 0;
-          let totalDeleted = 0;
-          
-          for (const doc of oldLogsSnap.docs) {
-            batch.delete(doc.ref);
-            deletesCount++;
-            totalDeleted++;
-            
-            if (deletesCount >= 400) {
-              await batch.commit();
-              batch = db.batch();
-              deletesCount = 0;
-            }
-          }
-          
-          if (deletesCount > 0) {
-            await batch.commit();
-          }
-          
-          console.log(`Successfully deleted ${totalDeleted} search API logs.`);
-        } else {
-          console.log("No search API logs found for deletion.");
-        }
-      } else {
-        console.log("searchLogAutoDeleteDays is not set or invalid. Skipping auto-delete.");
-      }
-    } catch (error: any) {
-      if (error && error.code === 7) {
-        console.warn("\n[WARNING] Auto-Delete Cron skipped due to PERMISSION_DENIED in sandbox environment.\n");
-      } else {
-        console.error("Search API Log Auto-Delete Cron failed:", error);
-      }
-    }
-  });
-
-  // Dynamic YPT Continuous Sync Cron Job Setup
   if (db) {
+    console.log("Registered 2-hour leaderboard recalculation cron job.");
+
+    // Runs every 2 hours
+    cron.schedule("0 */2 * * *", async () => {
+      console.log("Running 2-hour leaderboard recalculation task...");
+      try {
+        // 1. Fetch all users
+        const usersSnap = await db.collection("users").get();
+        const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+        // 2. Fetch all mocks (using collectionGroup if possible, or individual queries)
+        const mocksSnap = await db.collectionGroup("mocks").get();
+        const allMocks = mocksSnap.docs.map(d => {
+             const data = d.data();
+             return { id: d.id, userId: d.ref.parent.parent?.id, ...data };
+        }).filter((m: any) => !m.isDeleted);
+
+        // Group mocks by user
+        const userMocks: Record<string, any[]> = {};
+        allMocks.forEach(m => {
+            if (m.userId) {
+                if (!userMocks[m.userId]) Object.assign(userMocks, { [m.userId]: [] });
+                userMocks[m.userId].push(m);
+            }
+        });
+
+        const batch = db.batch();
+        let updatesCount = 0;
+
+        for (const user of users) {
+            const mocks = userMocks[user.id] || [];
+            if (mocks.length === 0) continue;
+
+            const { avgPercentile, totalTests } = calculateUserStats(mocks);
+
+            if (user.avgPercentile !== avgPercentile || user.totalTests !== totalTests) {
+                const ref = db.collection("users").doc(user.id);
+                batch.update(ref, { 
+                    avgPercentile, 
+                    totalTests, 
+                });
+                updatesCount++;
+            }
+            
+            if (updatesCount >= 400) {
+                await batch.commit();
+                updatesCount = 0;
+            }
+        }
+        
+        if (updatesCount > 0) {
+            await batch.commit();
+        }
+
+        console.log(`Leaderboard recalculation finished. Updated ${updatesCount} users.`);
+      } catch (error: any) {
+        if (error && error.code === 7) {
+          console.warn("\n[WARNING] Leaderboard Cron skipped due to PERMISSION_DENIED.");
+        } else {
+          console.error("Leaderboard Cron failed:", error);
+        }
+      }
+    });
+
+    console.log("Registered nightly search API log auto-delete cron job.");
+    // Runs every day at midnight (00:00)
+    cron.schedule("0 0 * * *", async () => {
+      console.log("Running nightly search API log auto-delete task...");
+      try {
+        const settingsDoc = await db.collection("system").doc("settings").get();
+        const settings = settingsDoc.data();
+        
+        const searchLogAutoDeleteDays = settings?.searchLogAutoDeleteDays;
+        
+        if (typeof searchLogAutoDeleteDays === "number" && searchLogAutoDeleteDays > 0) {
+          const cutoffDate = new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - searchLogAutoDeleteDays);
+          
+          const oldLogsSnap = await db
+            .collection("search_api_logs")
+            .where("createdAt", "<", admin.firestore.Timestamp.fromDate(cutoffDate))
+            .get();
+            
+          if (!oldLogsSnap.empty) {
+            console.log(`Found ${oldLogsSnap.size} search API logs to delete.`);
+            
+            let batch = db.batch();
+            let deletesCount = 0;
+            let totalDeleted = 0;
+            
+            for (const doc of oldLogsSnap.docs) {
+              batch.delete(doc.ref);
+              deletesCount++;
+              totalDeleted++;
+              
+              if (deletesCount >= 400) {
+                await batch.commit();
+                batch = db.batch();
+                deletesCount = 0;
+              }
+            }
+            
+            if (deletesCount > 0) {
+              await batch.commit();
+            }
+            
+            console.log(`Successfully deleted ${totalDeleted} search API logs.`);
+          } else {
+            console.log("No search API logs found for deletion.");
+          }
+        } else {
+          console.log("searchLogAutoDeleteDays is not set or invalid. Skipping auto-delete.");
+        }
+      } catch (error: any) {
+        if (error && error.code === 7) {
+          console.warn("\n[WARNING] Auto-Delete Cron skipped due to PERMISSION_DENIED in sandbox environment.\n");
+        } else {
+          console.error("Search API Log Auto-Delete Cron failed:", error);
+        }
+      }
+    });
+
+    // Dynamic YPT Continuous Sync Cron Job Setup
     initDynamicYptSync(db);
+  } else {
+    console.warn("Admin DB instance not initialized with ADC; YPT background cron services will run in REST API Fallback Mode.");
+    updateYptSyncCronSchedule(null as any, 15);
   }
 
   console.log("Registered 04:55 AM IST (23:25 UTC) YPT Pre-Reset Peak Capture cron job.");
   // Runs daily at 23:25 UTC (04:55 AM IST): captures absolute peak study hours before YPT 05:00 AM IST reset
   cron.schedule("25 23 * * *", async () => {
-    if (db) {
-      console.log("[YPT 4:55 AM IST PRE-RESET] Executing final pre-reset peak capture...");
-      await execute15MinYptSync(db);
-    }
+    console.log("[YPT 4:55 AM IST PRE-RESET] Executing final pre-reset peak capture...");
+    await execute15MinYptSync(db);
   });
 
   console.log("Registered 05:15 AM IST (23:45 UTC) YPT Daily Finalizer & Day Transition cron job.");
   // Runs daily at 23:45 UTC (05:15 AM IST): locks yesterday's snapshot and opens fresh today snapshot
   cron.schedule("45 23 * * *", async () => {
-    if (db) {
-      await execute515AmYptFinalizer(db);
-    }
+    await execute515AmYptFinalizer(db);
   });
 }
 

@@ -1811,10 +1811,53 @@ export async function deleteDailySnapshot(
 }
 
 /**
- * Auto-closes any missing past daily snapshots for a challenge.
+ * One-Time Cleanup / Admin Reset for a specific date's snapshot and challenge High-Water Marks.
+ * Clears:
+ * 1. dailyHighWaterMarks & maxContinuousHighWaterMarks on the main challenge document
+ * 2. Deletes dailySnapshots/{targetDateYmd} document so today restarts fresh
+ * 3. Recalculates team / all-time points
+ */
+export async function resetTodayChallengeData(
+  challengeId: string,
+  targetDateYmd?: string
+): Promise<void> {
+  const activeYmd = targetDateYmd || getYptDayYmd();
+  const challengeRef = doc(db, CHALLENGES_COLLECTION, challengeId);
+
+  // 1. Clear HWMs on main challenge document
+  await updateDoc(challengeRef, {
+    dailyHighWaterMarks: {},
+    maxContinuousHighWaterMarks: {},
+    lastDailySnapshotDate: activeYmd,
+    updatedAt: new Date().toISOString(),
+  });
+
+  // 2. Delete today's snapshot subcollection document so it can start completely fresh
+  const snapDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "dailySnapshots", activeYmd);
+  try {
+    await deleteDoc(snapDocRef);
+  } catch (e) {
+    console.warn("Could not delete dailySnapshots doc during reset:", e);
+  }
+
+  // Also clean legacy subcollection if present
+  try {
+    const legacyDocRef = doc(db, CHALLENGES_COLLECTION, challengeId, "daily_snapshots", `daily_${activeYmd}`);
+    await deleteDoc(legacyDocRef);
+  } catch {
+    // Ignore legacy delete errors
+  }
+
+  // 3. Recalculate totals
+  await recalculateTeamPointsFromSubmissions(challengeId);
+}
+
+/**
+ * Auto-closes and locks any missing or unlocked past daily snapshots for a challenge.
  * Evaluates from challenge startDate up to yesterday (or endDate), using IST day boundary (05:00 AM IST).
- * If missing, it aggregates existing unclosed/manual submission logs or calculates point rules,
- * writes the finalized snapshot, and updates team points.
+ * If any past day is either missing or unlocked (isLocked !== true), it finalizes it using
+ * syncChallengeDaySnapshotWithHighWaterMark(..., forceFinalLock: true) to apply penalties, freeze points,
+ * and ensure data integrity even if the backend server was offline.
  */
 export async function autoCloseMissingDays(
   challenge: YptChallenge
@@ -1860,383 +1903,52 @@ export async function autoCloseMissingDays(
 
   // Query existing snapshots for this challenge
   const existingSnapshots = await getAllDailySnapshots(challenge.id);
-  const existingDates = new Set(existingSnapshots.map((s) => s.targetDateYmd || s.dateYmd));
+  const snapshotMap = new Map<string, YptDailyDaySnapshot>();
+  existingSnapshots.forEach((s) => {
+    const key = s.targetDateYmd || s.dateYmd;
+    if (key) snapshotMap.set(key, s);
+  });
 
-  const missingDates = dateList.filter((d) => !existingDates.has(d));
-  if (missingDates.length === 0) {
+  // Target any date in range that either:
+  // 1. Has no snapshot created yet
+  // 2. Has an existing snapshot that is not yet locked (isLocked !== true)
+  const datesToFinalize = dateList.filter((d) => {
+    const snap = snapshotMap.get(d);
+    return !snap || !snap.isLocked;
+  });
+
+  // Also check if any existing snapshot in database is strictly in the past (< currentYptDay) but unlocked
+  existingSnapshots.forEach((s) => {
+    const sDate = s.targetDateYmd || s.dateYmd;
+    if (sDate && sDate < currentYptDay && !s.isLocked && !datesToFinalize.includes(sDate)) {
+      datesToFinalize.push(sDate);
+    }
+  });
+
+  if (datesToFinalize.length === 0) {
     return { closedCount: 0, newSnapshots: [] };
   }
 
-  // Fetch all existing submission logs for the challenge to calculate daily points
-  const allSubmissions = await getYptSubmissionLogs(challenge.id);
-  const allDeduplicatedStats = getDeduplicatedDailyMemberStats(allSubmissions, challenge);
+  // Sort ascending chronologically
+  datesToFinalize.sort();
 
   const newSnapshots: YptDailyDaySnapshot[] = [];
 
-  for (const dateYmd of missingDates) {
-    const statsForDate = allDeduplicatedStats.filter((s) => s.dateYmd === dateYmd);
-    const isSoloMode = (challenge.mode || 'team') === 'individual';
-    const teamPointsMap: Record<string, number> = {};
-    const memberRecords: NonNullable<YptDailyDaySnapshot['memberRecords']> = [];
-    const memberSnapshots: YptDailyDaySnapshot['memberSnapshots'] = {};
-    const highWaterMarks: Record<string, number> = {};
-    const maxContinuousHighWaterMarks: Record<string, number> = {};
-    const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
-    let participantStandings: Array<{ yptUd?: number; yptHandle: string; appUserId?: string; dayHours: number; dayPoints: number; rank: number }> = [];
-    let dayTotalPoints = 0;
-    let dayTotalHours = 0;
-    let activeMemberCount = 0;
-
-    if (isSoloMode) {
-      const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
-        challenge.participants && challenge.participants.length > 0
-          ? challenge.participants
-          : [];
-
-      participantsList.forEach((p) => {
-        const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
-        const memberHandleOrUid = p.yptHandle || cleanHandle;
-        const foundStat = statsForDate.find((s) =>
-          areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid || (p.yptUd ? String(p.yptUd) : undefined))
-        );
-
-        if (foundStat) {
-          const hours = foundStat.hoursStudied || 0;
-          const net = foundStat.pointsEarned || 0;
-          const maxContMs = foundStat.maxContinuousMs || 0;
-          highWaterMarks[cleanHandle] = hours;
-          maxContinuousHighWaterMarks[cleanHandle] = maxContMs;
-          if (hours > 0) activeMemberCount++;
-          dayTotalHours += hours;
-
-          const appliedRules = foundStat.detectedRules
-            ? foundStat.detectedRules.map((r) => ({
-                ruleId: r.ruleId,
-                ruleName: r.ruleName,
-                emoji: r.emoji || '⭐',
-                points: r.points || 0,
-              }))
-            : [];
-
-          const intervalVal = challenge.rules?.studyIntervalValue ?? 1;
-          const intervalUnit = challenge.rules?.studyIntervalUnit ?? 'hours';
-          const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
-          const ptsPerInterval = challenge.rules?.pointsPerInterval ?? challenge.rules?.pointsPerStudyHour ?? 1;
-          const basePoints = Math.floor(hours / (intervalHours || 1)) * ptsPerInterval;
-
-          const bonusPoints = appliedRules
-            .filter((r) => r.points > 0)
-            .reduce((acc, r) => acc + r.points, 0);
-          const penaltyPoints = appliedRules
-            .filter((r) => r.points < 0)
-            .reduce((acc, r) => acc + Math.abs(r.points), 0);
-
-          const appliedRuleBreakdown = appliedRules.map((r) => ({
-            ruleId: r.ruleId || '',
-            ruleName: r.ruleName,
-            emoji: r.emoji,
-            points: r.points,
-            type: (r.points < 0 ? 'penalty' : r.points > 0 ? 'bonus' : 'base') as 'bonus' | 'penalty' | 'base' | 'milestone',
-          }));
-
-          const memberDoc = {
-            handle: foundStat.memberHandle || memberHandleOrUid,
-            rawYptUd: p.yptUd,
-            appUserId: p.appUserId,
-            hoursStudied: hours,
-            studyMs: Math.round(hours * 3600000),
-            maxContinuousMs: maxContMs,
-            isCurrentlyStudying: false,
-            completedNativeChallengeIds: [],
-            basePoints,
-            bonusPoints,
-            penaltyPoints,
-            netPoints: net,
-            appliedRuleBreakdown,
-            status: 'active' as const,
-            lastSyncedAt: new Date().toISOString(),
-          };
-
-          memberSnapshots[cleanHandle] = memberDoc;
-
-          memberRecords.push({
-            yptHandle: foundStat.memberHandle || memberHandleOrUid,
-            userId: foundStat.matchedUid || (p.yptUd ? String(p.yptUd) : undefined),
-            hoursStudied: hours,
-            basePoints,
-            bonusPoints,
-            penaltyPoints,
-            netPoints: net,
-            appliedRules,
-          });
-
-          dayTotalPoints += net;
-        } else {
-          // Member had 0 study time recorded on this past date
-          highWaterMarks[cleanHandle] = 0;
-          maxContinuousHighWaterMarks[cleanHandle] = 0;
-          const penaltyThreshold =
-            challenge.rules?.penaltyThresholdValue ??
-            challenge.rules?.noStudyPenaltyThresholdHours ??
-            0;
-          const penaltyVal = challenge.rules?.penaltyPoints || 0;
-          const isPenalized = penaltyThreshold > 0 && penaltyVal > 0;
-          const penaltyPoints = isPenalized ? penaltyVal : 0;
-          const netPoints = -penaltyPoints;
-
-          const appliedRules = isPenalized
-            ? [
-                {
-                  ruleName: 'No Study Penalty',
-                  emoji: '⚠️',
-                  points: -penaltyVal,
-                },
-              ]
-            : [];
-
-          memberSnapshots[cleanHandle] = {
-            handle: cleanHandle,
-            rawYptUd: p.yptUd,
-            appUserId: p.appUserId,
-            hoursStudied: 0,
-            studyMs: 0,
-            maxContinuousMs: 0,
-            isCurrentlyStudying: false,
-            completedNativeChallengeIds: [],
-            basePoints: 0,
-            bonusPoints: 0,
-            penaltyPoints,
-            netPoints,
-            appliedRuleBreakdown: isPenalized
-              ? [
-                  {
-                    ruleId: 'no_study_penalty',
-                    ruleName: 'No Study Penalty',
-                    emoji: '⚠️',
-                    points: -penaltyVal,
-                    type: 'penalty',
-                  },
-                ]
-              : [],
-            status: 'active',
-            lastSyncedAt: new Date().toISOString(),
-          };
-
-          memberRecords.push({
-            yptHandle: cleanHandle,
-            hoursStudied: 0,
-            basePoints: 0,
-            bonusPoints: 0,
-            penaltyPoints,
-            netPoints,
-            appliedRules,
-          });
-
-          dayTotalPoints += netPoints;
-        }
-      });
-
-      const participantDraft = Object.values(memberSnapshots).map((m: any) => ({
-        yptUd: m.rawYptUd,
-        yptHandle: m.handle,
-        appUserId: m.appUserId,
-        dayHours: m.hoursStudied || 0,
-        dayPoints: m.netPoints || 0,
-      }));
-      participantDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
-      participantStandings = participantDraft.map((p, idx) => ({ ...p, rank: idx + 1 }));
-    } else {
-      (challenge.teams || []).forEach((team) => {
-        let teamDailyPoints = 0;
-        let teamDailyHours = 0;
-
-        (team.memberUids || []).forEach((memberHandleOrUid) => {
-          const cleanHandle = memberHandleOrUid.replace(/^@/, '').trim().toLowerCase();
-          const foundStat = statsForDate.find((s) =>
-            areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
-          );
-
-          if (foundStat) {
-            const hours = foundStat.hoursStudied || 0;
-            const net = foundStat.pointsEarned || 0;
-            const maxContMs = foundStat.maxContinuousMs || 0;
-            highWaterMarks[cleanHandle] = hours;
-            maxContinuousHighWaterMarks[cleanHandle] = maxContMs;
-            if (hours > 0) activeMemberCount++;
-            dayTotalHours += hours;
-            teamDailyHours += hours;
-
-            const appliedRules = foundStat.detectedRules
-              ? foundStat.detectedRules.map((r) => ({
-                  ruleId: r.ruleId,
-                  ruleName: r.ruleName,
-                  emoji: r.emoji || '⭐',
-                  points: r.points || 0,
-                }))
-              : [];
-
-            const intervalVal = challenge.rules?.studyIntervalValue ?? 1;
-            const intervalUnit = challenge.rules?.studyIntervalUnit ?? 'hours';
-            const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
-            const ptsPerInterval = challenge.rules?.pointsPerInterval ?? challenge.rules?.pointsPerStudyHour ?? 1;
-            const basePoints = Math.floor(hours / (intervalHours || 1)) * ptsPerInterval;
-
-            const bonusPoints = appliedRules
-              .filter((r) => r.points > 0)
-              .reduce((acc, r) => acc + r.points, 0);
-            const penaltyPoints = appliedRules
-              .filter((r) => r.points < 0)
-              .reduce((acc, r) => acc + Math.abs(r.points), 0);
-
-            const appliedRuleBreakdown = appliedRules.map((r) => ({
-              ruleId: r.ruleId || '',
-              ruleName: r.ruleName,
-              emoji: r.emoji,
-              points: r.points,
-              type: (r.points < 0 ? 'penalty' : r.points > 0 ? 'bonus' : 'base') as 'bonus' | 'penalty' | 'base' | 'milestone',
-            }));
-
-            const memberDoc = {
-              handle: foundStat.memberHandle || memberHandleOrUid,
-              rawYptUd: undefined,
-              hoursStudied: hours,
-              studyMs: Math.round(hours * 3600000),
-              maxContinuousMs: maxContMs,
-              isCurrentlyStudying: false,
-              completedNativeChallengeIds: [],
-              basePoints,
-              bonusPoints,
-              penaltyPoints,
-              netPoints: net,
-              appliedRuleBreakdown,
-              status: 'active' as const,
-              lastSyncedAt: new Date().toISOString(),
-            };
-
-            memberSnapshots[cleanHandle] = memberDoc;
-
-            memberRecords.push({
-              yptHandle: foundStat.memberHandle || memberHandleOrUid,
-              userId: foundStat.matchedUid,
-              teamId: team.id,
-              hoursStudied: hours,
-              basePoints,
-              bonusPoints,
-              penaltyPoints,
-              netPoints: net,
-              appliedRules,
-            });
-
-            teamDailyPoints += net;
-          } else {
-            // Member had 0 study time recorded on this past date
-            highWaterMarks[cleanHandle] = 0;
-            maxContinuousHighWaterMarks[cleanHandle] = 0;
-            const penaltyThreshold =
-              challenge.rules?.penaltyThresholdValue ??
-              challenge.rules?.noStudyPenaltyThresholdHours ??
-              0;
-            const penaltyVal = challenge.rules?.penaltyPoints || 0;
-            const isPenalized = penaltyThreshold > 0 && penaltyVal > 0;
-            const penaltyPoints = isPenalized ? penaltyVal : 0;
-            const netPoints = -penaltyPoints;
-
-            const appliedRules = isPenalized
-              ? [
-                  {
-                    ruleName: 'No Study Penalty',
-                    emoji: '⚠️',
-                    points: -penaltyVal,
-                  },
-                ]
-              : [];
-
-            memberSnapshots[cleanHandle] = {
-              handle: cleanHandle,
-              rawYptUd: undefined,
-              hoursStudied: 0,
-              studyMs: 0,
-              maxContinuousMs: 0,
-              isCurrentlyStudying: false,
-              completedNativeChallengeIds: [],
-              basePoints: 0,
-              bonusPoints: 0,
-              penaltyPoints,
-              netPoints,
-              appliedRuleBreakdown: isPenalized
-                ? [
-                    {
-                      ruleId: 'no_study_penalty',
-                      ruleName: 'No Study Penalty',
-                      emoji: '⚠️',
-                      points: -penaltyVal,
-                      type: 'penalty',
-                    },
-                  ]
-                : [],
-              status: 'active',
-              lastSyncedAt: new Date().toISOString(),
-            };
-
-            memberRecords.push({
-              yptHandle: cleanHandle,
-              teamId: team.id,
-              hoursStudied: 0,
-              basePoints: 0,
-              bonusPoints: 0,
-              penaltyPoints,
-              netPoints,
-              appliedRules,
-            });
-
-            teamDailyPoints += netPoints;
-          }
-        });
-
-        teamPointsMap[team.id] = teamDailyPoints;
-        dayTotalPoints += teamDailyPoints;
-
-        teamStandingsDraft.push({
-          teamId: team.id,
-          teamName: team.name || `Team ${team.id}`,
-          dayHours: teamDailyHours,
-          dayPoints: teamDailyPoints,
-        });
-      });
+  for (const dateYmd of datesToFinalize) {
+    try {
+      // Trigger the finalizer for this past date:
+      // Passes empty live roster (Phase 2 4:59 AM rule), reads 4:59 AM HWMs,
+      // applies penalties (applyPenalty = true), locks the snapshot (isLocked = true).
+      const finalizedSnapshot = await syncChallengeDaySnapshotWithHighWaterMark(
+        challenge,
+        [],
+        dateYmd,
+        true
+      );
+      newSnapshots.push(finalizedSnapshot);
+    } catch (err) {
+      console.warn(`[AutoCloser] Failed to finalize past day snapshot for date ${dateYmd}:`, err);
     }
-
-    // Rank teams descending by dayPoints, then dayHours
-    teamStandingsDraft.sort((a, b) => b.dayPoints - a.dayPoints || b.dayHours - a.dayHours);
-    const teamStandings = teamStandingsDraft.map((t, idx) => ({
-      ...t,
-      rank: idx + 1,
-    }));
-
-    const snapshot: YptDailyDaySnapshot = {
-      id: dateYmd,
-      challengeId: challenge.id,
-      dateYmd: dateYmd,
-      targetDateYmd: dateYmd,
-      isLocked: true,
-      lockedAt: new Date().toISOString(),
-      lockedBy: 'cron_system',
-      totalChallengeHours: dayTotalHours,
-      totalChallengePoints: dayTotalPoints,
-      activeMemberCount,
-      memberSnapshots,
-      teamStandings: isSoloMode ? [] : teamStandings,
-      participantStandings: isSoloMode ? participantStandings : undefined,
-      isAutoClosed: true,
-      closedAt: Date.now(),
-      totalPointsAwarded: dayTotalPoints,
-      teamPointsMap,
-      highWaterMarks,
-      maxContinuousHighWaterMarks,
-      memberRecords,
-    };
-
-    await saveDailySnapshot(challenge.id, snapshot);
-    newSnapshots.push(snapshot);
   }
 
   // Recalculate team points to aggregate newly closed historical days
@@ -2311,11 +2023,17 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
   const isPastLockedDate = activeYmd < getYptDayYmd();
   const applyPenalty = isPastLockedDate || forceFinalLock;
 
+  // PHASE 2 (4:59 AM Rule): If the target date is in the past (e.g. Yesterday),
+  // completely bypass the incoming live API roster. This prevents cross-boundary (post-5:00 AM)
+  // live timers from polluting yesterday's final snapshot or leaking into today.
+  // Past dates strictly use the peak High-Water Marks captured at 4:59 AM + any manual OCR submissions.
+  const effectiveLiveRoster = isPastLockedDate ? [] : (liveRoster || []);
+
   if (isSoloMode) {
     const participantsList: Array<{ yptUd?: number; yptHandle: string; appUserId?: string }> =
       challenge.participants && challenge.participants.length > 0
         ? challenge.participants
-        : (liveRoster || []).map((m) => ({ yptUd: m.ud, yptHandle: m.n }));
+        : (effectiveLiveRoster || []).map((m) => ({ yptUd: m.ud, yptHandle: m.n }));
 
     participantsList.forEach((p) => {
       const cleanHandle = (p.yptHandle || '').replace(/^@/, '').trim().toLowerCase();
@@ -2326,19 +2044,19 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
         areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid || (p.yptUd ? String(p.yptUd) : undefined))
       );
 
-      // Find member in live API roster
-      const liveMember = (liveRoster || []).find((m) => {
+      // Find member in live API roster (empty if past day)
+      const liveMember = (effectiveLiveRoster || []).find((m) => {
         if (!m) return false;
         const mHandle = (m.n || '').replace(/^@/, '').trim();
         const mUid = m.ud ? String(m.ud) : undefined;
         return areYptHandlesMatching(mHandle, memberHandleOrUid, mUid || (p.yptUd ? String(p.yptUd) : undefined));
       });
 
-      // 1. Calculate incoming hours from API
+      // 1. Calculate incoming hours from API (0 for past dates)
       const apiLiveHours = liveMember ? getMemberStudyHoursFromApi(liveMember) : 0;
       const manualHours = foundStat ? foundStat.hoursStudied || 0 : 0;
 
-      // 2. High-Water Mark for total hours: Math.max(previous recorded HWM, apiLiveHours, manualHours)
+      // 2. High-Water Mark for total hours: Math.max(previous recorded HWM from 4:59 AM, apiLiveHours, manualHours)
       const prevHwm = existingHwms[cleanHandle] ?? 0;
       const peakHours = applyHighWaterMark(prevHwm, Math.max(apiLiveHours, manualHours));
       updatedHwms[cleanHandle] = peakHours;
@@ -2355,13 +2073,15 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
 
       // 3. Extract completed native challenges
       const completedChallengeIds: number[] = [];
-      if (liveMember?.cls && typeof liveMember.cls === 'object') {
+      if (!isPastLockedDate && liveMember?.cls && typeof liveMember.cls === 'object') {
         Object.entries(liveMember.cls).forEach(([cid, statusObj]) => {
           if (statusObj && typeof statusObj === 'object' && (statusObj as any).st === 1) {
             const numCid = Number(cid);
             if (!isNaN(numCid)) completedChallengeIds.push(numCid);
           }
         });
+      } else if (existingSnapshot?.memberSnapshots?.[cleanHandle]?.completedNativeChallengeIds) {
+        completedChallengeIds.push(...existingSnapshot.memberSnapshots[cleanHandle].completedNativeChallengeIds);
       }
 
       // 4. Calculate points using challenge rules (with live penalty guard and max continuous trap)
@@ -2412,7 +2132,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
         hoursStudied: peakHours,
         studyMs: Math.round(peakHours * 3600000),
         maxContinuousMs: peakMaxContMs,
-        isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+        isCurrentlyStudying: isPastLockedDate ? false : Boolean(liveMember?.dl?.is),
         completedNativeChallengeIds: completedChallengeIds,
         basePoints,
         bonusPoints,
@@ -2431,7 +2151,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
         bonusPoints,
         penaltyPoints,
         netPoints,
-        isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+        isCurrentlyStudying: isPastLockedDate ? false : Boolean(liveMember?.dl?.is),
         appliedRules,
         completedChallengeIds,
       });
@@ -2461,19 +2181,19 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
           areYptHandlesMatching(s.memberHandle, memberHandleOrUid, s.matchedUid)
         );
 
-        // Find member in live API roster
-        const liveMember = (liveRoster || []).find((m) => {
+        // Find member in live API roster (empty if past day)
+        const liveMember = (effectiveLiveRoster || []).find((m) => {
           if (!m) return false;
           const mHandle = (m.n || '').replace(/^@/, '').trim();
           const mUid = m.ud ? String(m.ud) : undefined;
           return areYptHandlesMatching(mHandle, memberHandleOrUid, mUid);
         });
 
-        // 1. Calculate incoming hours from API
+        // 1. Calculate incoming hours from API (0 for past dates)
         const apiLiveHours = liveMember ? getMemberStudyHoursFromApi(liveMember) : 0;
         const manualHours = foundStat ? foundStat.hoursStudied || 0 : 0;
 
-        // 2. High-Water Mark for total hours: Math.max(previous recorded HWM, apiLiveHours, manualHours)
+        // 2. High-Water Mark for total hours: Math.max(previous recorded HWM from 4:59 AM, apiLiveHours, manualHours)
         const prevHwm = existingHwms[cleanHandle] ?? 0;
         const peakHours = applyHighWaterMark(prevHwm, Math.max(apiLiveHours, manualHours));
         updatedHwms[cleanHandle] = peakHours;
@@ -2491,13 +2211,15 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
 
         // 3. Extract completed native challenges
         const completedChallengeIds: number[] = [];
-        if (liveMember?.cls && typeof liveMember.cls === 'object') {
+        if (!isPastLockedDate && liveMember?.cls && typeof liveMember.cls === 'object') {
           Object.entries(liveMember.cls).forEach(([cid, statusObj]) => {
             if (statusObj && typeof statusObj === 'object' && (statusObj as any).st === 1) {
               const numCid = Number(cid);
               if (!isNaN(numCid)) completedChallengeIds.push(numCid);
             }
           });
+        } else if (existingSnapshot?.memberSnapshots?.[cleanHandle]?.completedNativeChallengeIds) {
+          completedChallengeIds.push(...existingSnapshot.memberSnapshots[cleanHandle].completedNativeChallengeIds);
         }
 
         // 4. Calculate points using challenge rules (with live penalty guard and max continuous trap)
@@ -2547,7 +2269,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
           hoursStudied: peakHours,
           studyMs: Math.round(peakHours * 3600000),
           maxContinuousMs: peakMaxContMs,
-          isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+          isCurrentlyStudying: isPastLockedDate ? false : Boolean(liveMember?.dl?.is),
           completedNativeChallengeIds: completedChallengeIds,
           basePoints,
           bonusPoints,
@@ -2567,7 +2289,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
           bonusPoints,
           penaltyPoints,
           netPoints,
-          isCurrentlyStudying: Boolean(liveMember?.dl?.is),
+          isCurrentlyStudying: isPastLockedDate ? false : Boolean(liveMember?.dl?.is),
           appliedRules,
           completedChallengeIds,
         });
@@ -2594,21 +2316,22 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
     rank: idx + 1,
   }));
 
+  const shouldLock = forceFinalLock || isPastLockedDate;
   const snapshot: YptDailyDaySnapshot = {
     id: activeYmd,
     challengeId: challenge.id,
     dateYmd: activeYmd,
     targetDateYmd: activeYmd,
-    isLocked: forceFinalLock,
-    lockedAt: forceFinalLock ? new Date().toISOString() : undefined,
-    lockedBy: forceFinalLock ? 'admin_manual' : undefined,
+    isLocked: shouldLock,
+    lockedAt: shouldLock ? (existingSnapshot?.lockedAt || new Date().toISOString()) : undefined,
+    lockedBy: shouldLock ? (existingSnapshot?.lockedBy || (forceFinalLock ? 'admin_manual' : 'cron_system')) : undefined,
     totalChallengeHours: dayTotalHours,
     totalChallengePoints: dayTotalPoints,
     activeMemberCount,
     memberSnapshots,
     teamStandings: isSoloMode ? [] : teamStandings,
     participantStandings: isSoloMode ? participantStandings : undefined,
-    isAutoClosed: forceFinalLock,
+    isAutoClosed: shouldLock,
     closedAt: Date.now(),
     totalPointsAwarded: dayTotalPoints,
     teamPointsMap,
@@ -2619,7 +2342,7 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
 
   await saveDailySnapshot(challenge.id, snapshot);
 
-  if (forceFinalLock) {
+  if (shouldLock) {
     await recalculateTeamPointsFromSubmissions(challenge.id);
   }
 
