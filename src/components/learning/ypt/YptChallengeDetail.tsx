@@ -1347,6 +1347,35 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
               }
             }
 
+            // Principle C: Restore Badges & Points from Cron Snapshot (Fix for Vanishing API Data)
+            if (todaySnapshot) {
+              const snapRec = (todaySnapshot.memberRecords || []).find((r: any) =>
+                areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
+              );
+              const memberSnap = todaySnapshot.memberSnapshots?.[cleanHandle];
+              const snapNetPoints = snapRec ? snapRec.netPoints : (memberSnap ? memberSnap.netPoints : 0);
+              const snapRules = snapRec?.appliedRules || memberSnap?.appliedRuleBreakdown || [];
+
+              if (snapNetPoints > todayLivePoints) {
+                todayLivePoints = snapNetPoints;
+              }
+
+              if (Array.isArray(snapRules) && snapRules.length > 0) {
+                snapRules.forEach((ar: any) => {
+                  const key = ar.ruleId || ar.ruleName || ar.emoji;
+                  if (!periodBadgeMap.has(key)) {
+                    periodBadgeMap.set(key, {
+                      emoji: ar.emoji || '⭐',
+                      name: ar.ruleName,
+                      points: ar.points || 0,
+                      count: 1,
+                      isTeamAll: false,
+                    });
+                  }
+                });
+              }
+            }
+
             // Cumulative total adds Today's contribution
             cumulativeHours += todayLiveHours;
             cumulativePoints += todayLivePoints;
@@ -1378,10 +1407,25 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
                     });
                   }
                 } else if (activeSnapshot && activeSnapshot.isLocked === false) {
+                  const snapRec = (activeSnapshot.memberRecords || []).find((r) =>
+                    areYptHandlesMatching(r.yptHandle, handleRaw, r.userId)
+                  );
                   const memberSnap = activeSnapshot.memberSnapshots?.[cleanHandle];
                   const hwm = activeSnapshot.highWaterMarks?.[cleanHandle] ?? 0;
-                  periodHours = memberSnap ? memberSnap.hoursStudied : hwm;
-                  periodPoints = memberSnap ? memberSnap.netPoints : 0;
+                  periodHours = memberSnap ? memberSnap.hoursStudied : (snapRec?.hoursStudied || hwm);
+                  periodPoints = memberSnap ? memberSnap.netPoints : (snapRec?.netPoints || 0);
+                  periodBadgeMap.clear();
+                  const rulesList = memberSnap?.appliedRuleBreakdown || snapRec?.appliedRules || [];
+                  rulesList.forEach((ar: any) => {
+                    const key = ar.ruleId || ar.ruleName || ar.emoji;
+                    periodBadgeMap.set(key, {
+                      emoji: ar.emoji || '⭐',
+                      name: ar.ruleName,
+                      points: ar.points || 0,
+                      count: 1,
+                      isTeamAll: false,
+                    });
+                  });
                 } else {
                   const statForDay = memberDailyStats.find((s) => s.dateYmd === selectedFilterDateYmd);
                   if (statForDay) {
