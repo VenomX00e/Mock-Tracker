@@ -1471,6 +1471,9 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
 
             const isLiveDay = dateFilter === 'date' && selectedFilterDateYmd === todayYmd;
             const finalPeriodBadges = Array.from(periodBadgeMap.values()).filter((badge) => {
+              if (badge.name === 'Study Interval Points' || (badge as any).ruleId === 'base_study' || badge.emoji === '⏱️') {
+                return false;
+              }
               if (isLiveDay && (badge.points < 0 || badge.name?.toLowerCase().includes('penalty') || badge.emoji === '⚠️')) {
                 return false;
               }

@@ -610,16 +610,6 @@ function calculatePointsFromRulesNode(
   let bonusPoints = 0;
   let customPenaltySum = 0;
 
-  if (baseStudyPoints > 0) {
-    appliedRules.push({
-      ruleId: 'base_study',
-      ruleName: 'Study Interval Points',
-      emoji: '⏱️',
-      points: baseStudyPoints,
-      type: 'base',
-    });
-  }
-
   if (Array.isArray(rules.customRules)) {
     for (const cr of rules.customRules) {
       let isMet = false;
