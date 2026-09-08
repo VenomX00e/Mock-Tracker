@@ -1824,10 +1824,11 @@ export async function resetTodayChallengeData(
   const activeYmd = targetDateYmd || getYptDayYmd();
   const challengeRef = doc(db, CHALLENGES_COLLECTION, challengeId);
 
-  // 1. Clear HWMs on main challenge document
+  // 1. Clear HWMs and completed challenges on main challenge document
   await updateDoc(challengeRef, {
     dailyHighWaterMarks: {},
     maxContinuousHighWaterMarks: {},
+    dailyCompletedChallenges: {},
     lastDailySnapshotDate: activeYmd,
     updatedAt: new Date().toISOString(),
   });
