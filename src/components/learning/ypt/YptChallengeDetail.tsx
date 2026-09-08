@@ -96,6 +96,7 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetTodayConfirm, setShowResetTodayConfirm] = useState(false);
   const [dateFilter, setDateFilter] = useState<'date' | 'allTime'>('date');
   const [selectedFilterDateYmd, setSelectedFilterDateYmd] = useState<string>(getYptDayYmd());
   const [editingMemberHandle, setEditingMemberHandle] = useState<string | null>(null);
@@ -436,25 +437,27 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
     setShowDeleteConfirm(true);
   };
 
-  const handleResetTodayData = async () => {
+  const handleResetTodayData = () => {
+    if (!challenge) return;
+    setShowResetTodayConfirm(true);
+  };
+
+  const executeResetTodayData = async () => {
     if (!challenge) return;
     const todayYmd = getYptDayYmd();
-    if (
-      !window.confirm(
-        `⚠️ ADMIN RESET: This will purge leaked hours for Today (${todayYmd}), clear challenge High-Water Marks, and reset Today's leaderboard back to 0:00.\n\nYesterday's data remains untouched.\n\nProceed with reset?`
-      )
-    ) {
-      return;
-    }
     try {
       setIsResettingToday(true);
       await resetTodayChallengeData(challenge.id, todayYmd);
+      setShowResetTodayConfirm(false);
       await onRefresh();
       // Re-trigger live fetch to get clean current live data
       fetchLiveRoster();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to reset today data:', err);
-      alert('Failed to reset today data: ' + (err instanceof Error ? err.message : String(err)));
+      setDayLogFeedback({
+        type: 'error',
+        message: 'Failed to reset today data: ' + (err instanceof Error ? err.message : String(err)),
+      });
     } finally {
       setIsResettingToday(false);
     }
@@ -910,6 +913,23 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
             return (
               <div className="flex flex-wrap items-center gap-2">
                 {/* Status Indicator Pill & Actions */}
+                {isTodaySelected && canManageYptChallenges && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleResetTodayData();
+                    }}
+                    disabled={isResettingToday}
+                    className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300/80 dark:border-amber-700/80 rounded-lg shadow-2xs transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap z-10"
+                    title="Purge leaked hours and reset Today's leaderboard back to 0:00"
+                  >
+                    <RefreshCw className={`w-3 h-3 text-amber-500 shrink-0 ${isResettingToday ? 'animate-spin' : ''}`} />
+                    <span>{isResettingToday ? 'Resetting...' : "Reset Today's Data"}</span>
+                  </button>
+                )}
+
                 {isPastSelected && activeSnapshot && activeSnapshot.isLocked !== false && (
                   <div className="flex items-center gap-1">
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-lg shadow-2xs whitespace-nowrap">
@@ -2128,6 +2148,18 @@ export function YptChallengeDetail({ challenge, onBack, onRefresh }: YptChalleng
         isLoading={isDeleting}
         onConfirm={confirmSoftDelete}
         onClose={() => setShowDeleteConfirm(false)}
+      />
+
+      {/* Reset Today Data Confirm Modal */}
+      <ConfirmDeleteModal
+        isOpen={showResetTodayConfirm}
+        title="Reset Today's Data?"
+        message={`This will purge leaked hours for Today (${getYptDayYmd()}), clear challenge High-Water Marks, and reset Today's leaderboard back to 0:00.\n\nYesterday's finalized data will remain completely untouched.`}
+        confirmText="Reset Today"
+        isDanger={true}
+        isLoading={isResettingToday}
+        onConfirm={executeResetTodayData}
+        onClose={() => setShowResetTodayConfirm(false)}
       />
 
       {/* Upload Screenshot Modal locked to this challenge */}

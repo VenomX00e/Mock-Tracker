@@ -1998,9 +1998,14 @@ export async function syncChallengeDaySnapshotWithHighWaterMark(
     return existingSnapshot;
   }
 
-  const existingHwms: Record<string, number> = existingSnapshot?.highWaterMarks || {};
+  // DATE-AWARE MEMORY BANK GUARD (Frontend / Client Service):
+  // When activeYmd is Today, but the challenge lastDailySnapshotDate is older (e.g. yesterday, 5:00-5:15 AM window),
+  // ensure we do not inherit stale cross-boundary HWMs if the snapshot is being created for the first time.
+  const isStaleChallengeDocDate = challenge.lastDailySnapshotDate && challenge.lastDailySnapshotDate < activeYmd;
+
+  const existingHwms: Record<string, number> = existingSnapshot?.highWaterMarks || (isStaleChallengeDocDate ? {} : (challenge.dailyHighWaterMarks as any) || {});
   const updatedHwms: Record<string, number> = { ...existingHwms };
-  const existingMaxContHwms: Record<string, number> = existingSnapshot?.maxContinuousHighWaterMarks || {};
+  const existingMaxContHwms: Record<string, number> = existingSnapshot?.maxContinuousHighWaterMarks || (isStaleChallengeDocDate ? {} : (challenge.dailyMaxContinuousHighWaterMarks as any) || {});
   const updatedMaxContHwms: Record<string, number> = { ...existingMaxContHwms };
 
   // Fetch all existing manual / OCR submission logs for this challenge & date

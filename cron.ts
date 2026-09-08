@@ -842,14 +842,21 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         const freshChallengeDoc = await challengeDocRef.get();
         if (freshChallengeDoc.exists) {
           const chData = freshChallengeDoc.data() as any;
-          if (chData?.dailyHighWaterMarks && typeof chData.dailyHighWaterMarks === 'object') {
-            challengeDailyHwms = { ...chData.dailyHighWaterMarks };
-          }
-          if (chData?.dailyMaxContinuousHighWaterMarks && typeof chData.dailyMaxContinuousHighWaterMarks === 'object') {
-            challengeDailyMaxContHwms = { ...chData.dailyMaxContinuousHighWaterMarks };
-          }
-          if (chData?.dailyCompletedChallenges && typeof chData.dailyCompletedChallenges === 'object') {
-            challengeDailyCompletedChallenges = { ...chData.dailyCompletedChallenges };
+          // DATE-AWARE MEMORY BANK GUARD:
+          // If the challenge document's lastDailySnapshotDate is older than activeYmd (e.g. yesterday, during 5:00-5:15 AM window),
+          // do NOT load yesterday's dailyHighWaterMarks/completedChallenges into today's fresh memory bank.
+          const isStaleCrossBoundaryData = chData?.lastDailySnapshotDate && chData.lastDailySnapshotDate < activeYmd;
+
+          if (!isStaleCrossBoundaryData) {
+            if (chData?.dailyHighWaterMarks && typeof chData.dailyHighWaterMarks === 'object') {
+              challengeDailyHwms = { ...chData.dailyHighWaterMarks };
+            }
+            if (chData?.dailyMaxContinuousHighWaterMarks && typeof chData.dailyMaxContinuousHighWaterMarks === 'object') {
+              challengeDailyMaxContHwms = { ...chData.dailyMaxContinuousHighWaterMarks };
+            }
+            if (chData?.dailyCompletedChallenges && typeof chData.dailyCompletedChallenges === 'object') {
+              challengeDailyCompletedChallenges = { ...chData.dailyCompletedChallenges };
+            }
           }
         }
 
@@ -1387,14 +1394,21 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
 
         const freshChallengeData = await fetchFirestoreRestDoc(`yptChallenges/${challenge.id}`);
         if (freshChallengeData) {
-          if (freshChallengeData.dailyHighWaterMarks && typeof freshChallengeData.dailyHighWaterMarks === 'object') {
-            challengeDailyHwms = { ...freshChallengeData.dailyHighWaterMarks };
-          }
-          if (freshChallengeData.dailyMaxContinuousHighWaterMarks && typeof freshChallengeData.dailyMaxContinuousHighWaterMarks === 'object') {
-            challengeDailyMaxContHwms = { ...freshChallengeData.dailyMaxContinuousHighWaterMarks };
-          }
-          if (freshChallengeData.dailyCompletedChallenges && typeof freshChallengeData.dailyCompletedChallenges === 'object') {
-            challengeDailyCompletedChallenges = { ...freshChallengeData.dailyCompletedChallenges };
+          // DATE-AWARE MEMORY BANK GUARD:
+          // If the challenge document's lastDailySnapshotDate is older than activeYmd (e.g. yesterday, during 5:00-5:15 AM window),
+          // do NOT load yesterday's dailyHighWaterMarks/completedChallenges into today's fresh memory bank.
+          const isStaleCrossBoundaryData = freshChallengeData?.lastDailySnapshotDate && freshChallengeData.lastDailySnapshotDate < activeYmd;
+
+          if (!isStaleCrossBoundaryData) {
+            if (freshChallengeData.dailyHighWaterMarks && typeof freshChallengeData.dailyHighWaterMarks === 'object') {
+              challengeDailyHwms = { ...freshChallengeData.dailyHighWaterMarks };
+            }
+            if (freshChallengeData.dailyMaxContinuousHighWaterMarks && typeof freshChallengeData.dailyMaxContinuousHighWaterMarks === 'object') {
+              challengeDailyMaxContHwms = { ...freshChallengeData.dailyMaxContinuousHighWaterMarks };
+            }
+            if (freshChallengeData.dailyCompletedChallenges && typeof freshChallengeData.dailyCompletedChallenges === 'object') {
+              challengeDailyCompletedChallenges = { ...freshChallengeData.dailyCompletedChallenges };
+            }
           }
         }
 
