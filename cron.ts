@@ -896,6 +896,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
         const updatedChallengeMaxContHwms: Record<string, number> = { ...challengeDailyMaxContHwms };
         const updatedChallengeCompletedChallenges: Record<string, number[]> = { ...challengeDailyCompletedChallenges };
         const memberSnapshots: Record<string, any> = {};
+        const memberRecords: any[] = [];
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
         let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
@@ -956,12 +957,16 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
               }
 
               // Phase 3 Challenge Status: Check the cls (challenge submission) dictionary in the YPT response
-              // to see if they completed the specific active challenge (st === 1)
+              // Extract both dictionary key (Challenge ID) and entry item ID (Submission ID)
               if (liveMember.cls && typeof liveMember.cls === 'object') {
                 for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
-                  if (cItem && (cItem as any).st === 1) {
-                    const cNum = Number(cIdStr);
-                    completedChallengeIds.push(cNum);
+                  const c = cItem as any;
+                  if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
+                    const keyId = Number(cIdStr);
+                    if (!isNaN(keyId)) completedChallengeIds.push(keyId);
+                    if (c.id && !isNaN(Number(c.id))) {
+                      completedChallengeIds.push(Number(c.id));
+                    }
                   }
                 }
               }
@@ -1054,6 +1059,19 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
             if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
               memberSnapshots[resolvedUdKey] = currentSnapshotItem;
             }
+
+            memberRecords.push({
+              yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
+              userId: resolvedUd ? String(resolvedUd) : undefined,
+              hoursStudied: peakHours,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: 0,
+              netPoints: calculated.netPoints,
+              isCurrentlyStudying,
+              appliedRules: calculated.appliedRules,
+              completedChallengeIds: finalCompletedList,
+            });
           });
 
           // Build solo leaderboard participant standings sorted by dayPoints desc, then dayHours desc
@@ -1114,9 +1132,13 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
 
                 if (liveMember.cls && typeof liveMember.cls === 'object') {
                   for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
-                    if (cItem && (cItem as any).st === 1) {
-                      const cNum = Number(cIdStr);
-                      completedChallengeIds.push(cNum);
+                    const c = cItem as any;
+                    if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
+                      const keyId = Number(cIdStr);
+                      if (!isNaN(keyId)) completedChallengeIds.push(keyId);
+                      if (c.id && !isNaN(Number(c.id))) {
+                        completedChallengeIds.push(Number(c.id));
+                      }
                     }
                   }
                 }
@@ -1200,6 +1222,19 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
                 status: 'active',
                 lastSyncedAt: new Date().toISOString(),
               };
+
+              memberRecords.push({
+                yptHandle: liveMember?.n || cleanHandle,
+                userId: resolvedUd ? String(resolvedUd) : undefined,
+                hoursStudied: peakHours,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: 0,
+                netPoints: calculated.netPoints,
+                isCurrentlyStudying,
+                appliedRules: calculated.appliedRules,
+                completedChallengeIds: finalCompletedList,
+              });
             });
 
             teamStandingsDraft.push({
@@ -1227,6 +1262,7 @@ async function execute15MinYptSync(adminDb?: admin.firestore.Firestore): Promise
           totalChallengePoints: dayTotalPoints,
           activeMemberCount,
           memberSnapshots,
+          memberRecords,
           teamStandings: isSoloMode ? [] : teamStandings,
           participantStandings: isSoloMode ? participantStandings : undefined,
           highWaterMarks: updatedHwms,
@@ -1444,6 +1480,7 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
         const updatedChallengeMaxContHwms: Record<string, number> = { ...challengeDailyMaxContHwms };
         const updatedChallengeCompletedChallenges: Record<string, number[]> = { ...challengeDailyCompletedChallenges };
         const memberSnapshots: Record<string, any> = {};
+        const memberRecords: any[] = [];
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
         let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
@@ -1502,9 +1539,13 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
 
               if (liveMember.cls && typeof liveMember.cls === 'object') {
                 for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
-                  if (cItem && (cItem as any).st === 1) {
-                    const cNum = Number(cIdStr);
-                    completedChallengeIds.push(cNum);
+                  const c = cItem as any;
+                  if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
+                    const keyId = Number(cIdStr);
+                    if (!isNaN(keyId)) completedChallengeIds.push(keyId);
+                    if (c.id && !isNaN(Number(c.id))) {
+                      completedChallengeIds.push(Number(c.id));
+                    }
                   }
                 }
               }
@@ -1591,6 +1632,19 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
               completedChallengeIds: finalCompletedList,
               lastSyncedAt: new Date().toISOString(),
             });
+
+            memberRecords.push({
+              yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
+              userId: resolvedUd ? String(resolvedUd) : undefined,
+              hoursStudied: peakHours,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: calculated.penaltyPoints || 0,
+              netPoints: calculated.netPoints,
+              isCurrentlyStudying,
+              appliedRules: calculated.appliedRules,
+              completedChallengeIds: finalCompletedList,
+            });
           });
 
           const seenKeys = new Set<string>();
@@ -1645,9 +1699,13 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
 
                 if (liveMember.cls && typeof liveMember.cls === 'object') {
                   for (const [cIdStr, cItem] of Object.entries(liveMember.cls)) {
-                    if (cItem && (cItem as any).st === 1) {
-                      const cNum = Number(cIdStr);
-                      completedChallengeIds.push(cNum);
+                    const c = cItem as any;
+                    if (c && (c.st === 1 || c.status === 1 || c.st === true)) {
+                      const keyId = Number(cIdStr);
+                      if (!isNaN(keyId)) completedChallengeIds.push(keyId);
+                      if (c.id && !isNaN(Number(c.id))) {
+                        completedChallengeIds.push(Number(c.id));
+                      }
                     }
                   }
                 }
@@ -1728,6 +1786,19 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
                 completedChallengeIds: finalCompletedList,
                 lastSyncedAt: new Date().toISOString(),
               });
+
+              memberRecords.push({
+                yptHandle: liveMember?.n || cleanHandle,
+                userId: resolvedUd ? String(resolvedUd) : undefined,
+                hoursStudied: peakHours,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: calculated.penaltyPoints || 0,
+                netPoints: calculated.netPoints,
+                isCurrentlyStudying,
+                appliedRules: calculated.appliedRules,
+                completedChallengeIds: finalCompletedList,
+              });
             });
 
             teamStandingsDraft.push({
@@ -1746,12 +1817,17 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
         const teamStandings = teamStandingsDraft.map((t, idx) => ({ ...t, rank: idx + 1 }));
 
         const snapshotData: any = {
+          id: activeYmd,
+          challengeId: challenge.id,
           dateYmd: activeYmd,
+          targetDateYmd: activeYmd,
           isLocked: false,
+          totalChallengeHours: Math.round(dayTotalHours * 100) / 100,
           totalHoursStudied: Math.round(dayTotalHours * 100) / 100,
           totalChallengePoints: dayTotalPoints,
           activeMemberCount,
           memberSnapshots,
+          memberRecords,
           teamStandings: isSoloMode ? [] : teamStandings,
           participantStandings: isSoloMode ? participantStandings : undefined,
           highWaterMarks: updatedHwms,
@@ -1759,8 +1835,12 @@ async function executeContinuousYptSyncViaRest(): Promise<YptSyncDiagnosticRepor
           lastSyncedAt: new Date().toISOString(),
         };
 
-        // Write daily snapshot via REST
+        // Write daily snapshot via REST (canonical path)
         await setFirestoreRestDoc(`yptChallenges/${challenge.id}/dailySnapshots/${activeYmd}`, snapshotData);
+        // Also write legacy path for backward compatibility
+        try {
+          await setFirestoreRestDoc(`yptChallenges/${challenge.id}/daily_snapshots/daily_${activeYmd}`, snapshotData);
+        } catch {}
 
         // Update challenge doc via REST
         const challengeUpdatePayload: any = {
@@ -1883,6 +1963,7 @@ async function execute515AmYptFinalizerViaRest(): Promise<void> {
         const isSoloMode = mode === 'individual';
 
         const finalizedMemberSnapshots: Record<string, any> = {};
+        const finalizedMemberRecords: any[] = [];
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
         let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
@@ -1963,6 +2044,19 @@ async function execute515AmYptFinalizerViaRest(): Promise<void> {
             if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
               finalizedMemberSnapshots[resolvedUdKey] = finalSnapshotItem;
             }
+
+            finalizedMemberRecords.push({
+              yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
+              userId: resolvedUd ? String(resolvedUd) : undefined,
+              hoursStudied: peakHours,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: calculated.penaltyPoints || 0,
+              netPoints: calculated.netPoints,
+              isCurrentlyStudying: false,
+              appliedRules: calculated.appliedRules,
+              completedChallengeIds: memberCompletedChallenges,
+            });
           });
 
           const seenKeys = new Set<string>();
@@ -2045,6 +2139,19 @@ async function execute515AmYptFinalizerViaRest(): Promise<void> {
                 status: 'active',
                 lastSyncedAt: new Date().toISOString(),
               };
+
+              finalizedMemberRecords.push({
+                yptHandle: liveMember?.n || cleanHandle,
+                userId: resolvedUd ? String(resolvedUd) : undefined,
+                hoursStudied: peakHours,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: calculated.penaltyPoints || 0,
+                netPoints: calculated.netPoints,
+                isCurrentlyStudying: false,
+                appliedRules: calculated.appliedRules,
+                completedChallengeIds: memberCompletedChallenges,
+              });
             });
 
             teamStandingsDraft.push({
@@ -2074,6 +2181,7 @@ async function execute515AmYptFinalizerViaRest(): Promise<void> {
           totalChallengePoints: dayTotalPoints,
           activeMemberCount,
           memberSnapshots: finalizedMemberSnapshots,
+          memberRecords: finalizedMemberRecords,
           teamStandings: isSoloMode ? [] : teamStandings,
           participantStandings: isSoloMode ? participantStandings : undefined,
           highWaterMarks: existingHwms,
@@ -2187,6 +2295,7 @@ async function execute515AmYptFinalizerViaRest(): Promise<void> {
               totalChallengePoints: 0,
               activeMemberCount: 0,
               memberSnapshots: initialMemberSnapshots,
+              memberRecords: [],
               teamStandings: isSoloMode ? [] : initialTeamStandings,
               participantStandings: isSoloMode ? initialParticipantStandings : undefined,
               highWaterMarks: {},
@@ -2296,6 +2405,7 @@ async function execute515AmYptFinalizer(adminDb?: admin.firestore.Firestore) {
         const isSoloMode = mode === 'individual';
 
         const finalizedMemberSnapshots: Record<string, any> = {};
+        const finalizedMemberRecords: any[] = [];
         const teamStandingsDraft: Array<{ teamId: string; teamName: string; dayHours: number; dayPoints: number }> = [];
         let participantStandings: Array<{ yptUd?: number; yptHandle: string; dayHours: number; dayPoints: number; rank: number }> = [];
         let dayTotalHours = 0;
@@ -2378,6 +2488,19 @@ async function execute515AmYptFinalizer(adminDb?: admin.firestore.Firestore) {
             if (resolvedUdKey && resolvedUdKey !== cleanHandle) {
               finalizedMemberSnapshots[resolvedUdKey] = finalSnapshotItem;
             }
+
+            finalizedMemberRecords.push({
+              yptHandle: liveMember?.n || p.yptHandle || cleanHandle,
+              userId: resolvedUd ? String(resolvedUd) : undefined,
+              hoursStudied: peakHours,
+              basePoints: calculated.baseStudyPoints,
+              bonusPoints: calculated.bonusPoints,
+              penaltyPoints: calculated.penaltyPoints || 0,
+              netPoints: calculated.netPoints,
+              isCurrentlyStudying: false,
+              appliedRules: calculated.appliedRules,
+              completedChallengeIds: memberCompletedChallenges,
+            });
           });
 
           // Build solo leaderboard participant standings sorted by dayPoints desc, then dayHours desc
@@ -2463,6 +2586,19 @@ async function execute515AmYptFinalizer(adminDb?: admin.firestore.Firestore) {
                 status: 'active',
                 lastSyncedAt: new Date().toISOString(),
               };
+
+              finalizedMemberRecords.push({
+                yptHandle: liveMember?.n || cleanHandle,
+                userId: resolvedUd ? String(resolvedUd) : undefined,
+                hoursStudied: peakHours,
+                basePoints: calculated.baseStudyPoints,
+                bonusPoints: calculated.bonusPoints,
+                penaltyPoints: calculated.penaltyPoints || 0,
+                netPoints: calculated.netPoints,
+                isCurrentlyStudying: false,
+                appliedRules: calculated.appliedRules,
+                completedChallengeIds: memberCompletedChallenges,
+              });
             });
 
             teamStandingsDraft.push({
@@ -2490,6 +2626,7 @@ async function execute515AmYptFinalizer(adminDb?: admin.firestore.Firestore) {
             totalChallengePoints: dayTotalPoints,
             activeMemberCount,
             memberSnapshots: finalizedMemberSnapshots,
+            memberRecords: finalizedMemberRecords,
             teamStandings: isSoloMode ? [] : teamStandings,
             participantStandings: isSoloMode ? participantStandings : undefined,
             highWaterMarks: existingHwms,
@@ -2687,6 +2824,7 @@ async function execute515AmYptFinalizer(adminDb?: admin.firestore.Firestore) {
               totalChallengePoints: 0,
               activeMemberCount: 0,
               memberSnapshots: initialMemberSnapshots,
+              memberRecords: [],
               teamStandings: isSoloMode ? [] : initialTeamStandings,
               participantStandings: isSoloMode ? initialParticipantStandings : undefined,
               highWaterMarks: {},
