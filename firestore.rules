@@ -78,6 +78,15 @@ service cloud.firestore {
         && (!data.keys().hasAny(['dynamicSubjects']) || data.dynamicSubjects is map);
     }
 
+    function isValidCustomVocabFolder(data) {
+      return data.keys().hasAll(['id', 'name', 'vocabIds'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.vocabIds is list && data.vocabIds.size() <= 5000
+        && (!data.keys().hasAny(['createdAt']) || data.createdAt is timestamp || data.createdAt is string || data.createdAt is number)
+        && (!data.keys().hasAny(['updatedAt']) || data.updatedAt is timestamp || data.updatedAt is string || data.updatedAt is number);
+    }
+
     function isValidUserProfile(data) {
       return data.keys().hasAll(['userId'])
         && data.userId is string && data.userId == request.auth.uid
@@ -111,6 +120,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(['defaultYptHandle']) || data.defaultYptHandle is string || data.defaultYptHandle == null)
         && (!data.keys().hasAny(['permissions']) || data.permissions is map || data.permissions == null)
         && (!data.keys().hasAny(['tasks']) || data.tasks is list || data.tasks == null)
+        && (!data.keys().hasAny(['completedPracticeFiles']) || data.completedPracticeFiles is list || data.completedPracticeFiles == null)
+        && (!data.keys().hasAny(['favoriteVocabIds']) || (data.favoriteVocabIds is list && data.favoriteVocabIds.size() <= 10000) || data.favoriteVocabIds == null)
         && (!data.keys().hasAny(['lastActiveAt']) || data.lastActiveAt is number || data.lastActiveAt is timestamp || data.lastActiveAt == null);
     }
 
@@ -249,14 +260,32 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
           'userId', 'email', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 'avgAccuracy', 'avgQuantPercentile', 
           'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 'totalTests', 'streak', 
-          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'defaultYptHandle', 'tasks', 'lastActiveAt'
+          'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'defaultYptHandle', 'tasks', 'lastActiveAt',
+          'completedPracticeFiles', 'favoriteVocabIds'
         ]) && (!incoming().keys().hasAny(['createdAt']) || incoming().createdAt == existing().createdAt)) 
         || (isAnyAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
           'userId', 'email', 'isBanned', 'isMuted', 'adminCategories', 'displayName', 'photoURL', 'targetedExam', 'avgPercentile', 
           'avgAccuracy', 'avgQuantPercentile', 'avgReasoningPercentile', 'avgEnglishPercentile', 'avgGaPercentile', 
-          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'defaultYptHandle', 'tasks', 'lastActiveAt'
+          'totalTests', 'streak', 'updatedAt', 'lastMockDate', 'categoryId', 'dynamicSubjects', 'streakActive', 'dynamicAverages', 'stats30D', 'stats7D', 'categoryStats', 'badges', 'bio', 'yptNames', 'defaultYptHandle', 'tasks', 'lastActiveAt',
+          'completedPracticeFiles', 'favoriteVocabIds'
         ]));
       allow delete: if false; // Users shouldn't delete profile or let's say false for now
+
+      match /customVocabFolders/{folderId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() 
+          && request.auth.uid == userId 
+          && isValidId(folderId) 
+          && isValidCustomVocabFolder(incoming())
+          && incoming().id == folderId;
+        allow update: if isSignedIn() 
+          && request.auth.uid == userId 
+          && isValidId(folderId) 
+          && isValidCustomVocabFolder(incoming())
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'vocabIds', 'updatedAt'])
+          && incoming().id == existing().id;
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(folderId);
+      }
     }
 
     match /{path=**}/mocks/{mockId} {

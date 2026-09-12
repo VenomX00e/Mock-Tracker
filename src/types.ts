@@ -39,6 +39,7 @@ export interface UserProfile {
   stats7D?: any;
   stats30D?: any;
   completedPracticeFiles?: string[];
+  favoriteVocabIds?: string[];
   permissions?: {
     canManageUsers?: boolean;
     canManageNotices?: boolean;
@@ -52,6 +53,33 @@ export interface UserProfile {
     canManageYpt?: boolean;
   };
   tasks?: ReflectionTask[];
+}
+
+export interface CustomVocabFolder {
+  id: string;
+  name: string;
+  vocabIds: string[];
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export type CustomFolder = CustomVocabFolder;
+
+export interface Vocabulary {
+  id: string;
+  type: 'vocab' | 'phrasal_verb' | 'idiom' | 'one_word_sub';
+  word: string;
+  meaning: string;
+  pos?: string;
+  example?: string;
+  synonyms?: string[];
+  antonyms?: string[];
+  mnemonic?: string;
+  additional?: string;
+  canvasId?: string;
+  canvasTitle?: string;
+  canvasDate?: string;
+  isMastered?: boolean;
 }
 
 export interface ReflectionTask {

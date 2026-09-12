@@ -52,6 +52,7 @@ export function LearningView() {
   const popoverRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const setCanvases = useVocabularyStore(state => state.setCanvases);
+  const syncUserDataOnLogin = useVocabularyStore(state => state.syncUserDataOnLogin);
 
   useEffect(() => {
     const handleSubNavigate = (action: any) => {
@@ -131,6 +132,11 @@ export function LearningView() {
     });
     return () => unsubscribe();
   }, [setCanvases]);
+
+  useEffect(() => {
+    const unsubscribe = syncUserDataOnLogin(userProfile?.userId || null);
+    return () => unsubscribe();
+  }, [userProfile?.userId, syncUserDataOnLogin]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

@@ -24,6 +24,7 @@ export function useUserProfile() {
           ...data,
           yptNames: Array.isArray(data.yptNames) ? data.yptNames : [],
           defaultYptHandle: typeof data.defaultYptHandle === 'string' ? data.defaultYptHandle : undefined,
+          favoriteVocabIds: Array.isArray(data.favoriteVocabIds) ? data.favoriteVocabIds : [],
         } as UserProfile);
       } else {
         // Initialize profile locally to avoid immediate write loop inside read listener
@@ -40,6 +41,7 @@ export function useUserProfile() {
           totalTests: 0,
           streak: 0,
           yptNames: [],
+          favoriteVocabIds: [],
         };
         // Don't setDoc inside onSnapshot here either. If we need to bootstrap, 
         // rely on an action or a separate hook.

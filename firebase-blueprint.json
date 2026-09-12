@@ -23,6 +23,10 @@
         "yptNames": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "favoriteVocabIds": {
+          "type": "array",
+          "items": { "type": "string" }
         }
       },
       "required": ["userId"]
@@ -215,6 +219,22 @@
         "updatedBy": { "type": "string" }
       }
     },
+    "CustomVocabFolder": {
+      "title": "CustomVocabFolder",
+      "description": "User-created custom folder for organizing favorited vocabulary words",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "vocabIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "vocabIds"]
+    },
     "YptDailyDaySnapshot": {
       "title": "YptDailyDaySnapshot",
       "description": "Daily finalized score and study hours snapshot for YPT challenge",
@@ -255,6 +275,10 @@
     "users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "User profile containing metadata and aggregates"
+    },
+    "users/{userId}/customVocabFolders/{folderId}": {
+      "schema": { "$ref": "#/entities/CustomVocabFolder" },
+      "description": "Custom vocabulary folders created by the user"
     },
     "users/{userId}/mocks/{mockId}": {
       "schema": { "$ref": "#/entities/MockScore" },

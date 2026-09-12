@@ -1,12 +1,13 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { AppStateCtx } from '../../context/AppContext';
 import { useVocabularyStore } from '../../store/vocabularyStore';
-import { Plus, BookOpen, Calendar, Trash2, Youtube, Sparkles, BookMarked } from 'lucide-react';
+import { Plus, BookOpen, Calendar, Trash2, Youtube, Sparkles, BookMarked, Star } from 'lucide-react';
 import { EditorialCanvasView } from './EditorialCanvasView';
 import { YouTubeVocabExtractorModal } from './YouTubeVocabExtractorModal';
 import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/Tabs';
 import { RuleBookDashboard } from '../vocabulary/RuleBookDashboard';
+import { MyVocabsView } from './MyVocabsView';
 
 export function VocabularyFeed() {
   const { isOwner, adminPermissions } = useContext(AppStateCtx)!;
@@ -19,7 +20,7 @@ export function VocabularyFeed() {
   const [isCreating, setIsCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [isYouTubeModalOpen, setIsYouTubeModalOpen] = useState(false);
-  const [subTab, setSubTab] = useState<'vocabs' | 'rules'>('vocabs');
+  const [subTab, setSubTab] = useState<'vocabs' | 'my-vocabs' | 'rules'>('vocabs');
 
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
@@ -61,6 +62,12 @@ export function VocabularyFeed() {
   useEffect(() => {
     const handleJarvisAction = (action: JarvisActionEvent) => {
       if (action.type === 'EXECUTE_INTENT') {
+        if (action.intent === 'OPEN_MY_VOCABS' || action.intent === 'OPEN_FAVORITE_VOCAB') {
+          setSubTab('my-vocabs');
+          setActiveCanvasId(null);
+          return;
+        }
+
         if (
           action.intent === 'OPEN_VOCAB_CANVAS' ||
           action.intent === 'FILTER_VOCAB_DATE' ||
@@ -124,12 +131,15 @@ export function VocabularyFeed() {
 
   return (
     <div className="w-full h-full flex flex-col gap-5">
-      {/* Subpage Tabs Navigation: Vocabularies vs. RuleBook */}
-      <Tabs value={subTab} onValueChange={(val) => setSubTab(val as 'vocabs' | 'rules')}>
+      {/* Subpage Tabs Navigation: Editorial Vocabs vs. My Vocabs vs. RuleBook */}
+      <Tabs value={subTab} onValueChange={(val) => setSubTab(val as 'vocabs' | 'my-vocabs' | 'rules')}>
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-3">
           <TabsList>
             <TabsTrigger value="vocabs" icon={<BookOpen className="w-4 h-4" />}>
               Editorial Vocab
+            </TabsTrigger>
+            <TabsTrigger value="my-vocabs" icon={<Star className="w-4 h-4 text-amber-500 fill-amber-400" />}>
+              My Vocabs
             </TabsTrigger>
             <TabsTrigger value="rules" icon={<BookMarked className="w-4 h-4 text-amber-500" />}>
               RuleBook
@@ -265,7 +275,12 @@ export function VocabularyFeed() {
           </div>
         </TabsContent>
 
-        {/* Tab 2: Personal RuleBook Dashboard */}
+        {/* Tab 2: My Vocabs (Favorites & Custom Folders) */}
+        <TabsContent value="my-vocabs">
+          <MyVocabsView />
+        </TabsContent>
+
+        {/* Tab 3: Personal RuleBook Dashboard */}
         <TabsContent value="rules">
           <RuleBookDashboard />
         </TabsContent>

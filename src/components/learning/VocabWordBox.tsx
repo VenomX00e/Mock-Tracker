@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { VocabEntry } from "../../store/vocabularyStore";
+import { VocabEntry, useVocabularyStore } from "../../store/vocabularyStore";
 import {
   CheckCircle,
   Circle,
@@ -12,14 +12,18 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  Star,
+  Folder,
 } from "lucide-react";
 import { generateWordDetails } from "../../services/aiService";
+import { MoveVocabDialog } from "./MoveVocabDialog";
 
 interface VocabWordBoxProps {
   vocab: VocabEntry;
   onUpdate: (updates: Partial<VocabEntry>) => void;
   onDelete: () => void;
   canManageLearning?: boolean;
+  isMyVocabsView?: boolean;
 }
 
 import { getActiveApiKey } from '../../utils/apiKeyManager';
@@ -29,7 +33,22 @@ export function VocabWordBox({
   onUpdate,
   onDelete,
   canManageLearning = false,
+  isMyVocabsView = false,
 }: VocabWordBoxProps) {
+  // Store actions and state for favorites
+  const favoriteVocabIds = useVocabularyStore((state) => state.favoriteVocabIds);
+  const customFolders = useVocabularyStore((state) => state.customFolders);
+  const toggleFavorite = useVocabularyStore((state) => state.toggleFavorite);
+  const isStarred = favoriteVocabIds.includes(vocab.id);
+  const isInCustomFolder = customFolders.some((f) => (f.vocabIds || []).includes(vocab.id));
+
+  // Move dialog state
+  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
+
+  // Local toast message for instant feedback
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // We use local state for editing arrays to avoid jumping cursor issues while typing
   const [synonyms, setSynonyms] = useState(vocab.synonyms.join(", "));
   const [antonyms, setAntonyms] = useState(vocab.antonyms.join(", "));
@@ -41,6 +60,31 @@ export function VocabWordBox({
   const [showDelete, setShowDelete] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const [isAddExpanded, setIsAddExpanded] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleToggleStar = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const willBeStarred = !isStarred;
+    toggleFavorite(vocab.id);
+
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    setToastMessage(willBeStarred ? "Added to Favorites" : "Removed from Favorites");
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2000);
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -110,7 +154,56 @@ export function VocabWordBox({
       `}
     >
       {/* Actions */}
-      <div className="absolute top-3.5 right-2 md:right-3.5 flex items-center gap-0.5 md:gap-1 transition-opacity z-10 pointer-events-auto">
+      <div className="absolute top-2.5 right-2 md:right-3 flex items-center gap-1 transition-opacity z-10 pointer-events-auto">
+        {/* Toast Notification Pill */}
+        {toastMessage && (
+          <div className="px-2.5 py-1 bg-slate-900/90 dark:bg-white/95 text-white dark:text-slate-900 text-[11px] font-semibold rounded-full shadow-lg whitespace-nowrap pointer-events-none animate-in fade-in slide-in-from-right-2 duration-200">
+            {toastMessage}
+          </div>
+        )}
+
+        {/* Save to Personal Section / Custom Folder Button */}
+        {isMyVocabsView && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsMoveDialogOpen(true);
+            }}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
+              isInCustomFolder
+                ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                : "text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+            title="Save to personal section..."
+          >
+            <Folder
+              className={`w-4 h-4 md:w-4.5 md:h-4.5 transition-transform active:scale-125 ${
+                isInCustomFolder ? "fill-indigo-500/20" : ""
+              }`}
+            />
+          </button>
+        )}
+
+        {/* Favorite Star Button */}
+        <button
+          type="button"
+          onClick={handleToggleStar}
+          className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
+            isStarred
+              ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60"
+              : "text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          }`}
+          title={isStarred ? "Remove from Favorites" : "Add to Favorites"}
+        >
+          <Star
+            className={`w-4 h-4 md:w-4.5 md:h-4.5 transition-transform active:scale-125 ${
+              isStarred ? "fill-amber-400 text-amber-500" : ""
+            }`}
+          />
+        </button>
+
         {canManageLearning && showDelete && (
           <button
             onClick={(e) => {
@@ -127,7 +220,7 @@ export function VocabWordBox({
       </div>
 
       {/* Row 1: Word and POS */}
-      <div className="flex items-center gap-1.5 w-full pr-[32px] md:pr-[40px] flex-nowrap">
+      <div className={`flex items-center gap-1.5 w-full ${isMyVocabsView ? 'pr-[98px] md:pr-[110px]' : 'pr-[72px] md:pr-[84px]'} flex-nowrap`}>
         <button
           onClick={() => onUpdate({ isMastered: !vocab.isMastered })}
           className="p-0.5 text-slate-400 hover:text-green-600 dark:hover:text-green-500 rounded-md transition-colors shrink-0"
@@ -374,6 +467,16 @@ export function VocabWordBox({
           className="flex-1 text-[13px] md:text-sm italic text-slate-600 dark:text-slate-400 bg-transparent outline-none resize-none placeholder:text-slate-300 dark:placeholder:text-slate-700 leading-relaxed min-h-[24px]"
         />
       </div>
+
+      {/* Move to Custom Folder Dialog */}
+      {isMyVocabsView && (
+        <MoveVocabDialog
+          isOpen={isMoveDialogOpen}
+          onClose={() => setIsMoveDialogOpen(false)}
+          vocabId={vocab.id}
+          vocabWord={vocab.word}
+        />
+      )}
     </div>
   );
 }

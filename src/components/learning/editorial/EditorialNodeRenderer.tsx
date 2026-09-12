@@ -1,6 +1,7 @@
-import React from "react";
-import { Plus } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Plus, Star } from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
+import { useVocabularyStore } from "../../../store/vocabularyStore";
 
 interface EditorialNodeRendererProps {
   title: string;
@@ -29,6 +30,38 @@ export function EditorialNodeRenderer({
   activeDeleteId,
   setActiveDeleteId,
 }: EditorialNodeRendererProps) {
+  const favoriteVocabIds = useVocabularyStore((state) => state.favoriteVocabIds);
+  const toggleFavorite = useVocabularyStore((state) => state.toggleFavorite);
+
+  const [toastId, setToastId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleToggleStar = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const willBeStarred = !favoriteVocabIds.includes(id);
+    toggleFavorite(id);
+
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToastId(id);
+    setToastMessage(willBeStarred ? "Added to Favorites" : "Removed from Favorites");
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastId(null);
+      setToastMessage(null);
+    }, 2000);
+  };
   const getStyleForType = (type: string) => {
     switch (type) {
       case "phrasalVerbs":
@@ -77,6 +110,8 @@ export function EditorialNodeRenderer({
               ? (item.example || (hasEmbeddedExample ? hasEmbeddedExample[1] : "")).trim()
               : (item.example || (hasEmbeddedExample ? hasEmbeddedExample[1] : ""));
 
+          const isStarred = favoriteVocabIds.includes(item.id);
+
           return (
             <div
               key={item.id}
@@ -84,19 +119,46 @@ export function EditorialNodeRenderer({
               onClick={() => setActiveDeleteId(item.id)}
               className={`relative flex flex-col gap-1 p-3.5 border rounded-lg group transition-colors ${styleClasses}`}
             >
-              {canManageLearning && activeDeleteId === item.id && (
+              {/* Item Actions (Star & Delete) */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                {toastId === item.id && toastMessage && (
+                  <div className="px-2.5 py-0.5 bg-slate-900/90 dark:bg-white/95 text-white dark:text-slate-900 text-[11px] font-semibold rounded-full shadow-md whitespace-nowrap pointer-events-none animate-in fade-in slide-in-from-right-2 duration-200">
+                    {toastMessage}
+                  </div>
+                )}
+
                 <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    deleteTextEntry(canvasId, type, item.id);
-                  }}
-                  className="absolute top-2 right-2 p-1 px-2 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-md transition-colors shadow-sm animate-in fade-in zoom-in z-10"
-                  title="Delete Entry"
+                  type="button"
+                  onClick={(e) => handleToggleStar(item.id, e)}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
+                    isStarred
+                      ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60"
+                      : "text-slate-400 hover:text-amber-500 hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
+                  }`}
+                  title={isStarred ? "Remove from Favorites" : "Add to Favorites"}
                 >
-                  Delete
+                  <Star
+                    className={`w-4 h-4 transition-transform active:scale-125 ${
+                      isStarred ? "fill-amber-400 text-amber-500" : ""
+                    }`}
+                  />
                 </button>
-              )}
+
+                {canManageLearning && activeDeleteId === item.id && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      deleteTextEntry(canvasId, type, item.id);
+                    }}
+                    className="p-1 px-2 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-md transition-colors shadow-sm animate-in fade-in zoom-in"
+                    title="Delete Entry"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+
               <TextareaAutosize
                 placeholder="Term/Phrase"
                 value={item.text}
@@ -106,7 +168,7 @@ export function EditorialNodeRenderer({
                   })
                 }
                 readOnly={!canManageLearning}
-                className={`font-semibold text-base bg-transparent outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 w-full pr-8 resize-none ${
+                className={`font-semibold text-base bg-transparent outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600 w-full pr-16 resize-none ${
                   type === "phrasalVerbs"
                     ? "!text-[#4883ff]"
                     : type === "idioms"
