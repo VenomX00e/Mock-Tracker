@@ -82,6 +82,8 @@ export interface Vocabulary {
   isMastered?: boolean;
 }
 
+export type VocabularyItem = Vocabulary;
+
 export interface ReflectionTask {
   id: string;
   text: string;
@@ -337,4 +339,5 @@ export interface GlobalGeminiSystemConfig {
 
 export * from './types/yptTypes';
 export * from './types/extraction';
+export * from './types/quiz';
 

@@ -54,49 +54,77 @@ export function RuleBookDashboard() {
     };
   }, []);
 
+  // 10 Official categories
+  const OFFICIAL_CATEGORIES = useMemo(() => [
+    "Subject-Verb Agreement",
+    "Verb Tenses & Conditionals",
+    "Pronoun Reference & Agreement",
+    "Modifiers (Misplaced & Dangling)",
+    "Parallelism & Structure",
+    "Prepositions & Idioms",
+    "Nouns & Articles",
+    "Conjunctions & Clauses",
+    "Word Choice & Redundancy",
+    "General Grammar"
+  ], []);
+
   // Dynamically generate unique categories and their item counts
   const categories = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const r of rules) {
-      const cat = r.category || 'General Grammar';
-      counts[cat] = (counts[cat] || 0) + 1;
+    
+    for (const cat of OFFICIAL_CATEGORIES) {
+      counts[cat] = 0;
     }
 
-    return Object.entries(counts).map(([name, count]) => ({
-      name,
-      count,
-    }));
-  }, [rules]);
+    for (const r of rules) {
+      // Graceful fallback for legacy rules
+      const cat = r.category || 'General Grammar';
+      const effectiveCategory = OFFICIAL_CATEGORIES.includes(cat) ? cat : "General Grammar";
+      counts[effectiveCategory] += 1;
+    }
+
+    // Only render a pill if that category has 1 or more saved rules
+    return OFFICIAL_CATEGORIES
+      .filter((name) => counts[name] > 0)
+      .map((name) => ({
+        name,
+        count: counts[name],
+      }));
+  }, [rules, OFFICIAL_CATEGORIES]);
 
   // Search & category filtering pipeline
   const filteredRules = useMemo(() => {
     return rules.filter((rule) => {
+      // Graceful fallback for legacy rules
+      const rawCat = rule.category || 'General Grammar';
+      const effectiveCategory = OFFICIAL_CATEGORIES.includes(rawCat) ? rawCat : "General Grammar";
+
       // 1. Category Filter
-      if (selectedCategory !== 'ALL' && rule.category !== selectedCategory) {
+      if (selectedCategory !== 'ALL' && effectiveCategory !== selectedCategory) {
         return false;
       }
 
-      // 2. Search Query Filter (Checks ruleName, examTrap, quickSwap, category, formulas)
+      // 2. Search Query Filter (Checks ruleName, spottingStrategy, fixReason, category, formulas)
       if (!searchQuery.trim()) return true;
 
       const q = searchQuery.toLowerCase().trim();
       const name = (rule.blueprint?.ruleName || '').toLowerCase();
-      const trap = (rule.blueprint?.examTrap || '').toLowerCase();
-      const swap = (rule.blueprint?.quickSwap || '').toLowerCase();
-      const cat = (rule.category || '').toLowerCase();
+      const strategy = (rule.blueprint?.spottingStrategy || '').toLowerCase();
+      const fixReason = (rule.blueprint?.originalSentenceBreakdown?.fixReason || '').toLowerCase();
+      const cat = effectiveCategory.toLowerCase();
       const formulas = (rule.blueprint?.formulas || [])
         .map((f) => f.text.toLowerCase())
         .join(' ');
 
       return (
         name.includes(q) ||
-        trap.includes(q) ||
-        swap.includes(q) ||
+        strategy.includes(q) ||
+        fixReason.includes(q) ||
         cat.includes(q) ||
         formulas.includes(q)
       );
     });
-  }, [rules, selectedCategory, searchQuery]);
+  }, [rules, selectedCategory, searchQuery, OFFICIAL_CATEGORIES]);
 
   // Quick accordion expansion handlers
   const handleExpandAll = () => {

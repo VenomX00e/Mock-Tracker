@@ -5,11 +5,31 @@ export interface GrammarBlueprintFormula {
   isValid: boolean;
 }
 
+export type GrammarCategory = 
+  | "Subject-Verb Agreement" 
+  | "Verb Tenses & Conditionals" 
+  | "Pronoun Reference & Agreement" 
+  | "Modifiers (Misplaced & Dangling)" 
+  | "Parallelism & Structure" 
+  | "Prepositions & Idioms" 
+  | "Nouns & Articles" 
+  | "Conjunctions & Clauses" 
+  | "Word Choice & Redundancy" 
+  | "General Grammar";
+
 export interface GrammarBlueprint {
   ruleName: string;
-  formulas?: GrammarBlueprintFormula[];
-  examTrap?: string;
+  category: GrammarCategory;
+  originalSentenceBreakdown: {
+    prefix: string;
+    errorText: string;
+    correctText: string;
+    suffix: string;
+    fixReason?: string;
+  };
   quickSwap?: string;
+  spottingStrategy: string;
+  formulas?: GrammarBlueprintFormula[];
   example?: {
     incorrect?: string;
     correct?: string;
@@ -171,14 +191,16 @@ export function useRuleBook() {
       const newRule: SavedRule = {
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `rule_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         savedAt: Date.now(),
-        category: extractCategory(blueprint.ruleName),
+        category: blueprint.category || extractCategory(blueprint.ruleName),
         blueprint: {
           ruleName: blueprint.ruleName.trim(),
           formulas: Array.isArray(blueprint.formulas)
             ? blueprint.formulas.map((f) => ({ text: f.text || '', isValid: !!f.isValid }))
             : [],
-          examTrap: blueprint.examTrap || '',
-          quickSwap: blueprint.quickSwap || '',
+          category: (blueprint.category || extractCategory(blueprint.ruleName)) as GrammarCategory,
+          originalSentenceBreakdown: blueprint.originalSentenceBreakdown,
+          quickSwap: blueprint.quickSwap,
+          spottingStrategy: blueprint.spottingStrategy || '',
           example: blueprint.example
             ? {
                 incorrect: blueprint.example.incorrect || '',
@@ -357,14 +379,16 @@ export function useRuleBook() {
               validNewRules.push({
                 id: item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `rule_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`),
                 savedAt: item.savedAt || Date.now(),
-                category: item.category || extractCategory(blueprint.ruleName),
+                category: item.category || blueprint.category || extractCategory(blueprint.ruleName),
                 blueprint: {
                   ruleName: blueprint.ruleName.trim(),
                   formulas: Array.isArray(blueprint.formulas)
                     ? blueprint.formulas.map((f) => ({ text: f.text || '', isValid: !!f.isValid }))
                     : [],
-                  examTrap: blueprint.examTrap || '',
-                  quickSwap: blueprint.quickSwap || '',
+                  category: (blueprint.category || extractCategory(blueprint.ruleName)) as GrammarCategory,
+                  originalSentenceBreakdown: blueprint.originalSentenceBreakdown,
+                  quickSwap: blueprint.quickSwap,
+                  spottingStrategy: blueprint.spottingStrategy || '',
                   example: blueprint.example
                     ? {
                         incorrect: blueprint.example.incorrect || '',

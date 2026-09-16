@@ -52,25 +52,6 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const searchApiMenuRef = useRef<HTMLDivElement>(null);
 
-  const prevMessagesLengthRef = useRef(currentModeMessages.length);
-  const prevIsEnlargedRef = useRef(isEnlarged);
-
-  useEffect(() => {
-    if (messagesContainerRef.current) {
-      const isNewMessage = currentModeMessages.length > prevMessagesLengthRef.current;
-      const isToggledEnlarged = isEnlarged !== prevIsEnlargedRef.current;
-
-      if (isNewMessage || isToggledEnlarged) {
-        messagesContainerRef.current.scrollTo({
-          top: messagesContainerRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
-      }
-      prevMessagesLengthRef.current = currentModeMessages.length;
-      prevIsEnlargedRef.current = isEnlarged;
-    }
-  }, [currentModeMessages.length, isEnlarged]);
-
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
@@ -346,18 +327,29 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
         </div>
       </div>
 
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-        {!isFeatureAllowed && (
-          <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs max-w-lg mx-auto my-4">
-            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-bold text-sm text-amber-900 dark:text-amber-100">API Key Required</p>
-              <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
-                An API Key is required for AI Tutor. Please add your Gemini key in Settings or request access from your Administrator.
-              </p>
-            </div>
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-4 no-scrollbar">
+        {isLoading && (
+          <div className="flex justify-start">
+             <div className="max-w-[80%] rounded-2xl rounded-tl-sm p-4 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex gap-2 items-center">
+                <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-bounce"></div>
+                <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+             </div>
           </div>
         )}
+        {[...currentModeMessages].reverse().map((msg, reverseIdx) => {
+          const originalIdx = currentModeMessages.length - 1 - reverseIdx;
+          return (
+            <ChatMessageBubble 
+              key={originalIdx} 
+              msg={msg} 
+              idx={originalIdx} 
+              setActiveTab={setActiveTab}
+              onSendAnswer={(ans) => handleSend({ input: ans, attachment: null, pdfPagesInput: '', useWebSearch: false })}
+              isLoading={isLoading}
+            />
+          );
+        })}
         {currentModeMessages.length <= 1 && (
           <div className="pt-2 space-y-4">
             {chatMode === 'reasoning' && (
@@ -383,23 +375,15 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
             )}
           </div>
         )}
-        {currentModeMessages.map((msg, idx) => (
-          <ChatMessageBubble 
-            key={idx} 
-            msg={msg} 
-            idx={idx} 
-            setActiveTab={setActiveTab}
-            onSendAnswer={(ans) => handleSend({ input: ans, attachment: null, pdfPagesInput: '', useWebSearch: false })}
-            isLoading={isLoading}
-          />
-        ))}
-        {isLoading && (
-          <div className="flex justify-start">
-             <div className="max-w-[80%] rounded-2xl rounded-tl-sm p-4 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex gap-2 items-center">
-                <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-bounce"></div>
-                <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-             </div>
+        {!isFeatureAllowed && (
+          <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs max-w-lg mx-auto my-4">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-sm text-amber-900 dark:text-amber-100">API Key Required</p>
+              <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
+                An API Key is required for AI Tutor. Please add your Gemini key in Settings or request access from your Administrator.
+              </p>
+            </div>
           </div>
         )}
       </div>

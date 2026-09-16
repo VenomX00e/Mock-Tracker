@@ -17,9 +17,15 @@ interface FormulaItem {
 
 interface GrammarBlueprintData {
   ruleName?: string;
+  category?: string;
+  originalSentenceBreakdown?: {
+    prefix: string;
+    errorText: string;
+    correctText: string;
+    suffix: string;
+  };
+  spottingStrategy?: string;
   formulas?: Array<{ text?: string; isValid?: boolean }>;
-  examTrap?: string;
-  quickSwap?: string;
   example?: {
     incorrect?: string;
     correct?: string;
@@ -88,8 +94,7 @@ export function RuleCard({ content, data: directData }: RuleCardProps) {
       // 3. Fallback field extraction if JSON has minor unescaped quotes
       try {
         const ruleNameMatch = /"ruleName"\s*:\s*"([^"]+)"/i.exec(cleaned);
-        const examTrapMatch = /"examTrap"\s*:\s*"([^"]+)"/i.exec(cleaned);
-        const quickSwapMatch = /"quickSwap"\s*:\s*"([^"]+)"/i.exec(cleaned);
+        const spottingStrategyMatch = /"spottingStrategy"\s*:\s*"([^"]+)"/i.exec(cleaned);
         const incMatch = /"incorrect"\s*:\s*"([^"]+)"/i.exec(cleaned);
         const corMatch = /"correct"\s*:\s*"([^"]+)"/i.exec(cleaned);
 
@@ -112,8 +117,7 @@ export function RuleCard({ content, data: directData }: RuleCardProps) {
             data: {
               ruleName: ruleNameMatch ? ruleNameMatch[1] : 'Grammar Principle',
               formulas,
-              examTrap: examTrapMatch ? examTrapMatch[1] : undefined,
-              quickSwap: quickSwapMatch ? quickSwapMatch[1] : undefined,
+              spottingStrategy: spottingStrategyMatch ? spottingStrategyMatch[1] : undefined,
               example: (incMatch || corMatch) ? {
                 incorrect: incMatch ? incMatch[1] : undefined,
                 correct: corMatch ? corMatch[1] : undefined,
@@ -300,9 +304,9 @@ export function RuleCard({ content, data: directData }: RuleCardProps) {
 
   // 3. Pure Data-Driven Visual Grammar Blueprint
   const ruleTitle = data?.ruleName || 'Grammar Principle';
+  const originalSentenceBreakdown = data?.originalSentenceBreakdown;
+  const spottingStrategy = data?.spottingStrategy;
   const formulas = data?.formulas || [];
-  const examTrap = data?.examTrap;
-  const quickSwap = data?.quickSwap;
   const example = data?.example;
 
   return (
@@ -381,30 +385,103 @@ export function RuleCard({ content, data: directData }: RuleCardProps) {
 
       {/* Structured Blueprint Layout */}
       <div className="space-y-3">
-        {/* 🎯 1. Core Grammar Formulas */}
-        {formulas.length > 0 && (
+        {/* 🔍 1. Your Sentence Breakdown */}
+        {originalSentenceBreakdown && (
           <div className="p-3 rounded-xl bg-white/95 dark:bg-slate-900/90 border border-indigo-200/90 dark:border-indigo-800/80 shadow-2xs">
             <div className="text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1">
-              <span>🎯 Core Grammar Formulas</span>
+              <span>🔍 Your Sentence Breakdown</span>
             </div>
+
+            {/* 2-Row Compact Breakdown */}
             <div className="space-y-1.5">
+              {/* Row 1: Original */}
+              <div className="flex gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <span className="shrink-0 text-rose-500/80 select-none">❌</span>
+                <p>
+                  {originalSentenceBreakdown.prefix && <span>{originalSentenceBreakdown.prefix} </span>}
+                  <span className="line-through text-rose-500 font-medium">
+                    {originalSentenceBreakdown.errorText}
+                  </span>
+                  {originalSentenceBreakdown.suffix && <span> {originalSentenceBreakdown.suffix}</span>}
+                </p>
+              </div>
+
+              {/* Row 2: Corrected */}
+              <div className="flex gap-2 text-sm text-slate-800 dark:text-slate-200">
+                <span className="shrink-0 text-emerald-500/80 select-none">✅</span>
+                <p>
+                  {originalSentenceBreakdown.prefix && <span>{originalSentenceBreakdown.prefix} </span>}
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                    {originalSentenceBreakdown.correctText}
+                  </span>
+                  {originalSentenceBreakdown.suffix && <span> {originalSentenceBreakdown.suffix}</span>}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🕵️ 2. Spotting Strategy */}
+        {spottingStrategy && (
+          <div className="mb-4">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-1">
+              🕵️ Spotting Strategy
+            </h4>
+            <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed markdown-body">
+              <Markdown
+                components={{
+                  strong: ({node, ...props}) => <strong className="font-semibold text-amber-700 dark:text-amber-400" {...props} />,
+                  code: ({node, ...props}) => <code className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md text-amber-600 dark:text-amber-300 font-mono text-[13px]" {...props} />
+                }}
+              >
+                {spottingStrategy}
+              </Markdown>
+            </div>
+          </div>
+        )}
+
+        {/* 🎯 3. Core Grammar Formulas */}
+        {formulas.length > 0 && (
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1">
+              📐 Core Grammar Formulas
+            </h4>
+            <div className="space-y-2">
               {formulas.map((item, idx) => {
                 const isValid = item.isValid !== false;
                 return (
                   <div
                     key={idx}
-                    className={`text-xs sm:text-[12.5px] font-medium leading-snug flex items-center gap-2 p-2 rounded-lg ${
-                      !isValid
-                        ? 'bg-rose-500/10 dark:bg-rose-500/15 text-rose-900 dark:text-rose-200 border border-rose-200/80 dark:border-rose-800/50'
-                        : 'bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50'
+                    className={`text-[13px] leading-relaxed flex items-start gap-3 p-3 rounded-r-xl rounded-l-sm shadow-sm relative overflow-hidden transition-colors ${
+                      isValid
+                        ? 'bg-gradient-to-r from-emerald-50/80 to-transparent dark:from-emerald-950/20 border-y border-r border-slate-200 dark:border-slate-800 border-l-[4px] border-l-emerald-500'
+                        : 'bg-gradient-to-r from-rose-50/80 to-transparent dark:from-rose-950/20 border-y border-r border-slate-200 dark:border-slate-800 border-l-[4px] border-l-rose-500'
                     }`}
                   >
                     {!isValid ? (
-                      <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                      <div className="mt-0.5 shrink-0 bg-white dark:bg-slate-900 rounded-full shadow-sm">
+                        <XCircle className="w-4 h-4 text-rose-500" />
+                      </div>
                     ) : (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div className="mt-0.5 shrink-0 bg-white dark:bg-slate-900 rounded-full shadow-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      </div>
                     )}
-                    <span>{item.text}</span>
+                    <span className="markdown-body flex-1 text-slate-700 dark:text-slate-300">
+                      <Markdown
+                        components={{
+                          strong: ({node, ...props}) => <strong className="font-bold text-slate-900 dark:text-slate-100 tracking-tight" {...props} />,
+                          code: ({node, ...props}) => <code className="px-1.5 py-0.5 mx-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded text-indigo-600 dark:text-indigo-400 font-mono text-[12px] font-bold" {...props} />,
+                          em: ({node, ...props}) => <em className="text-slate-500 dark:text-slate-400 italic text-[11.5px] ml-1" {...props} />,
+                          p: ({node, ...props}) => <span {...props} />
+                        }}
+                      >
+                        {item.text || ''}
+                      </Markdown>
+                    </span>
+                    {!isValid && (
+                      <div className="absolute inset-0 pointer-events-none opacity-5" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 1px, transparent 10px)' }}></div>
+                    )}
                   </div>
                 );
               })}
@@ -412,36 +489,7 @@ export function RuleCard({ content, data: directData }: RuleCardProps) {
           </div>
         )}
 
-        {/* ⚡ 2. Side-by-Side: Exam Trap & Universal Quick Swap */}
-        {(examTrap || quickSwap) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Exam Trap */}
-            {examTrap && (
-              <div className="p-2.5 rounded-lg bg-amber-500/10 dark:bg-amber-500/15 border border-amber-300/80 dark:border-amber-700/60 shadow-2xs">
-                <div className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1 mb-1">
-                  <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-600 dark:text-amber-400" />
-                  <span>Exam Trap</span>
-                </div>
-                <div className="text-[11.5px] sm:text-xs font-semibold text-slate-800 dark:text-amber-100/90 leading-relaxed">
-                  {examTrap}
-                </div>
-              </div>
-            )}
 
-            {/* Quick Swap */}
-            {quickSwap && (
-              <div className="p-2.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-300/80 dark:border-emerald-700/60 shadow-2xs">
-                <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-1">
-                  <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Quick Swap</span>
-                </div>
-                <div className="text-[11.5px] sm:text-xs font-semibold text-slate-800 dark:text-emerald-100/90 leading-relaxed">
-                  {quickSwap}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ⚖️ 3. Full Sentence Example */}
         {example && (example.incorrect || example.correct) && (

@@ -1677,25 +1677,12 @@ app.post("/api/generate-badge", async (req, res) => {
 // Shared Error Detection Protocol for Grammar & Competitive Exams
 const ERROR_DETECTION_PROTOCOL = `
 <error_detection_protocol>
-When a user asks to find an error, spot the error, check if a sentence is grammatically correct, identify incorrect parts (A/B/C/D), or asks for sentence correction / why a sentence is wrong, you MUST strictly adhere to the following 5-step response format:
+When a user asks to find an error, spot the error, check if a sentence is grammatically correct, identify incorrect parts (A/B/C/D), or asks for sentence correction / why a sentence is wrong, you MUST strictly adhere to the following 2-step response format:
 
 <response_format>
-1. **🎯 Error Located:**
-   - Clearly state the exact incorrect fragment or part (e.g., Part D: "...across most semi-urban and rural region...") and what makes it wrong.
-   - If the sentence is completely correct with no grammatical errors, clearly state: "No error found in this sentence." and briefly explain why.
-
-2. **🛠️ How to Fix It:**
-   - Provide at least 2 distinct ways to fix the sentence:
-     • **Standard / Grammatical Fix:** The direct correction of the erroneous word/phrase. *(Core Principle: If the error can be resolved by adjusting the right side / following element to match the preceding anchor, prefer adjusting the right side).*
-     • **Reworded / Alternative Version:** A natural alternative phrasing or rearrangement.
-
-3. **🕵️ Spotting Strategy (Trigger Words):**
-   - Give the student a mental shortcut / exam strategy focused strictly on the user's error.
-   - Explicitly call out the **Trigger Words / Patterns** to look out for during timed exams.
-   - NEGATIVE CONSTRAINT: Do NOT list other vocabulary words from the same broad grammar category. (e.g., If the error is 'cope with', do NOT say 'Many verbs like cope, comprise, and discuss...'). Listing extra words pollutes the context and confuses the student. Focus ONLY on the specific trigger word from the user's sentence.
-
-4. **Grammar Blueprint (JSON Block):**
+1. **Grammar Blueprint (JSON Block):**
    - You MUST output the grammar rule blueprint strictly as a valid JSON code block enclosed in \`\`\`json ... \`\`\`.
+   - Do not output any conversational text, introductions, or markdown explanations outside of the JSON block. Your entire response must be contained within the grammarBlueprint object, followed ONLY by the Quick Test.
    - The JSON object MUST have the root key "grammarBlueprint" matching the exact schema below.
 
 <json_schema>
@@ -1703,12 +1690,20 @@ When a user asks to find an error, spot the error, check if a sentence is gramma
 {
   "grammarBlueprint": {
     "ruleName": "string (Concise rule name for THIS sentence)",
+    "category": "string (MUST be exactly one of: Subject-Verb Agreement, Verb Tenses & Conditionals, Pronoun Reference & Agreement, Modifiers (Misplaced & Dangling), Parallelism & Structure, Prepositions & Idioms, Nouns & Articles, Conjunctions & Clauses, Word Choice & Redundancy, General Grammar)",
+    "quickSwap": "string (A super-short 2-to-3 word replacement summary, e.g., 'is -> are' or 'cope with -> cope up with')",
+    "originalSentenceBreakdown": {
+      "prefix": "string (The part of the clean sentence BEFORE the error. DO NOT include A/B/C/D markers)",
+      "errorText": "string (The exact word/phrase that is wrong)",
+      "correctText": "string (The exact corrected word/phrase)",
+      "suffix": "string (The part of the clean sentence AFTER the error. DO NOT include A/B/C/D markers)",
+      "fixReason": "string (A short, 1-sentence reason why this exact fix is correct)"
+    },
+    "spottingStrategy": "string (Give the student a mental shortcut / exam strategy. Explicitly call out Trigger Words. MUST USE Markdown formatting: wrap trigger words in \`inline code\` and use **bolding** for emphasis. Do NOT list extra vocabulary words.)",
     "formulas": [
-      { "text": "string (Valid formula / rule structure)", "isValid": true },
+      { "text": "string (Valid formula / rule structure. MUST USE Markdown: \`keywords\` in backticks, **parts of speech** in bold, and *(examples)* in italics.)", "isValid": true },
       { "text": "string (Forbidden trap / invalid structure)", "isValid": false }
     ],
-    "examTrap": "string (1-2 short sentences explaining the specific deceptive trick examiners use)",
-    "quickSwap": "string (e.g. Change '...rural region' ➔ '...rural regions')",
     "example": {
       "incorrect": "string (A FRESH, CLEAR example sentence DIFFERENT from the user's input sentence, with [error fragment] in brackets)",
       "correct": "string (The same fresh sentence with [corrected fragment] in brackets)"
@@ -1718,7 +1713,10 @@ When a user asks to find an error, spot the error, check if a sentence is gramma
 \`\`\`
 </json_schema>
 
-CRITICAL MANDATES FOR STEP 4:
+CRITICAL MANDATES FOR STEP 1:
+- You MUST classify the error into EXACTLY one of these categories: Subject-Verb Agreement, Verb Tenses & Conditionals, Pronoun Reference & Agreement, Modifiers (Misplaced & Dangling), Parallelism & Structure, Prepositions & Idioms, Nouns & Articles, Conjunctions & Clauses, Word Choice & Redundancy, General Grammar. You are forbidden from inventing new categories.
+- You MUST explicitly isolate the exact word/phrase in 'errorText' and its replacement in 'correctText'.
+- You MUST strip out all exam dividers like (A), (B), (C), (D) from the prefix and suffix.
 - NEVER write markdown text, paragraphs, or ASCII flow arrows instead of JSON.
 - The JSON block MUST be strictly valid and parseable by standard JSON.parse().
 - Always include at least 1 valid formula ("isValid": true) and 1 invalid trap ("isValid": false).
@@ -1726,25 +1724,24 @@ CRITICAL MANDATES FOR STEP 4:
 
 <examples>
 FEW-SHOT DEMONSTRATION 1 (Quantifier / Determiner Agreement):
-User Input: "...yet regulatory oversight remains shockingly lax across most semi-urban and rural region."
+User Input: "...yet regulatory oversight remains shockingly lax (C)/ across most semi-urban and rural region. (D)/ No error (E)"
 
-1. **🎯 Error Located:** Part D: "...rural region". The word "most" is a plural quantifier and must be followed by a plural countable noun.
-2. **🛠️ How to Fix It:** 
-   - **Standard / Grammatical Fix:** "...across most semi-urban and rural regions."
-   - **Reworded / Alternative Version:** "...across a majority of semi-urban and rural regions."
-3. **🕵️ Spotting Strategy (Trigger Words):** 
-   - Trigger: Whenever you see the quantifier "most", immediately check if the countable noun following it is plural. (Notice: Do not list other quantifiers like some/all/many here).
-4. **Grammar Blueprint (JSON Block):**
+1. **Grammar Blueprint (JSON Block):**
 \`\`\`json
 {
   "grammarBlueprint": {
     "ruleName": "Quantifier-Noun Agreement (\"Most + Plural Countable Noun\")",
+    "originalSentenceBreakdown": {
+      "prefix": "...yet regulatory oversight remains shockingly lax across most semi-urban and rural ",
+      "errorText": "region.",
+      "correctText": "regions.",
+      "suffix": ""
+    },
+    "spottingStrategy": "**Trigger:** Whenever you see the quantifier \`most\`, immediately check if the countable noun following it is plural.",
     "formulas": [
-      { "text": "most + Plural Countable Noun (e.g., most regions)", "isValid": true },
-      { "text": "most + Singular Countable Noun (e.g., most region)", "isValid": false }
+      { "text": "\`most\` + **Plural Countable Noun** *(e.g., most regions)*", "isValid": true },
+      { "text": "\`most\` + **Singular Countable Noun** *(e.g., most region)*", "isValid": false }
     ],
-    "examTrap": "Long compound modifiers (e.g., 'semi-urban and rural') distract you from verifying that 'most' requires the plural noun 'regions'.",
-    "quickSwap": "Change: \"...rural region\" ➔ \"...rural regions\"",
     "example": {
       "incorrect": "Most modern [institution] require strict compliance with regulatory standards.",
       "correct": "Most modern [institutions] require strict compliance with regulatory standards."
@@ -1753,37 +1750,45 @@ User Input: "...yet regulatory oversight remains shockingly lax across most semi
 }
 \`\`\`
 
-5. **⚡ Quick Test (Active Recall):**
+2. **⚡ Quick Test (Active Recall):**
    Test your understanding of this rule:
    *(A) Despite the recent / (B) economic downturn, / (C) most local business / (D) have managed to survive. / (E) No error*
    [TEST_KEY: {"correct": "C", "explanation": "Replace 'business' with 'businesses' because the quantifier 'most' requires a plural countable noun.", "correctSentence": "Despite the recent economic downturn, most local businesses have managed to survive."}]
 
 FEW-SHOT DEMONSTRATION 2 (Inverted Conditional):
+User Input: "Had the authorities acted promptly, (A)/ the crisis will not have caused (B)/ such severe damage. (C)/ No error (D)"
+
+1. **Grammar Blueprint (JSON Block):**
 \`\`\`json
 {
   "grammarBlueprint": {
     "ruleName": "Third Conditional (Past Unreal Inversion with \"Had\")",
+    "originalSentenceBreakdown": {
+      "prefix": "Had the authorities acted promptly, the crisis ",
+      "errorText": "will not have caused",
+      "correctText": "would not have caused",
+      "suffix": " such severe damage."
+    },
+    "spottingStrategy": "**Trigger:** When a sentence begins with \`Had\` + Subject + V3 (inverted conditional), check the main clause for \`would/could/might have + V3\`. Examiners often trap you with \`will have\`.",
     "formulas": [
-      { "text": "Had + Subject + V3 ... Subject + would / could / might + have + V3", "isValid": true },
-      { "text": "Had + Subject + V3 ... will have / would + V1", "isValid": false }
+      { "text": "\`Had\` + **Subject** + **V3** ... **Subject** + \`would / could / might have\` + **V3**", "isValid": true },
+      { "text": "\`Had\` + **Subject** + **V3** ... \`will have\` / \`would\` + **V1**", "isValid": false }
     ],
-    "examTrap": "Examiners pair the past unreal inversion ('Had anticipated') with future modal 'will not have' instead of the required past modal 'would not have'.",
-    "quickSwap": "Change: \"...will not have disbursed...\" ➔ \"...would not have disbursed...\"",
     "example": {
-      "incorrect": "Had the authorities acted promptly, the crisis [will not have caused] such severe damage.",
-      "correct": "Had the authorities acted promptly, the crisis [would not have caused] such severe damage."
+      "incorrect": "Had the engineering team anticipated the flaw, the structure [will not have collapsed].",
+      "correct": "Had the engineering team anticipated the flaw, the structure [would not have collapsed]."
     }
   }
 }
 \`\`\`
 
-5. **⚡ Quick Test (Active Recall):**
+2. **⚡ Quick Test (Active Recall):**
    Test your understanding of this rule:
    *(A) Had the engineering team / (B) detected the structural flaw earlier, / (C) they will have halted / (D) the construction process immediately. / (E) No error*
    [TEST_KEY: {"correct": "C", "explanation": "Replace 'will have halted' with 'would have halted' to match the past unreal conditional established by 'Had... detected'.", "correctSentence": "Had the engineering team detected the structural flaw earlier, they would have halted the construction process immediately."}]
 </examples>
 
-5. **⚡ Quick Test (Active Recall):**
+2. **⚡ Quick Test (Active Recall):**
    - Generate exactly ONE new practice sentence to test the student's active recall of the rule you JUST taught.
    - STRICT REQUIREMENT: The test sentence MUST test the exact same trigger word, idiom, or structural mechanic defined in the JSON blueprint above.
    - NEGATIVE CONSTRAINT: Do NOT test a "similar" rule or a different word from the same broad category. (e.g., If the rule is about "cope with" vs "cope up with", the test MUST use "cope with". If the rule is "Hardly... when", the test MUST use "Hardly... when").
@@ -2732,8 +2737,8 @@ app.post("/api/generate-word-details", async (req, res) => {
     // Safely extract JSON in case the LLM wrapped it in markdown
     const responseText = response.text || "{}";
     const cleanText = responseText
-      .replace(/```json\s*/gi, "")
-      .replace(/```/g, "")
+      .replace(/\`\`\`json\s*/gi, "")
+      .replace(/\`\`\`/g, "")
       .trim();
     const match = cleanText.match(/\{[\s\S]*\}/);
     const finalJSON = match ? match[0] : cleanText;
@@ -2912,8 +2917,8 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
     // Safely extract JSON in case the LLM wrapped it in markdown
     const responseText = response.text || "{}";
     const cleanText = responseText
-      .replace(/```json\s*/gi, "")
-      .replace(/```/g, "")
+      .replace(/\`\`\`json\s*/gi, "")
+      .replace(/\`\`\`/g, "")
       .trim();
     const match = cleanText.match(/\{[\s\S]*\}/);
     const finalJSON = match ? match[0] : cleanText;
@@ -3947,9 +3952,9 @@ Structure every response exactly according to the following layout guide:
 
     const rawOutputText = response.text || "";
     const cleanText = rawOutputText
-      .replace(/^```markdown\s*/gi, "")
-      .replace(/^```\s*/gi, "")
-      .replace(/\s*```$/gi, "")
+      .replace(/^\`\`\`markdown\s*/gi, "")
+      .replace(/^\`\`\`\s*/gi, "")
+      .replace(/\s*\`\`\`$/gi, "")
       .trim();
 
     // Parse the Markdown into structured words
@@ -4080,6 +4085,265 @@ Structure every response exactly according to the following layout guide:
     return res.status(500).json({ error: formatGeminiError(error) });
   }
 });
+
+// =========================================================================
+// AI Vocab Quiz Generator - Dynamic Prompt Engineering & Endpoint
+// =========================================================================
+
+interface QuizWordInputItem {
+  id?: string;
+  word: string;
+  meaning?: string;
+  pos?: string;
+  synonyms?: string[];
+  antonyms?: string[];
+  example?: string;
+}
+
+interface QuizPromptBuildOptions {
+  format?: string;
+  theme?: string;
+  scope?: "strict" | "expanded";
+  words: QuizWordInputItem[];
+}
+
+/**
+ * Constructs the structured prompt dynamically according to the requested strategy:
+ * 1. The Base: "You are an expert English examiner. Create a vocabulary quiz in strict JSON format based on the following JSON schema."
+ * 2. Injecting the Words: "Here is the target vocabulary list: [Word1, Word2, ...]."
+ * 3. Injecting the Scope: Strict vs. Expanded directive.
+ * 4. Injecting the Format & Theme: Contextual passage & instructions tailored to user format & custom theme.
+ * 5. Validation: Index matching, 1-sentence pedagogical explanations, and strict JSON compliance.
+ */
+function constructDynamicQuizPrompt(config: QuizPromptBuildOptions): string {
+  // 1. The Base
+  const baseSection = `You are an expert English examiner. Create a vocabulary quiz in strict JSON format based on the following JSON schema:
+{
+  "quizTitle": "A concise, engaging title for this quiz",
+  "passageText": "The cohesive passage text (required if format is cloze or reading_comprehension)",
+  "questions": [
+    {
+      "id": "q1",
+      "questionText": "The question prompt or Blank identifier (e.g. Blank 1)",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswerIndex": 0,
+      "testedWord": "The target vocabulary word tested",
+      "explanation": "Provide a detailed 1-sentence 'explanation' for every question.",
+      "sentenceChunks": ["Chunk 1", "Chunk 2", "Chunk 3", "Chunk 4"]
+    }
+  ]
+}`;
+
+  // 2. Injecting the Words
+  const wordEntries = config.words.slice(0, 20).map((w, idx) => {
+    const details = [
+      `${idx + 1}. Word: "${w.word}"`,
+      w.pos ? `(${w.pos})` : "",
+      w.meaning ? `- Meaning: ${w.meaning}` : "",
+      w.synonyms && w.synonyms.length > 0 ? `| Synonyms: ${w.synonyms.join(", ")}` : "",
+      w.antonyms && w.antonyms.length > 0 ? `| Antonyms: ${w.antonyms.join(", ")}` : "",
+      w.example ? `| Example: "${w.example}"` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return details;
+  });
+
+  const wordsSection = `Here is the target vocabulary list:\n${wordEntries.join("\n")}`;
+
+  // 3. Injecting the Scope
+  const isExpanded = config.scope === "expanded";
+  const scopeSection = isExpanded
+    ? `Scope Directive:\nYou may use these words OR their direct, advanced synonyms/antonyms as the correct answers to test deep comprehension.`
+    : `Scope Directive:\nYou MUST only use these exact words as the correct answers.`;
+
+  // 4. Injecting the Format & Theme
+  const format = config.format || "cloze";
+  const theme = config.theme ? String(config.theme).trim() : "";
+  let formatThemeSection = "";
+
+  if (format === "cloze") {
+    formatThemeSection = `Format & Theme Directive:\nFormat the quiz as a Cloze Test. Write a cohesive 200-word passage about ${
+      theme ? `[User's Theme: ${theme}]` : "a modern editorial or real-world scenario"
+    }. Replace 5 to 8 vocabulary words with blanks formatted as [Blank 1], [Blank 2], [Blank 3], etc. in the 'passageText'. In the 'questions' array, each corresponding blank should have 'questionText' as "Blank 1", "Blank 2", etc., with exactly 4 competitive options.`;
+  } else if (format === "reading_comprehension") {
+    formatThemeSection = `Format & Theme Directive:\nFormat the quiz as Reading Comprehension. Write a cohesive 200-300 word passage about ${
+      theme ? `[User's Theme: ${theme}]` : "a thought-provoking editorial scenario"
+    } naturally weaving in several of the target vocabulary words. Populate 'passageText' with this passage, and create 4 to 6 reading comprehension and contextual vocabulary questions.`;
+  } else if (format === "fillers") {
+    formatThemeSection = `Format & Theme Directive:\nFormat the quiz as Sentence Fillers. Create 5 single-sentence fill-in-the-blank questions testing nuance and precision. ${
+      theme ? `Write the sentences about [User's Theme: ${theme}].` : "Use rich, exam-standard sentence contexts."
+    } 'passageText' should be omitted or left blank.`;
+  } else if (format === "synonyms_antonyms") {
+    formatThemeSection = `Format & Theme Directive:\nFormat the quiz as Synonyms & Antonyms. Create 5 questions directly testing either the closest synonym or opposite antonym of the target vocabulary words. ${
+      theme ? `Frame the scenarios around [User's Theme: ${theme}].` : ""
+    } 'passageText' should be omitted or left blank.`;
+  } else if (format === "spot_error") {
+    formatThemeSection = `Format & Theme Directive:\nFormat the quiz as Spot the Error. Create 5 questions where each sentence is split into 4 distinct segments (provided in 'sentenceChunks' and 'options') with exactly one segment containing a lexical, grammatical, or usage error concerning the target vocabulary. ${
+      theme ? `Center the sentences around [User's Theme: ${theme}].` : ""
+    } 'passageText' should be omitted or left blank.`;
+  } else {
+    // mixed
+    formatThemeSection = `Format & Theme Directive:\nFormat the quiz as a Mixed Mock Challenge. Include a diverse mix of sentence fillers, synonyms/antonyms, and spot-the-error questions testing the target words. ${
+      theme ? `Contextualize where applicable around [User's Theme: ${theme}].` : ""
+    }`;
+  }
+
+  // 5. Validation
+  const validationSection = `Validation Directives:
+- Ensure the 'correctAnswerIndex' perfectly matches the 'options' array.
+- Provide a detailed 1-sentence 'explanation' for every question.
+- 'correctAnswerIndex' must be a valid 0-based integer (0, 1, 2, or 3) representing the index of the correct answer in 'options'.
+- 'options' must always be an array of exactly 4 competitive, well-chosen choices.
+- Output MUST be strictly valid, raw JSON conforming to the schema above without markdown formatting, code fences, or conversational text.`;
+
+  return [
+    baseSection,
+    wordsSection,
+    scopeSection,
+    formatThemeSection,
+    validationSection,
+  ].join("\n\n");
+}
+
+const handleQuizGeneration = async (req: express.Request, res: express.Response) => {
+  try {
+    const { customApiKey, config } = req.body || {};
+    if (!config || !Array.isArray(config.words) || config.words.length === 0) {
+      return res.status(400).json({ error: "No vocabulary words provided for quiz generation." });
+    }
+
+    let aiConfig;
+    try {
+      aiConfig = await resolveGeminiProxyConfig(req.body, req.headers, "vocab_quiz");
+    } catch (cfgErr: any) {
+      // Fallback: If global config is not set for vocab_quiz, try general_chat or direct client key
+      try {
+        aiConfig = await resolveGeminiProxyConfig(req.body, req.headers, "general_chat");
+      } catch (nestedCfgErr: any) {
+        // Direct key fallback if available
+        const directKey = customApiKey || process.env.GEMINI_API_KEY || process.env.API_KEY;
+        if (!directKey) {
+          return res.status(403).json({
+            error: "Gemini API key is required. Please check your settings or server API key configuration.",
+          });
+        }
+        aiConfig = {
+          apiKey: directKey,
+          model: "gemini-2.5-flash",
+          isGlobalKey: false,
+          featureKey: "vocab_quiz",
+          aiClient: new GoogleGenAI({ apiKey: directKey }),
+        };
+      }
+    }
+
+    const { aiClient, model } = aiConfig;
+
+    // Mitigation for Prompt Size Limits: Sample 15-20 words if input array is large
+    let wordsToUse = config.words;
+    if (wordsToUse.length > 20) {
+      const shuffled = [...wordsToUse];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      wordsToUse = shuffled.slice(0, 20);
+    }
+
+    const prompt = constructDynamicQuizPrompt({
+      format: config.format || "cloze",
+      theme: config.theme ? String(config.theme).trim() : "",
+      scope: config.scope === "expanded" ? "expanded" : "strict",
+      words: wordsToUse,
+    });
+
+    // Mitigation for JSON Parsing Errors:
+    // Retry wrapper attempting generation up to 2 times if JSON is malformed
+    let parsedData: any = null;
+    let attempts = 0;
+    const maxAttempts = 2;
+    let lastError: any = null;
+
+    while (attempts < maxAttempts && !parsedData) {
+      attempts++;
+      try {
+        const response = await fetchWithRetry(async () => {
+          return await aiClient.models.generateContent({
+            model: model || "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              temperature: attempts === 1 ? 0.4 : 0.2, // slightly more deterministic on retry
+            },
+          });
+        });
+
+        const responseText = response.text ? response.text.trim() : "";
+        if (!responseText) {
+          throw new Error("Empty response received from Gemini.");
+        }
+
+        try {
+          parsedData = JSON.parse(responseText);
+        } catch (parseErr) {
+          // Clean possible markdown json codeblock fencing
+          const cleanJson = responseText.replace(/^\`\`\`json\s*/i, "").replace(/\`\`\`\s*$/, "").trim();
+          parsedData = JSON.parse(cleanJson);
+        }
+
+        if (!parsedData || !Array.isArray(parsedData.questions) || parsedData.questions.length === 0) {
+          parsedData = null;
+          throw new Error("Quiz questions missing from generated output.");
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`AI Quiz Generation attempt ${attempts} failed:`, err);
+        if (attempts >= maxAttempts) {
+          break;
+        }
+      }
+    }
+
+    if (!parsedData || !Array.isArray(parsedData.questions)) {
+      return res.status(500).json({
+        error: "The AI got confused, let's try again! (Please retry generating your quiz)",
+      });
+    }
+
+    // Sanitize and ensure complete structure
+    parsedData.questions = parsedData.questions.map((q: any, idx: number) => {
+      const options = Array.isArray(q.options) && q.options.length > 0 ? q.options : ["A", "B", "C", "D"];
+      const correctIndex =
+        typeof q.correctAnswerIndex === "number" &&
+        q.correctAnswerIndex >= 0 &&
+        q.correctAnswerIndex < options.length
+          ? q.correctAnswerIndex
+          : 0;
+
+      return {
+        id: q.id || `q_${idx + 1}_${Date.now()}`,
+        questionText: q.questionText || `Question ${idx + 1}`,
+        options: options,
+        correctAnswerIndex: correctIndex,
+        testedWord: q.testedWord || wordsToUse[idx % wordsToUse.length]?.word || "",
+        explanation: q.explanation || "Correct option accurately fits the grammatical context and vocabulary meaning.",
+        sentenceChunks: Array.isArray(q.sentenceChunks) ? q.sentenceChunks : undefined,
+      };
+    });
+
+    return res.json(parsedData);
+  } catch (error: any) {
+    console.error("Error in AI Quiz Generator:", error);
+    return res.status(500).json({
+      error: "The AI got confused, let's try again!",
+    });
+  }
+};
+
+// Register both /api/generate-quiz (Phase 3 primary) and /api/generate-vocab-quiz (seamless compatibility)
+app.post("/api/generate-quiz", handleQuizGeneration);
+app.post("/api/generate-vocab-quiz", handleQuizGeneration);
 
 export default app;
 

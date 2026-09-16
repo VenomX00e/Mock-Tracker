@@ -21,6 +21,7 @@ import { EditorialSidebar } from "./editorial/EditorialSidebar";
 import { EditorialNodeRenderer } from "./editorial/EditorialNodeRenderer";
 import { YouTubeVocabExtractorModal } from "./YouTubeVocabExtractorModal";
 import { ExtractionSourceType } from "../../types/extraction";
+import { VocabQuizContainer } from "./quiz/VocabQuizContainer";
 
 interface EditorialCanvasViewProps {
   canvasId: string;
@@ -595,6 +596,25 @@ export function EditorialCanvasView({
         targetCanvasId={canvasId}
         initialSourceType={modalSourceType}
       />
+
+      {/* Floating AI Vocab Quiz Trigger & Modal Flow */}
+      {canvas && (
+        <VocabQuizContainer
+          words={(canvas.vocabularies || []).map((v) => ({
+            id: v.id,
+            type: 'vocab' as const,
+            word: v.word,
+            meaning: v.meaning,
+            pos: v.pos,
+            synonyms: v.synonyms,
+            antonyms: v.antonyms,
+            example: v.example,
+            canvasId: canvasId,
+            canvasTitle: canvas.title,
+          }))}
+          title="Editorial AI Quiz"
+        />
+      )}
     </div>
   );
 }

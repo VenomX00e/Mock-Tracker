@@ -28,6 +28,7 @@ import { VocabWordBox } from './VocabWordBox';
 import { PhraseCardBox } from './PhraseCardBox';
 import { fetchVocabulariesInChunks } from '../../services/vocabularyFirebaseService';
 import { Vocabulary } from '../../types';
+import { VocabQuizContainer } from './quiz/VocabQuizContainer';
 
 type PredefinedCategory = 'all' | 'vocab' | 'phrasal_verb' | 'idiom' | 'one_word_sub';
 
@@ -546,11 +547,6 @@ export function MyVocabsView() {
                       <span className="truncate max-w-[170px] sm:max-w-[210px]">
                         {item.canvasTitle}
                       </span>
-                      {cleanDate && (
-                        <span className="text-[10px] text-slate-400 font-normal">
-                          ({cleanDate})
-                        </span>
-                      )}
                     </span>
                     {item.type && item.type !== 'vocab' && (
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -704,6 +700,12 @@ export function MyVocabsView() {
           );
         })()}
       </main>
+
+      {/* Floating AI Vocab Quiz Trigger & Modal Flow */}
+      <VocabQuizContainer
+        words={filteredWords}
+        title="AI Vocab Quiz"
+      />
     </div>
   );
 }
