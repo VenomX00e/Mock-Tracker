@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Bookmark, BookmarkCheck, ArrowRight, Hash, Sparkles } from 'lucide-react';
+import { Bookmark, BookmarkCheck, ArrowRight, Hash, Sparkles, Loader2 } from 'lucide-react';
 import { SeriesPattern, SeriesCategory } from '../../../types/seriesTypes';
 import { useSeriesVault } from '../../../hooks/useSeriesVault';
 
@@ -13,37 +13,75 @@ export function SeriesPatternCard({ content, data: directData }: SeriesPatternCa
   const [isBouncing, setIsBouncing] = useState(false);
   const { isPatternSaved, toggleSavePattern } = useSeriesVault();
 
-  // Parse pattern data from direct prop or raw JSON block
-  const pattern = useMemo<Partial<SeriesPattern> | null>(() => {
+  // Parse pattern data from direct prop or raw/streaming JSON block
+  const { pattern } = useMemo<{ pattern: Partial<SeriesPattern> | null; isStreaming: boolean }>(() => {
     if (directData && directData.title && directData.steps) {
-      return directData;
+      return { pattern: directData, isStreaming: false };
     }
 
-    if (!content) return null;
+    if (!content) return { pattern: null, isStreaming: true };
 
     let cleaned = content.trim();
     cleaned = cleaned.replace(/^```(?:json)?(?::seriesBlueprint)?\s*/i, '').replace(/```\s*$/i, '').trim();
 
     try {
       const parsed = JSON.parse(cleaned);
-      return parsed.seriesBlueprint || parsed;
+      const bp = parsed.seriesBlueprint || parsed;
+      if (bp && bp.title) {
+        return { pattern: bp, isStreaming: false };
+      }
     } catch {
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace > firstBrace) {
         try {
           const parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
-          return parsed.seriesBlueprint || parsed;
+          const bp = parsed.seriesBlueprint || parsed;
+          if (bp && bp.title) {
+            return { pattern: bp, isStreaming: false };
+          }
         } catch {
-          return null;
+          // Fall through to partial regex extraction while streaming
         }
       }
-      return null;
     }
+
+    // Progressive partial extraction while JSON is still streaming
+    const idMatch = /"id"\s*:\s*"([^"]+)"/i.exec(cleaned);
+    const titleMatch = /"title"\s*:\s*"([^"]+)"/i.exec(cleaned);
+    const categoryMatch = /"category"\s*:\s*"([^"]+)"/i.exec(cleaned);
+    const stepsBlockMatch = /"steps"\s*:\s*\[([^\]]*)/i.exec(cleaned);
+    const partialSteps: string[] = [];
+    if (stepsBlockMatch && stepsBlockMatch[1]) {
+      const stepItemRegex = /"([^"]+)"/g;
+      let sm: RegExpExecArray | null;
+      while ((sm = stepItemRegex.exec(stepsBlockMatch[1])) !== null) {
+        partialSteps.push(sm[1]);
+      }
+    }
+
+    if (titleMatch || categoryMatch || partialSteps.length > 0) {
+      return {
+        pattern: {
+          id: idMatch?.[1],
+          title: titleMatch?.[1] || 'Building Series Pattern...',
+          category: (categoryMatch?.[1] as SeriesCategory) || 'difference',
+          steps: partialSteps,
+        },
+        isStreaming: true,
+      };
+    }
+
+    return { pattern: null, isStreaming: true };
   }, [content, directData]);
 
-  if (!pattern || !pattern.title) {
-    return null;
+  if (!pattern) {
+    return (
+      <div className="my-3 rounded-xl border border-indigo-200/70 dark:border-indigo-900/50 bg-indigo-50/40 dark:bg-slate-900/70 p-3.5 flex items-center gap-2.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+        <Loader2 className="w-4 h-4 animate-spin text-indigo-500 shrink-0" />
+        <span>Building Number Series Pattern Card...</span>
+      </div>
+    );
   }
 
   const patternId = pattern.id || pattern.title.toLowerCase().replace(/\s+/g, '-');

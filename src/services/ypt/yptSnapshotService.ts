@@ -968,7 +968,7 @@ export async function updateMemberInDailySnapshot(
       ruleName: cr.ruleName,
       emoji: cr.emoji || (pts >= 0 ? "☀️" : "📱"),
       points: pts,
-      type: cr.type || (pts < 0 ? "penalty" : "bonus"),
+      type: (cr as any).type || (pts < 0 ? "penalty" : "bonus"),
     });
   });
 

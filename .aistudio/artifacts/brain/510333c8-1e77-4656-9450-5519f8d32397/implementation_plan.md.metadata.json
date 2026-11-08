@@ -1,6 +1,6 @@
 {
-  "summary":  "Comprehensive implementation plan to redesign and fix the AI Vocab Quiz, including a compact single-screen configuration modal with Question Count and Word Pool controls, spoiler-free Instant Practice feedback across Cloze/Reading Comprehension/Mixed formats, two-zone split passage layout, Global Gemini key resolution alignment, and post-quiz revision tools (Retry Missed Words, Star/Bookmark, and Side-by-Side Passage & Answer Review).",
-  "updatedAt":  "2026-10-30T17:43:25.495963275Z",
+  "summary":  "Detailed implementation plan for: (1) Removing discontinued 3.5 Flash & 3.7 Flash models while passing all active models directly through normalizeGeminiModel without forced 2.5 downgrades, (2) Implementing descending model fallback chains (3.8 -> 3.6 -> 3.0 -> 2.5 for Flash; 3.5 Lite -> 3.1 Lite -> 2.5 Lite for Flash Lite) across all AI features in backendHelpers.ts and jarvisRoutes.ts, (3) Adding a subtle, non-eye-catchy short model name indicator at the bottom-right of each AI Tutor reply bubble, and (4) Speed optimizations via 60s server-side global_gemini config caching and local streaming state buffering before writing to useChatStore.",
+  "updatedAt":  "2026-11-08T13:02:41.359931435Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

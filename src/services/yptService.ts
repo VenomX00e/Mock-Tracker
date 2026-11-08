@@ -46,7 +46,6 @@ import {
   calculateMemberPointsForDate,
   applyTeamWideRulesToSnapshot,
 } from "./ypt/yptPointEngine";
-import type { DailyMemberStat } from "./ypt/yptPointEngine";
 
 import {
   saveDailySnapshot,
@@ -101,7 +100,6 @@ export type {
   YptDayLogSubject,
   YptDayLogResponse,
   YptUserEntry,
-  DailyMemberStat,
 };
 
 /**

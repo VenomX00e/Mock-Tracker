@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Bot, FileText, Image as ImageIcon, Globe, Copy, Check } from 'lucide-react';
+import { Bot, FileText, Image as ImageIcon, Globe, Copy, Check, ZoomIn } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { RuleCard } from './RuleCard';
 import { QuickTestCard } from './QuickTestCard';
 import { SeriesPatternCard } from './SeriesPatternCard';
+import { ImageLightboxModal } from './ImageLightboxModal';
+import { formatModelName } from '../../mocks/SubjectRow';
 
 function getTextFromNode(node: any): string {
   if (!node) return '';
@@ -97,22 +99,35 @@ function parseMessageSegments(text: string): ContentSegment[] {
     lastIndex = match.index + match[0].length;
   }
 
-  // Check if there is an in-progress streaming JSON block that hasn't closed yet
-  if (lastIndex === 0 && segments.length === 0) {
-    const streamMatch = streamingJsonStartRegex.exec(text);
-    if (streamMatch) {
-      const before = text.slice(0, streamMatch.index).trim();
-      const streamingContent = streamMatch[1].trim();
-      const isSeries = streamingContent.includes('"seriesBlueprint"') || streamingContent.includes('seriesBlueprint') || streamMatch[0].includes('seriesBlueprint');
+  // Check if there is an in-progress streaming JSON block that hasn't closed yet in the remaining text
+  const remainingSlice = text.slice(lastIndex);
+  const openJsonFenceRegex = /```(json(?::seriesBlueprint)?)?\s*([\s\S]*)$/i;
+  const streamFenceMatch = openJsonFenceRegex.exec(remainingSlice);
+
+  if (streamFenceMatch && !streamFenceMatch[2].includes('```')) {
+    const fenceTag = (streamFenceMatch[1] || '').toLowerCase();
+    const streamingBody = streamFenceMatch[2].trim();
+    const isSeriesStream =
+      fenceTag.includes('seriesblueprint') ||
+      streamingBody.includes('"seriesBlueprint"') ||
+      streamingBody.includes('seriesBlueprint') ||
+      streamingBody.includes('"generatorParams"') ||
+      streamingBody.includes('"generatorKey"');
+    const isGrammarStream =
+      streamingBody.includes('"grammarBlueprint"') ||
+      streamingBody.includes('"ruleName"') ||
+      streamingBody.includes('"originalSentenceBreakdown"') ||
+      (fenceTag === 'json' && (streamingBody.startsWith('{') || streamingBody === ''));
+
+    if (isSeriesStream || isGrammarStream) {
+      const before = remainingSlice.slice(0, streamFenceMatch.index).replace(/^[\s*]+|[\s*]+$/g, '').trim();
       if (before) {
         segments.push(...splitQuickTest(before));
       }
-      if (streamingContent) {
-        segments.push({
-          type: isSeries ? 'series_box' : 'rule_box',
-          content: streamingContent,
-        });
-      }
+      segments.push({
+        type: isSeriesStream ? 'series_box' : 'rule_box',
+        content: streamingBody,
+      });
       return segments;
     }
   }
@@ -239,8 +254,33 @@ export interface ChatMessageProps {
 }
 
 export function ChatMessage({ msg, idx, setActiveTab, onSendAnswer, isLoading = false }: ChatMessageProps) {
+  const [showAllCitations, setShowAllCitations] = useState(false);
+  const [copiedReply, setCopiedReply] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const isModel = msg.role === 'model';
-  const segments = isModel ? parseMessageSegments(msg.text || '') : [{ type: 'markdown' as const, content: msg.text || '' }];
+
+  const rawUserText = (msg.text || '').trim();
+  const isHiddenAttachmentPrompt =
+    !isModel &&
+    msg.attachments &&
+    msg.attachments.length > 0 &&
+    (rawUserText === '' ||
+      rawUserText === 'Please analyze this attachment.' ||
+      /^Please analyze the attached file \(Pages .*\)\.$/i.test(rawUserText));
+
+  const segments = isModel
+    ? parseMessageSegments(msg.text || '')
+    : isHiddenAttachmentPrompt || !rawUserText
+      ? []
+      : [{ type: 'markdown' as const, content: msg.text || '' }];
+
+  const handleCopyFullReply = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!msg.text) return;
+    navigator.clipboard.writeText(msg.text);
+    setCopiedReply(true);
+    setTimeout(() => setCopiedReply(false), 2000);
+  };
 
   const markdownComponents = {
     span: ({node, className, children, ...props}: any) => {
@@ -315,30 +355,67 @@ export function ChatMessage({ msg, idx, setActiveTab, onSendAnswer, isLoading = 
     }
   };
 
+  const totalCitations = msg.citations?.length || 0;
+  const INITIAL_VISIBLE_CITATIONS = 3;
+  const visibleCitations =
+    totalCitations > 0
+      ? showAllCitations
+        ? msg.citations
+        : msg.citations.slice(0, INITIAL_VISIBLE_CITATIONS)
+      : [];
+  const hiddenCitationsCount = Math.max(0, totalCitations - INITIAL_VISIBLE_CITATIONS);
+
   return (
-    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[90%] md:max-w-[80%] rounded-2xl p-3 md:p-4 flex flex-col md:flex-row gap-2 md:gap-3 shadow-sm border ${
+    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start w-full'}`}>
+      <div className={`rounded-2xl p-3.5 md:p-4 flex flex-col md:flex-row gap-2.5 md:gap-3 shadow-sm border ${
         msg.role === 'user' 
-          ? 'bg-slate-800 dark:bg-slate-700 text-white border-transparent rounded-tr-sm' 
-          : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-tl-sm'
+          ? 'max-w-[88%] md:max-w-[78%] bg-slate-800 dark:bg-slate-700 text-white border-transparent rounded-tr-sm' 
+          : 'w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-tl-sm'
       }`}>
         {msg.role === 'model' && (
-          <div className="flex-none w-5 h-5 md:w-6 md:h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center mt-0.5">
-            <Bot className="w-3.5 h-3.5 md:w-4 md:h-4 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex-none w-6 h-6 rounded-lg neon-icon-container bg-indigo-50 dark:bg-indigo-500/20 border border-indigo-200/60 dark:border-indigo-500/30 flex items-center justify-center mt-0.5">
+            <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
           </div>
         )}
         <div className={`markdown-body w-full overflow-hidden text-xs md:text-sm leading-relaxed ${msg.role === 'user' ? 'text-inherit [&_*]:text-inherit w-full' : 'text-slate-800 dark:text-slate-200'}`}>
           {msg.role === 'user' && msg.attachments && msg.attachments.length > 0 && (
-            <div className="flex flex-col gap-0.5 mb-2 bg-slate-900/40 dark:bg-slate-900/60 p-2 rounded-lg w-fit">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-200">
-                {msg.attachments[0].mimeType === 'application/pdf' ? <FileText className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
-                <span>{msg.attachments[0].mimeType === 'application/pdf' ? 'PDF Attached' : 'Image Attached'}</span>
-              </div>
-              {msg.attachments[0].pages && (
-                <span className="text-[10px] text-slate-400 pl-5">Pages: {msg.attachments[0].pages}</span>
+            <div className={`${segments.length > 0 ? 'mb-2' : ''} w-fit`}>
+              {msg.attachments[0].mimeType !== 'application/pdf' && msg.attachments[0].data ? (() => {
+                const imgSrc = `data:${msg.attachments[0].mimeType || 'image/jpeg'};base64,${msg.attachments[0].data}`;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxImage(imgSrc)}
+                    title="Click to view full image"
+                    className="relative group block rounded-xl overflow-hidden cursor-zoom-in focus:outline-none"
+                  >
+                    <img
+                      src={imgSrc}
+                      alt="Attached"
+                      className="max-h-44 md:max-h-52 max-w-[220px] md:max-w-[280px] rounded-xl object-contain border border-white/10 shadow-xs transition-transform duration-200 group-hover:scale-[1.01]"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-end justify-end p-2">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-xs text-white p-1.5 rounded-lg shadow-sm">
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })() : (
+                <div className="flex flex-col gap-0.5 bg-slate-900/40 dark:bg-slate-900/60 p-2 rounded-lg w-fit">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-200">
+                    {msg.attachments[0].mimeType === 'application/pdf' ? <FileText className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                    <span>{msg.attachments[0].mimeType === 'application/pdf' ? 'PDF Attached' : 'Image Attached'}</span>
+                  </div>
+                  {msg.attachments[0].pages && (
+                    <span className="text-[10px] text-slate-400 pl-5">Pages: {msg.attachments[0].pages}</span>
+                  )}
+                </div>
               )}
             </div>
           )}
+
+          <ImageLightboxModal src={lightboxImage} onClose={() => setLightboxImage(null)} />
 
           {/* Render parsed segments */}
           {segments.map((segment, segIdx) => {
@@ -363,21 +440,64 @@ export function ChatMessage({ msg, idx, setActiveTab, onSendAnswer, isLoading = 
             );
           })}
 
-          {msg.citations && msg.citations.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-2 text-xs">
-              {msg.citations.map((cit: any, i: number) => (
+          {totalCitations > 0 && (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-700/70 flex flex-wrap items-center gap-1.5 text-xs">
+              {visibleCitations.map((cit: any, i: number) => (
                 <a 
                   key={i} 
                   href={cit.uri} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-1 rounded transition-colors no-underline truncate max-w-[200px]"
+                  className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700/40 hover:bg-indigo-50/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-700 px-2.5 py-1 rounded-full transition-colors !no-underline decoration-transparent max-w-[210px]"
                   title={cit.title}
                 >
-                  <Globe className="w-3 h-3 flex-none" />
-                  <span className="truncate">[{i + 1}] {cit.title}</span>
+                  <Globe className="w-3 h-3 flex-none text-indigo-500 dark:text-indigo-400" />
+                  <span className="truncate !no-underline">{cit.title}</span>
                 </a>
               ))}
+              {hiddenCitationsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllCitations((prev) => !prev)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50/70 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100/80 dark:hover:bg-indigo-500/25 border border-indigo-200/70 dark:border-indigo-500/30 transition-colors cursor-pointer"
+                >
+                  {showAllCitations ? 'Show less' : `+${hiddenCitationsCount} more`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {isModel && (msg.modelUsed || msg.text) && (
+            <div className="mt-2 pt-1.5 flex items-center justify-end gap-2 text-[10px] text-slate-400 dark:text-slate-500">
+              {msg.text && (
+                <button
+                  type="button"
+                  onClick={handleCopyFullReply}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 hover:bg-slate-100/80 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
+                  aria-label="Copy response"
+                  title="Copy response"
+                >
+                  {copiedReply ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-500" />
+                      <span className="text-emerald-500 font-medium">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              )}
+              {msg.text && msg.modelUsed && (
+                <span className="text-slate-300 dark:text-slate-600 select-none">•</span>
+              )}
+              {msg.modelUsed && (
+                <span className="font-medium text-slate-400/90 dark:text-slate-500 select-none leading-none">
+                  {formatModelName(msg.modelUsed)}
+                </span>
+              )}
             </div>
           )}
         </div>

@@ -137,10 +137,19 @@ export function MathArena({ config, onClose }: MathArenaProps) {
   const [score, setScore] = useState(0);
   const [total, setTotal] = useState(0);
   const [mistakes, setMistakes] = useState<
-    { q: string; userAns: string; actual: number | string }[]
+    {
+      q: string;
+      userAns: string;
+      actual: number | string;
+      seriesSteps?: string[];
+      patternTitle?: string;
+      seriesType?: "missing" | "wrong";
+      wrongReplacement?: number;
+    }[]
   >([]);
   const [status, setStatus] = useState<"playing" | "ended">("playing");
   const [flash, setFlash] = useState<"none" | "success" | "error">("none");
+  const [showHint, setShowHint] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const box1Ref = useRef<HTMLInputElement>(null);
@@ -188,6 +197,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
 
     setQuestion(newQuestion);
     setQuestionStartTime(Date.now());
+    setShowHint(false);
     setInputVal("");
     inputValRef.current = "";
     let randIdx: 0 | 1 | null = null;
@@ -210,7 +220,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
       if (newQuestion.multiAnswer) {
         if (randIdx === 0) box2Ref.current?.focus();
         else box1Ref.current?.focus();
-      } else {
+      } else if (newQuestion.seriesData?.type !== "wrong") {
         inputRef.current?.focus();
       }
     }, 10);
@@ -266,6 +276,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
             q: question.displayString,
             userAns,
             actual: question.correctAnswer,
+            seriesSteps: question.seriesData?.steps,
+            patternTitle: question.seriesData?.patternTitle,
+            seriesType: question.seriesData?.type,
+            wrongReplacement: question.seriesData?.wrongReplacement,
           },
         ]);
         handleFlash("error");
@@ -277,6 +291,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
           q: question.displayString,
           userAns: "passed",
           actual: question.correctAnswer,
+          seriesSteps: question.seriesData?.steps,
+          patternTitle: question.seriesData?.patternTitle,
+          seriesType: question.seriesData?.type,
+          wrongReplacement: question.seriesData?.wrongReplacement,
         },
       ]);
     }
@@ -437,6 +455,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
             q: question.displayString,
             userAns: val,
             actual: question.correctAnswer,
+            seriesSteps: question.seriesData?.steps,
+            patternTitle: question.seriesData?.patternTitle,
+            seriesType: question.seriesData?.type,
+            wrongReplacement: question.seriesData?.wrongReplacement,
           },
         ]);
         inputValRef.current = "";
@@ -481,6 +503,10 @@ export function MathArena({ config, onClose }: MathArenaProps) {
             q: question.displayString,
             userAns: inputValRef.current,
             actual: question.correctAnswer,
+            seriesSteps: question.seriesData?.steps,
+            patternTitle: question.seriesData?.patternTitle,
+            seriesType: question.seriesData?.type,
+            wrongReplacement: question.seriesData?.wrongReplacement,
           },
         ]);
         inputValRef.current = "";
@@ -665,23 +691,97 @@ export function MathArena({ config, onClose }: MathArenaProps) {
           <div
             className={`flex flex-col ${effectiveAlignment === "center" ? "items-center" : effectiveAlignment === "left" ? "items-start" : "items-end"} w-full animate-in fade-in slide-in-from-bottom-2`}
           >
-            <div
-              className={`font-bold font-mono tracking-tight max-w-full ${effectiveAlignment === "center" ? "text-center flex justify-center" : effectiveAlignment === "left" ? "text-left flex justify-start" : "text-right flex justify-end"} items-center h-[120px] md:h-[150px] shrink-0 text-slate-800 dark:text-slate-100 mb-6 md:mb-8 transition-colors ${
-                flash === "success"
-                  ? "text-green-600 dark:text-green-400"
-                  : flash === "error"
-                    ? "text-red-600 dark:text-red-400"
-                    : ""
-              }`}
-              style={{
-                fontSize: `clamp(1rem, min(8vw, calc(3.5rem - ${Math.max(0, question.displayString.length - 12) * 0.08}rem)), 4.5rem)`,
-                lineHeight: "1.3",
-              }}
-            >
-              <MathRenderer expr={question.displayString} />
-            </div>
+            {question.seriesData ? (
+              <div className="w-full flex flex-col items-center mb-6">
+                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-2">
+                  <span>
+                    {question.seriesData.type === "missing"
+                      ? "Find the Missing Number (?)"
+                      : "Tap the Wrong Number in the Series"}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">
+                    {question.seriesData.type === "missing"
+                      ? "Keyboard / Numpad"
+                      : "Select Option"}
+                  </span>
+                </div>
 
-            {question.multiAnswer ? (
+                <div className="w-full flex items-center justify-center gap-2 sm:gap-3 flex-wrap py-4 px-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                  {question.seriesData.numbers.map((num, idx) => {
+                    const isMissingSlot = num === "?";
+                    const isWrongMode = question.seriesData?.type === "wrong";
+
+                    if (isWrongMode && typeof num === "number") {
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() =>
+                            processAnswer(
+                              String(num),
+                              false,
+                              num === question.correctAnswer,
+                            )
+                          }
+                          className="min-w-[56px] sm:min-w-[72px] px-3.5 py-2.5 sm:py-3 rounded-xl font-mono tabular-nums font-bold text-lg sm:text-2xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40 transition-all shadow-xs active:scale-95 cursor-pointer"
+                        >
+                          {num}
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`min-w-[52px] sm:min-w-[68px] px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-mono tabular-nums font-bold text-lg sm:text-2xl text-center border ${
+                          isMissingSlot
+                            ? "bg-indigo-50/80 dark:bg-indigo-950/50 border-indigo-400 dark:border-indigo-500 border-dashed text-indigo-600 dark:text-indigo-400"
+                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                        }`}
+                      >
+                        {num}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {showHint && (
+                  <div className="mt-3 px-3.5 py-2 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 text-center max-w-md animate-in fade-in duration-150">
+                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                      Hint:{" "}
+                    </span>
+                    <span>
+                      {question.seriesData.hintText ||
+                        question.seriesData.patternTitle}
+                    </span>
+                    {question.seriesData.steps.length > 0 && (
+                      <span className="ml-1.5 font-mono text-slate-500 dark:text-slate-400">
+                        (First step: {question.seriesData.steps[0]})
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                className={`font-bold font-mono tracking-tight max-w-full ${effectiveAlignment === "center" ? "text-center flex justify-center" : effectiveAlignment === "left" ? "text-left flex justify-start" : "text-right flex justify-end"} items-center h-[120px] md:h-[150px] shrink-0 text-slate-800 dark:text-slate-100 mb-6 md:mb-8 transition-colors ${
+                  flash === "success"
+                    ? "text-green-600 dark:text-green-400"
+                    : flash === "error"
+                      ? "text-red-600 dark:text-red-400"
+                      : ""
+                }`}
+                style={{
+                  fontSize: `clamp(1rem, min(8vw, calc(3.5rem - ${Math.max(0, question.displayString.length - 12) * 0.08}rem)), 4.5rem)`,
+                  lineHeight: "1.3",
+                }}
+              >
+                <MathRenderer expr={question.displayString} />
+              </div>
+            )}
+
+            {question.seriesData?.type === "wrong" ? null : question.multiAnswer ? (
               <div className="flex items-center gap-4">
                 <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
                   ref={box1Ref}
@@ -750,7 +850,7 @@ export function MathArena({ config, onClose }: MathArenaProps) {
                 autoCorrect="off" spellCheck={false}     />
             )}
 
-            {effectiveVirtualKeyboard && (
+            {effectiveVirtualKeyboard && question.seriesData?.type !== "wrong" && (
               <VirtualNumpad
                 handleNumpadPress={(key) => {
                   if (question?.multiAnswer) {
@@ -787,12 +887,24 @@ export function MathArena({ config, onClose }: MathArenaProps) {
               />
             )}
 
-            <button
-              onClick={passQuestion}
-              className="mt-4 text-sm font-medium text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors"
-            >
-              Pass / Skip Question
-            </button>
+            <div className="mt-4 flex items-center gap-4">
+              {question.seriesData && (
+                <button
+                  type="button"
+                  onClick={() => setShowHint((prev) => !prev)}
+                  className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                >
+                  {showHint ? "Hide Hint" : "Show Hint"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={passQuestion}
+                className="text-sm font-medium text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors"
+              >
+                Pass / Skip Question
+              </button>
+            </div>
           </div>
         )}
       </div>

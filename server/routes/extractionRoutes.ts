@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import admin from "firebase-admin";
 import {
   fetchWithRetry,
+  generateContentWithFallback,
   resolveGeminiProxyConfig,
   formatGeminiError,
 } from "../utils/backendHelpers.js";
@@ -87,26 +88,48 @@ router.post("/api/extract-mock", async (req, res) => {
     const thinkingConfig = getFastExtractionThinkingConfig(modelToUse);
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
-        model: modelToUse,
-        contents: contents,
-        config: {
-          ...(thinkingConfig ? { thinkingConfig } : {}),
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              examType: { type: Type.STRING },
-              examRole: { type: Type.STRING },
-              examPhase: { type: Type.STRING },
-              examScope: { type: Type.STRING },
-              mockName: { type: Type.STRING },
-              platform: { type: Type.STRING },
+      generateContentWithFallback(
+        aiClient,
+        {
+          model: modelToUse,
+          contents: contents,
+          config: {
+            ...(thinkingConfig ? { thinkingConfig } : {}),
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                examType: { type: Type.STRING },
+                examRole: { type: Type.STRING },
+                examPhase: { type: Type.STRING },
+                examScope: { type: Type.STRING },
+                mockName: { type: Type.STRING },
+                platform: { type: Type.STRING },
+              },
+              required: ["examType", "examRole", "examPhase", "examScope", "mockName", "platform"],
             },
-            required: ["examType", "examRole", "examPhase", "examScope", "mockName", "platform"],
           },
         },
-      }),
+        (candidateModel) => {
+          const tc = getFastExtractionThinkingConfig(candidateModel);
+          return {
+            ...(tc ? { thinkingConfig: tc } : {}),
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                examType: { type: Type.STRING },
+                examRole: { type: Type.STRING },
+                examPhase: { type: Type.STRING },
+                examScope: { type: Type.STRING },
+                mockName: { type: Type.STRING },
+                platform: { type: Type.STRING },
+              },
+              required: ["examType", "examRole", "examPhase", "examScope", "mockName", "platform"],
+            },
+          };
+        }
+      ),
     );
 
     const jsonText = response.text || "{}";
@@ -237,7 +260,7 @@ router.post("/api/extract-scorecard", async (req, res) => {
     const thinkingConfig = getFastExtractionThinkingConfig(modelToUse);
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
+      generateContentWithFallback(aiClient, {
         model: modelToUse,
         contents: contents,
         config: {
@@ -387,7 +410,7 @@ router.post("/api/generate-word-details", async (req, res) => {
     const prompt = `Provide the English meaning and a helpful mnemonic (trick to remember) for the word "${word}". Return ONLY a JSON object: {"meaning": "...", "mnemonic": "..."}`;
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
+      generateContentWithFallback(aiClient, {
         model: modelToUse,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
@@ -477,7 +500,7 @@ Return ONLY structured JSON adhering to this schema. If a field or category is n
     }
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
+      generateContentWithFallback(aiClient, {
         model: modelToUse,
         contents: [
           {
@@ -636,7 +659,7 @@ Preserve readability, paragraphs, and list structure. Do not summarize or omit a
     }
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
+      generateContentWithFallback(aiClient, {
         model: modelToUse,
         contents: [
           {
@@ -979,7 +1002,7 @@ Structure every response exactly according to the following layout guide:
     ];
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
+      generateContentWithFallback(aiClient, {
         model: modelToUse,
         contents,
       })
@@ -1303,8 +1326,8 @@ const handleQuizGeneration = async (req: express.Request, res: express.Response)
       attempts++;
       try {
         const response = await fetchWithRetry(async () => {
-          return await aiClient.models.generateContent({
-            model: model || "gemini-2.5-flash",
+          return await generateContentWithFallback(aiClient, {
+            model: model || "gemini-3.5-flash-lite",
             contents: prompt,
             config: {
               responseMimeType: "application/json",

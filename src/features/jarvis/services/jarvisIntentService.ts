@@ -84,7 +84,7 @@ function buildParamSchema(p: string): Schema {
 export async function determineIntent(
   userInput: string,
   context?: JarvisPageContext,
-  _model: string = 'gemini-3.5-flash'
+  _model: string = 'gemini-3.5-flash-lite'
 ): Promise<JarvisCommand | null> {
   const customApiKey = getActiveApiKey();
   

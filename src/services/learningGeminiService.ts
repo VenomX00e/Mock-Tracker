@@ -17,9 +17,18 @@ export interface ChatMessage {
   text: string;
   citations?: Citation[];
   attachments?: Attachment[];
+  modelUsed?: string;
 }
 
-export async function askLearningTutor(messages: ChatMessage[], useWebSearch: boolean = false, useCustomWebSearch: boolean = false, modelKey: string = 'gemini-3.1-flash-lite', chatMode: string = 'default', customSearchApi: string = 'auto', onMessageUpdate?: (text: string, citations?: Citation[]) => void): Promise<{ text: string, citations?: Citation[] }> {
+export async function askLearningTutor(
+  messages: ChatMessage[],
+  useWebSearch: boolean = false,
+  useCustomWebSearch: boolean = false,
+  modelKey: string = 'gemini-3.1-flash-lite',
+  chatMode: string = 'default',
+  customSearchApi: string = 'auto',
+  onMessageUpdate?: (text: string, citations?: Citation[], modelUsed?: string) => void
+): Promise<{ text: string; citations?: Citation[]; modelUsed?: string }> {
   const customKey = getActiveApiKey();
   const token = await auth.currentUser?.getIdToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -65,6 +74,7 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
   const decoder = new TextDecoder('utf-8');
   let fullText = '';
   let finalCitations: Citation[] = [];
+  let finalModelUsed: string = modelKey;
   let buffer = '';
 
   let isDone = false;
@@ -94,14 +104,17 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
           if (data?.error) {
             throw new Error(data.error);
           }
+          if (data?.modelUsed) {
+            finalModelUsed = data.modelUsed;
+          }
           if (data?.text) {
             fullText += data.text;
           }
           if (data?.citations) {
             finalCitations = data.citations;
           }
-          if (onMessageUpdate) {
-            onMessageUpdate(fullText, finalCitations);
+          if (onMessageUpdate && (fullText || finalCitations.length > 0)) {
+            onMessageUpdate(fullText, finalCitations, finalModelUsed);
           }
         }
       }
@@ -110,6 +123,7 @@ export async function askLearningTutor(messages: ChatMessage[], useWebSearch: bo
 
   return {
     text: fullText,
-    citations: finalCitations.length > 0 ? finalCitations : undefined
+    citations: finalCitations.length > 0 ? finalCitations : undefined,
+    modelUsed: finalModelUsed,
   };
 }

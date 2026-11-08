@@ -30,6 +30,8 @@ export interface SeriesQuestion {
   numbers: (number | string)[]; // e.g. [1, 7, 21, "?", 119, 255]
   correctAnswer: number;
   culpritIndex?: number;        // For wrong series (index of wrong number)
+  wrongReplacement?: number;    // True uncorrupted number that should replace the wrong number
+  hintText?: string;            // On-demand hint string
   steps: string[];              // ["×2 + 5", "×2 + 7", ...]
   level: SeriesPracticeLevel;
 }

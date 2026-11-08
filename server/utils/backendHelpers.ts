@@ -635,6 +635,14 @@ export const fetchWithRetry = async (
   }
 };
 
+let cachedGlobalGeminiConfig: { data: any; expiresAt: number } | null = null;
+let adminSdkGlobalConfigFailed = false;
+const GLOBAL_CONFIG_CACHE_TTL_MS = 60 * 1000;
+
+export function invalidateGlobalGeminiConfigCache() {
+  cachedGlobalGeminiConfig = null;
+}
+
 export async function getGlobalGeminiConfigRest(): Promise<any> {
   try {
     const projectId = firebaseConfig.projectId;
@@ -654,55 +662,144 @@ export async function getGlobalGeminiConfigRest(): Promise<any> {
   return null;
 }
 
+const VALID_ACTIVE_MODELS = new Set([
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.1-pro-preview",
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-pro",
+  "gemma-4-26b-a4b-it",
+  "gemma-4-31b-it",
+]);
+
+const FLASH_DESCENDING_LADDER = [
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",
+];
+
+const FLASH_LITE_DESCENDING_LADDER = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash-lite",
+];
+
+const PRO_DESCENDING_LADDER = [
+  "gemini-3.1-pro-preview",
+  "gemini-2.5-pro",
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",
+];
+
 export const normalizeGeminiModel = (rawModel?: string): string => {
-  if (!rawModel || typeof rawModel !== "string") return "gemini-2.5-flash";
+  if (!rawModel || typeof rawModel !== "string") return "gemini-3.5-flash-lite";
   const m = rawModel.trim().toLowerCase();
 
-  if (m === "gemini-3.8-flash") return "gemini-3.8-flash";
-  if (
-    m === "gemini-2.5-flash" ||
-    m === "gemini-2.5-flash-lite" ||
-    m === "gemini-2.5-pro"
-  )
+  // Pass valid active checkpoints directly through without downgrading
+  if (VALID_ACTIVE_MODELS.has(m)) {
     return m;
-
-  if (m.includes("3.7")) return "gemini-2.5-flash";
-  if (
-    m.includes("lite") ||
-    m.includes("3.5-flash-lite") ||
-    m.includes("3.1-flash-lite")
-  )
-    return "gemini-2.5-flash-lite";
-  if (m.includes("pro")) return "gemini-2.5-pro";
-  if (
-    m.includes("flash") ||
-    m.includes("3.6-flash") ||
-    m.includes("3.5-flash") ||
-    m.includes("3-flash") ||
-    m.includes("2.0") ||
-    m.includes("1.5")
-  ) {
-    return "gemini-2.5-flash";
   }
 
-  return "gemini-2.5-flash";
+  // Discontinued checkpoints mapped to next descending active model
+  if (m === "gemini-3.7-flash" || m.includes("3.7")) return "gemini-3.6-flash";
+  if (m === "gemini-3.5-flash") return "gemini-3-flash-preview";
+
+  // Normalize shorthand aliases if passed
+  if (m === "gemini-3.1-pro") return "gemini-3.1-pro-preview";
+  if (m === "gemini-3.0-flash" || m === "gemini-3-flash") return "gemini-3-flash-preview";
+
+  if (m.includes("lite")) return "gemini-3.5-flash-lite";
+  if (m.includes("pro")) return "gemini-3.1-pro-preview";
+  if (m.includes("flash")) return "gemini-3.8-flash";
+
+  return "gemini-3.5-flash-lite";
+};
+
+export const getDescendingFallbackChain = (rawPrimaryModel?: string): string[] => {
+  const primary = normalizeGeminiModel(rawPrimaryModel);
+
+  const liteIdx = FLASH_LITE_DESCENDING_LADDER.indexOf(primary);
+  if (liteIdx !== -1) {
+    return FLASH_LITE_DESCENDING_LADDER.slice(liteIdx);
+  }
+
+  const flashIdx = FLASH_DESCENDING_LADDER.indexOf(primary);
+  if (flashIdx !== -1) {
+    return FLASH_DESCENDING_LADDER.slice(flashIdx);
+  }
+
+  const proIdx = PRO_DESCENDING_LADDER.indexOf(primary);
+  if (proIdx !== -1) {
+    return PRO_DESCENDING_LADDER.slice(proIdx);
+  }
+
+  // Gemma or custom model fallback ladder
+  return [primary, ...FLASH_LITE_DESCENDING_LADDER];
+};
+
+export const generateContentWithFallback = async (
+  aiClient: any,
+  payload: any,
+  onModelChange?: (newModel: string) => Record<string, any> | void
+): Promise<any> => {
+  const chain = getDescendingFallbackChain(payload.model);
+  let lastErr: any = null;
+
+  for (let i = 0; i < chain.length; i++) {
+    const candidateModel = chain[i];
+    try {
+      const updatedConfig = onModelChange ? onModelChange(candidateModel) : undefined;
+      const response = await aiClient.models.generateContent({
+        ...payload,
+        model: candidateModel,
+        ...(updatedConfig ? { config: updatedConfig } : {}),
+      });
+      (response as any).modelUsed = candidateModel;
+      return response;
+    } catch (err: any) {
+      lastErr = err;
+      if (i < chain.length - 1) {
+        console.warn(
+          `[Gemini Fallback] Model ${candidateModel} failed (${err?.message || err}), stepping down to ${chain[i + 1]}...`
+        );
+      }
+    }
+  }
+
+  throw lastErr;
 };
 
 export const generateContentStreamWithFallback = async (aiClient: any, payload: any) => {
-  const primaryModel = payload.model || "gemini-2.5-flash";
-  try {
-    return await aiClient.models.generateContentStream(payload);
-  } catch (err: any) {
-    console.warn(
-      `Primary model ${primaryModel} failed stream (${err?.message}), retrying fallback...`
-    );
-    const fallbackModel =
-      primaryModel === "gemini-2.5-flash" ? "gemini-2.5-flash-lite" : "gemini-2.5-flash";
-    return await aiClient.models.generateContentStream({
-      ...payload,
-      model: fallbackModel,
-    });
+  const chain = getDescendingFallbackChain(payload.model);
+  let lastErr: any = null;
+
+  for (let i = 0; i < chain.length; i++) {
+    const candidateModel = chain[i];
+    try {
+      const stream = await aiClient.models.generateContentStream({
+        ...payload,
+        model: candidateModel,
+      });
+      (stream as any).modelUsed = candidateModel;
+      return stream;
+    } catch (err: any) {
+      lastErr = err;
+      if (i < chain.length - 1) {
+        console.warn(
+          `[Gemini Stream Fallback] Model ${candidateModel} failed (${err?.message || err}), stepping down to ${chain[i + 1]}...`
+        );
+      }
+    }
   }
+
+  throw lastErr;
 };
 
 export const resolveGeminiProxyConfig = async (
@@ -717,18 +814,32 @@ export const resolveGeminiProxyConfig = async (
 
   const clientApiKey = reqBody.customApiKey || reqHeaders["x-custom-api-key"];
 
+  const now = Date.now();
   let globalConfig: any = null;
-  try {
-    const snap = await getAdminDb().collection("system_config").doc("global_gemini").get();
-    if (snap.exists) {
-      globalConfig = snap.data();
+
+  if (cachedGlobalGeminiConfig && cachedGlobalGeminiConfig.expiresAt > now) {
+    globalConfig = cachedGlobalGeminiConfig.data;
+  } else {
+    if (!adminSdkGlobalConfigFailed) {
+      try {
+        const snap = await getAdminDb().collection("system_config").doc("global_gemini").get();
+        if (snap.exists) {
+          globalConfig = snap.data();
+        }
+      } catch (err: any) {
+        adminSdkGlobalConfigFailed = true;
+      }
     }
-  } catch (err: any) {
-    globalConfig = await getGlobalGeminiConfigRest();
+
     if (!globalConfig) {
-      console.warn(
-        "Could not retrieve system_config/global_gemini via Admin SDK or REST fallback."
-      );
+      globalConfig = await getGlobalGeminiConfigRest();
+    }
+
+    if (globalConfig) {
+      cachedGlobalGeminiConfig = {
+        data: globalConfig,
+        expiresAt: now + GLOBAL_CONFIG_CACHE_TTL_MS,
+      };
     }
   }
 

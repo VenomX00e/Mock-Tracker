@@ -3,7 +3,9 @@ import { Type } from "@google/genai";
 import admin from "firebase-admin";
 import {
   fetchWithRetry,
+  generateContentWithFallback,
   generateContentStreamWithFallback,
+  getDescendingFallbackChain,
   resolveGeminiProxyConfig,
   formatGeminiError,
   customWebSearchDeclaration,
@@ -47,7 +49,7 @@ router.post("/api/gemini-proxy", async (req, res) => {
     }
 
     const response = await fetchWithRetry(() =>
-      proxyRes.aiClient.models.generateContent({
+      generateContentWithFallback(proxyRes.aiClient, {
         model: proxyRes.model, // Forced model if global key used
         contents: contents || [],
         config: mergedConfig,
@@ -56,7 +58,7 @@ router.post("/api/gemini-proxy", async (req, res) => {
 
     res.json({
       text: response.text || "",
-      modelUsed: proxyRes.model,
+      modelUsed: (response as any).modelUsed || proxyRes.model,
       isGlobalKeyUsed: proxyRes.isGlobalKey,
       candidates: response.candidates,
     });
@@ -330,15 +332,23 @@ When a user inputs a number series (missing number series like "1, 7, 21, ?, 119
   "category": "one of: difference | multiplication | powers | primes | alternating",
   "steps": ["×2 + 5", "×2 + 7", "×2 + 11", "×2 + 13"],
   "generatorKey": "mul_const_primes",
-  "generatorParams": { "multiplier": 2, "offsetType": "prime" }
+  "generatorParams": {
+    "evaluationMode": "step",
+    "family": "mult_variable_add",
+    "multiplier": 2,
+    "offsetType": "primes",
+    "signRule": "+"
+  }
 }
 \`\`\`
 
 RULES FOR THE BLUEPRINT JSON:
 - "category" MUST be one of: "difference", "multiplication", "powers", "primes", "alternating".
 - "steps" MUST be an array of short, plain operation strings showing the step-by-step jumps (e.g. ["+ 3²", "+ 5²", "+ 7²"] or ["×2 + 5", "×2 + 7", "×2 + 11"]). Do NOT include the series numbers in steps—only the mathematical operations!
-- "generatorKey" is an identifier for practice generation (e.g., "mul_const_primes", "odd_squares_diff", "double_diff_mul", "consecutive_cubes").
-- Do NOT output extra fields in the JSON block. Keep it minimal and strictly valid JSON.
+- "generatorParams.evaluationMode" MUST be "term" if the series terms themselves are generated directly (e.g. 25, 49, 121 -> squares of primes) OR "step" if the operations are applied from one term to the next (e.g. +25, +49, +121 or ×5 + 2).
+- "generatorParams.family" should be one of: "prime_squares", "prime_cubes", "consecutive_primes", "squares", "cubes", "n_power_offset", "constant_multiplier", "mult_constant_add", "mult_variable_add", "growing_mult_offset", "decimal_ladder", "double_difference", "ap_difference".
+- Include numeric parameters in "generatorParams" when applicable: "multiplier" (number), "constantAdd" (number), "powerExp" (2 or 3), "diffStep" (number), "stride" (1 for consecutive, 2 for odd/even/alternate skip).
+- Do NOT output extra fields outside the schema. Keep it strictly valid JSON.
 </number_series_protocol>
 `;
 
@@ -495,7 +505,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
     }
 
     const response = await fetchWithRetry(() =>
-      aiClient.models.generateContent({
+      generateContentWithFallback(aiClient, {
         model: modelToUse,
         contents: contents,
         config: config,
@@ -518,6 +528,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
     res.json({
       reply: response.text || "Sorry, I couldn't generate a response.",
       citations,
+      modelUsed: (response as any).modelUsed || modelToUse,
     });
   } catch (error: any) {
     console.error("Gemini Chat Error:", error);
@@ -620,7 +631,7 @@ INSTRUCTIONS & RESPONSE TRACES:
       parts: [{ text: m.text || m.content || "" }]
     }));
 
-    const response = await aiClient.models.generateContent({
+    const response = await generateContentWithFallback(aiClient, {
       model: modelToUse,
       contents: contents,
       config: {
@@ -631,6 +642,7 @@ INSTRUCTIONS & RESPONSE TRACES:
     res.json({
       reply: response.text || "No response generated.",
       text: response.text || "No response generated.",
+      modelUsed: (response as any).modelUsed || modelToUse,
       screenContextUsed: screenContextBlock
     });
   } catch (error: any) {
@@ -683,7 +695,7 @@ Guidelines:
 1. Call function tools ONLY when the user explicitly requests a UI action (e.g., "go to dashboard", "open settings", "change theme to dark", "create task", "start math drill").
 2. CRITICAL EXCEPTION: Do NOT call any function tool if the user is asking an informational, analytical, performance evaluation, data inquiry, or screen summary question (e.g., "Who is in the top of the leaderboard?", "Who is rank 1?", "How did I do on my last mock?", "What am I looking at?", "Can you summarize what I am looking at right now?", "How are my scores?", "Summarize my performance", "Explain this section"). For these queries, DO NOT invoke any tool or function call so that Jarvis can answer using the full screen context.`;
 
-    const response = await aiClient.models.generateContent({
+    const response = await generateContentWithFallback(aiClient, {
       model: modelToUse,
       contents: userInput,
       config: {
@@ -873,50 +885,73 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
     }
 
     try {
-      let activeModel = modelToUse || "gemini-2.5-flash";
+      const fallbackChain = getDescendingFallbackChain(modelToUse || "gemini-3.5-flash-lite");
+      let activeModel = fallbackChain[0];
       let activeConfig = { ...config };
 
       let responseStream: any = null;
+      let streamIterator: AsyncIterator<any> | null = null;
       let firstChunk: any = null;
+      let lastStreamErr: any = null;
 
-      try {
-        responseStream = await aiClient.models.generateContentStream({
-          model: activeModel,
-          contents: contents,
-          config: activeConfig,
-        });
-        const iterator = responseStream[Symbol.asyncIterator]();
-        const first = await iterator.next();
-        if (!first.done) {
-          firstChunk = first.value;
-        }
-      } catch (streamErr: any) {
-        console.warn(`Primary stream failed with model ${activeModel} (${streamErr?.message}), retrying fallback...`);
-        activeModel = "gemini-2.5-flash";
-        const safeTools = (activeConfig.tools || []).filter((t: any) => !t.googleSearch);
-        activeConfig = {
-          ...activeConfig,
-          ...(safeTools.length > 0 ? { tools: safeTools } : {}),
-        };
-        if (safeTools.length === 0) delete activeConfig.tools;
+      for (let i = 0; i < fallbackChain.length; i++) {
+        activeModel = fallbackChain[i];
+        try {
+          if (i > 0) {
+            const safeTools = (activeConfig.tools || []).filter((t: any) => !t.googleSearch);
+            activeConfig = {
+              ...activeConfig,
+              ...(safeTools.length > 0 ? { tools: safeTools } : {}),
+            };
+            if (safeTools.length === 0) delete activeConfig.tools;
+          }
 
-        responseStream = await aiClient.models.generateContentStream({
-          model: activeModel,
-          contents: contents,
-          config: activeConfig,
-        });
-        const iterator = responseStream[Symbol.asyncIterator]();
-        const first = await iterator.next();
-        if (!first.done) {
-          firstChunk = first.value;
+          responseStream = await aiClient.models.generateContentStream({
+            model: activeModel,
+            contents: contents,
+            config: activeConfig,
+          });
+          streamIterator = responseStream[Symbol.asyncIterator]();
+          const first = await streamIterator!.next();
+          if (!first.done) {
+            firstChunk = first.value;
+          }
+          lastStreamErr = null;
+          break;
+        } catch (streamErr: any) {
+          lastStreamErr = streamErr;
+          responseStream = null;
+          streamIterator = null;
+          if (i < fallbackChain.length - 1) {
+            console.warn(
+              `Primary stream failed with model ${activeModel} (${streamErr?.message}), stepping down to ${fallbackChain[i + 1]}...`
+            );
+          }
         }
       }
 
+      if (lastStreamErr && !responseStream) {
+        throw lastStreamErr;
+      }
+
       res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
       });
+      if (typeof (res as any).flushHeaders === "function") {
+        (res as any).flushHeaders();
+      }
+
+      const writeSse = (payload: Record<string, any>) => {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        if (typeof (res as any).flush === "function") {
+          (res as any).flush();
+        }
+      };
+
+      writeSse({ modelUsed: activeModel });
 
       let groundingChunksSet = new Set<string>();
       let citations: { uri: string; title: string }[] = [];
@@ -937,7 +972,7 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
           }
         }
         if (chunk.text) {
-          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+          writeSse({ text: chunk.text });
         }
         if (chunk.candidates?.[0]?.groundingMetadata?.groundingChunks) {
           const metadataChunks =
@@ -961,9 +996,11 @@ CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
         processChunk(firstChunk);
       }
 
-      if (!isFunctionCall && responseStream) {
-        for await (const chunk of responseStream) {
-          processChunk(chunk);
+      if (!isFunctionCall && streamIterator) {
+        while (true) {
+          const next = await streamIterator.next();
+          if (next.done) break;
+          processChunk(next.value);
           if (isFunctionCall) break;
         }
       }

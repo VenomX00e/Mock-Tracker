@@ -16,6 +16,9 @@ export interface BaseSettings {
   shuffle?: boolean;
 }
 
+export type SeriesModeSetting = "MISSING" | "WRONG" | "MIXED";
+export type SeriesSourceSetting = "VAULT" | "BUILTIN" | "BOTH";
+
 export interface OperationSettings {
   difficulty?: DifficultyLevel;
   customRanges?: string;
@@ -26,6 +29,9 @@ export interface OperationSettings {
   mixIncludesFractions?: boolean;
   mixIncludesPowers?: boolean;
   mixIncludesRoots?: boolean;
+  seriesMode?: SeriesModeSetting;
+  seriesSource?: SeriesSourceSetting;
+  seriesCategory?: string;
 }
 
 export interface MathPreset {

@@ -95,7 +95,7 @@ export function SpeedMathPresetModal({
             </label>
             <div className="flex flex-wrap gap-2">
               {(
-                ["+", "-", "*", "/", "sq", "cube", "frac", "table"] as Operation[]
+                ["+", "-", "*", "/", "sq", "cube", "frac", "table", "series"] as Operation[]
               ).map((op) => (
                 <button
                   key={op}
@@ -115,7 +115,9 @@ export function SpeedMathPresetModal({
                         ? "Fractions"
                         : op === "table"
                           ? "Multiplication Table"
-                          : op}
+                          : op === "series"
+                            ? "Number Series"
+                            : op}
                 </button>
               ))}
             </div>
@@ -277,15 +279,22 @@ export function SpeedMathPresetModal({
                       </button>
                       
                       <div className="flex items-center gap-2">
-                        {['sq', 'cube', 'frac', 'table'].includes(op) && (
+                        {['sq', 'cube', 'frac', 'table', 'series'].includes(op) && (
                           <button
                             type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setPresetOverrides((prev: any) => ({
-                                  ...prev,
-                                  [op]: { ...prev[op], isReverse: !(prev[op]?.isReverse) }
-                                }));
+                                setPresetOverrides((prev: any) => {
+                                  const nextRev = !(prev[op]?.isReverse);
+                                  return {
+                                    ...prev,
+                                    [op]: {
+                                      ...prev[op],
+                                      isReverse: nextRev,
+                                      ...(op === 'series' ? { seriesMode: nextRev ? 'WRONG' : 'MISSING' } : {}),
+                                    }
+                                  };
+                                });
                             }}
                             className={`p-1 rounded transition-colors ${presetOverrides[op]?.isReverse ? "text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10" : "text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"}`}
                             title="Reverse Mode"
@@ -319,6 +328,9 @@ export function SpeedMathPresetModal({
                             customRanges:
                               presetOverrides[op]?.customRanges ?? "1-10",
                             isReverse: presetOverrides[op]?.isReverse,
+                            seriesMode: presetOverrides[op]?.seriesMode,
+                            seriesSource: presetOverrides[op]?.seriesSource,
+                            seriesCategory: presetOverrides[op]?.seriesCategory,
                           }}
                           onChange={(_, newOpSettings) => {
                             setPresetOverrides((prev: any) => ({

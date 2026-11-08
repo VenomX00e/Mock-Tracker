@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, Send, User, Sparkles, Paperclip, Image as ImageIcon, FileText, Settings, Trash2, Globe, Maximize2, Minimize2, Copy, Check, Lock, AlertCircle } from 'lucide-react';
+import { Bot, Send, User, Sparkles, Paperclip, Image as ImageIcon, FileText, Settings, Trash2, Globe, Maximize2, Minimize2, Copy, Check, Lock, AlertCircle, ChevronDown } from 'lucide-react';
 import { useGeminiResolution } from '../../hooks/useGeminiResolution';
+import { AVAILABLE_MOCK_MODELS, formatModelName } from '../mocks/SubjectRow';
 
 import Markdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -34,7 +35,10 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
   const [chatMode, setChatMode] = useState<ChatMode>('default');
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showSearchApiMenu, setShowSearchApiMenu] = useState(false);
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState<ChatMessage | null>(null);
   const currentModeMessages = messagesByMode[chatMode] || [];
+  const displayedMessages = streamingMessage ? [...currentModeMessages, streamingMessage] : currentModeMessages;
   
   useEffect(() => {
     if (isEnlarged) {
@@ -51,6 +55,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const searchApiMenuRef = useRef<HTMLDivElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -62,6 +67,9 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
       }
       if (searchApiMenuRef.current && !searchApiMenuRef.current.contains(event.target as Node)) {
         setShowSearchApiMenu(false);
+      }
+      if (modelPickerRef.current && !modelPickerRef.current.contains(event.target as Node)) {
+        setIsModelPickerOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -107,7 +115,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
 
     const userMessage: ChatMessage = { 
       role: 'user', 
-      text: input.trim() || (attachment && pagesText ? `Please analyze the attached file (Pages ${pagesText}).` : 'Please analyze this attachment.'),
+      text: input.trim(),
       attachments: attachment && finalAttachmentData ? [{
         data: finalAttachmentData,
         mimeType: attachment.mimeType || (attachment.type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
@@ -128,6 +136,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
       return;
     }
 
+    let rafId: number | null = null;
     try {
       const modelToUse = activeModel;
       
@@ -140,17 +149,101 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
         return {
           ...msg,
           attachments: undefined,
-          text: msg.text.includes("[Image") ? msg.text : `${msg.text} [Image attached in previous turn]`
+          text: msg.text.includes("[Image") ? msg.text : `${msg.text ? `${msg.text} ` : ''}[Image attached in previous turn]`
         };
       });
 
-      const reply = await askLearningTutor(sanitizedHistory, useWebSearch, useCustomWebSearch, modelToUse, chatMode, customSearchApi, (text, citations) => {
+      let targetText = '';
+      let displayedLen = 0;
+      let latestCitations: any = undefined;
+      let latestModelUsed: string = modelToUse;
+      let streamCompleted = false;
+
+      const stepPacer = () => {
+        const totalLen = targetText.length;
+        if (displayedLen < totalLen) {
+          const remaining = totalLen - displayedLen;
+          // Adaptive pace: steady word-by-word flow, accelerating if buffer builds up or stream finished
+          const rawStep = streamCompleted
+            ? Math.max(18, Math.ceil(remaining * 0.35))
+            : Math.max(4, Math.ceil(remaining * 0.14));
+
+          let nextLen = Math.min(totalLen, displayedLen + rawStep);
+          // Snap to next whitespace boundary if close so Markdown/KaTeX never jitters on partial tokens
+          if (nextLen < totalLen) {
+            const nextSpace = targetText.indexOf(' ', nextLen);
+            const nextNewline = targetText.indexOf('\n', nextLen);
+            const boundary =
+              nextSpace !== -1 && nextNewline !== -1
+                ? Math.min(nextSpace, nextNewline)
+                : nextSpace !== -1
+                  ? nextSpace
+                  : nextNewline;
+            if (boundary !== -1 && boundary - nextLen <= 10) {
+              nextLen = boundary + 1;
+            }
+          }
+
+          displayedLen = nextLen;
+          setStreamingMessage({
+            role: 'model',
+            text: targetText.slice(0, displayedLen),
+            citations: latestCitations,
+            modelUsed: latestModelUsed,
+          });
+        }
+
+        if (displayedLen < targetText.length) {
+          rafId = requestAnimationFrame(stepPacer);
+        } else {
+          rafId = null;
+        }
+      };
+
+      const reply = await askLearningTutor(sanitizedHistory, useWebSearch, useCustomWebSearch, modelToUse, chatMode, customSearchApi, (text, citations, modelUsed) => {
         setIsLoading(false);
-        setMessages(chatMode, [...chatHistory, { role: 'model', text: text, citations }]);
+        targetText = text;
+        latestCitations = citations;
+        latestModelUsed = modelUsed || modelToUse;
+        if (rafId === null && displayedLen < targetText.length) {
+          rafId = requestAnimationFrame(stepPacer);
+        }
       });
-      
-      setMessages(chatMode, [...chatHistory, { role: 'model', text: reply.text, citations: reply.citations }]);
+
+      streamCompleted = true;
+      targetText = reply.text;
+      latestCitations = reply.citations;
+      latestModelUsed = reply.modelUsed || modelToUse;
+
+      // Wait briefly if the smooth pacer is finishing the tail of the stream
+      if (displayedLen < targetText.length) {
+        if (rafId === null) {
+          rafId = requestAnimationFrame(stepPacer);
+        }
+        await new Promise<void>((resolve) => {
+          const checkDone = () => {
+            if (displayedLen >= targetText.length || rafId === null) {
+              resolve();
+            } else {
+              requestAnimationFrame(checkDone);
+            }
+          };
+          requestAnimationFrame(checkDone);
+        });
+      }
+
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      setStreamingMessage(null);
+      setMessages(chatMode, [...chatHistory, { role: 'model', text: reply.text, citations: reply.citations, modelUsed: reply.modelUsed || modelToUse }]);
     } catch (error: any) {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      setStreamingMessage(null);
       setMessages(chatMode, [...chatHistory, { 
         role: 'model', 
         text: `Error: ${error.message || 'Something went wrong. Please try again later.'}` 
@@ -161,24 +254,75 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
   };
 
   const content = (
-    <div className={`flex flex-col bg-white dark:bg-slate-900 shadow-lg overflow-hidden ${isEnlarged ? 'fixed inset-0 z-[9999] rounded-none border-0' : 'border border-slate-200 dark:border-slate-800 rounded-2xl h-[500px]'}`}>
-      <div className="flex-none p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+    <div className={`flex flex-col bg-white dark:bg-slate-900 shadow-lg overflow-hidden ${isEnlarged ? 'fixed inset-0 z-[9999] rounded-none border-0' : 'border border-slate-200 dark:border-slate-800 rounded-2xl h-[540px]'}`}>
+      <div className="flex-none px-4 py-3.5 bg-slate-50/40 dark:bg-slate-950/30 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Bot className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl neon-icon-container bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200/70 dark:border-indigo-500/30 flex flex-col items-center justify-center shadow-xs">
+            <Bot className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
-            <h3 className="text-sm md:text-base font-semibold text-slate-900 dark:text-white">AI Tutor</h3>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="text-sm md:text-base font-semibold text-slate-900 dark:text-white">AI Tutor</h3>
+              {activeModel && (
+                <div className="relative inline-flex items-center" ref={modelPickerRef}>
+                  <span className="text-slate-300 dark:text-slate-700 mr-1.5">•</span>
+                  {isModelLocked ? (
+                    <span
+                      className="text-[11px] font-normal text-slate-400 dark:text-slate-500 tracking-normal flex items-center gap-1"
+                      title={`Model locked by Admin ${userHasPersonalKey ? '(Custom Key)' : '(Global Access)'}`}
+                    >
+                      <span>{formatModelName(activeModel)}</span>
+                      <Lock className="w-2.5 h-2.5 text-slate-400/80 dark:text-slate-500/80" />
+                    </span>
+                  ) : (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsModelPickerOpen(prev => !prev)}
+                        className="text-[11px] font-normal text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 tracking-normal flex items-center gap-1 transition-colors group cursor-pointer"
+                        title="Switch model for AI Tutor"
+                      >
+                        <span className="underline decoration-dotted decoration-slate-300 dark:decoration-slate-600 underline-offset-2">{formatModelName(activeModel)}</span>
+                        <ChevronDown className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                      {isModelPickerOpen && (
+                        <div className="absolute top-full left-0 mt-1 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 min-w-[170px]">
+                          <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+                            AI Tutor Model
+                          </div>
+                          <div className="max-h-48 overflow-y-auto py-0.5">
+                            {AVAILABLE_MOCK_MODELS.map(m => (
+                              <button
+                                key={m.value}
+                                type="button"
+                                onClick={() => {
+                                  localStorage.setItem('geminiModel_ai_tutor', m.value);
+                                  localStorage.setItem('geminiModel_ai', m.value);
+                                  window.dispatchEvent(new Event('gemini_keys_changed'));
+                                  setIsModelPickerOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 text-xs flex items-center justify-between transition-colors ${
+                                  activeModel === m.value
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-medium'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <span>{m.label}</span>
+                                {activeModel === m.value && <Check className="w-3 h-3 text-indigo-500" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <p className="text-[10px] md:text-xs text-indigo-600 dark:text-indigo-300 flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
               Powered by Gemini
             </p>
-            {isModelLocked && (
-              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-0.5">
-                <Lock className="w-2.5 h-2.5 shrink-0 text-amber-500" />
-                <span>{activeModel} • Model locked by Admin {userHasPersonalKey ? '(Custom Key)' : '(Global Access)'}</span>
-              </p>
-            )}
           </div>
         </div>
 
@@ -228,10 +372,37 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
               )}
             </div>
           )}
-          <div className="relative mr-2" ref={modeMenuRef}>
+          {/* Linear small mode tiles on medium & large screens */}
+          <div className="hidden md:flex items-center gap-1 mr-1.5">
+            {([
+              { id: 'default', label: '🧬 Default' },
+              { id: 'math', label: '🔢 Quant' },
+              { id: 'english', label: '📖 English' },
+              { id: 'reasoning', label: '🧠 Reasoning' },
+            ] as const).map((mode) => {
+              const isActive = chatMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setChatMode(mode.id)}
+                  className={`px-2 py-1 text-[11px] rounded-lg transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/40 font-semibold shadow-xs'
+                      : 'bg-slate-50/60 dark:bg-slate-800/30 text-slate-500 dark:text-slate-400 border border-slate-200/70 dark:border-slate-700/60 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 font-medium'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Compact dropdown on small mobile screens */}
+          <div className="relative mr-1.5 md:hidden" ref={modeMenuRef}>
             <button
               onClick={() => setShowModeMenu(!showModeMenu)}
-              className="px-2 py-1 md:px-3 md:py-1.5 text-[10px] md:text-xs font-medium text-slate-700 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-slate-200 rounded-full transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap"
+              className="px-2 py-1 text-[10px] font-medium text-slate-700 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-slate-200 rounded-full transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap"
             >
               {chatMode === 'default' && '🧬 Default'}
               {chatMode === 'math' && '🔢 Quant'}
@@ -349,8 +520,8 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
              </div>
           </div>
         )}
-        {[...currentModeMessages].reverse().map((msg, reverseIdx) => {
-          const originalIdx = currentModeMessages.length - 1 - reverseIdx;
+        {[...displayedMessages].reverse().map((msg, reverseIdx) => {
+          const originalIdx = displayedMessages.length - 1 - reverseIdx;
           return (
             <ChatMessageBubble 
               key={originalIdx} 
@@ -362,14 +533,14 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
             />
           );
         })}
-        {currentModeMessages.length <= 1 && (
+        {currentModeMessages.length <= 1 && !streamingMessage && (
           <div className="pt-2 space-y-4">
             {chatMode === 'reasoning' && (
               <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-200 p-4 rounded-xl text-sm max-w-md mx-auto text-left flex gap-3 items-start shadow-sm">
                 <span className="text-lg">⚠️</span>
                 <div>
                   <p className="font-semibold mb-1">Recommended Configuration</p>
-                  <p className="opacity-95 leading-relaxed">Reasoning complex analytical puzzles require higher reasoning capabilities. We highly recommend switching your AI Model Version to <b>Gemini 3.5 Flash</b> in settings for the best results.</p>
+                  <p className="opacity-95 leading-relaxed">Reasoning complex analytical puzzles require higher reasoning capabilities. We highly recommend switching your AI Model Version to <b>3.8 Flash</b> in the header for the best results.</p>
                 </div>
               </div>
             )}

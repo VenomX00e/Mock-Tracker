@@ -1,35 +1,33 @@
 import React, { memo } from 'react';
 
 export const AVAILABLE_MOCK_MODELS = [
-  { value: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
-  { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-  { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
-  { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
-  { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-  { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro' },
-  { value: 'gemini-3-flash-preview', label: 'Gemini 3.0 Flash' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+  { value: 'gemini-3.5-flash-lite', label: '3.5 Flash Lite' },
+  { value: 'gemini-3.1-flash-lite', label: '3.1 Flash Lite' },
+  { value: 'gemini-3.8-flash', label: '3.8 Flash' },
+  { value: 'gemini-3.6-flash', label: '3.6 Flash' },
+  { value: 'gemini-3.1-pro-preview', label: '3.1 Pro' },
+  { value: 'gemini-3-flash-preview', label: '3.0 Flash' },
+  { value: 'gemini-2.5-flash', label: '2.5 Flash' },
+  { value: 'gemini-2.5-flash-lite', label: '2.5 Flash Lite' },
 ];
 
 export const formatModelName = (modelId?: string): string => {
   if (!modelId) return '';
   const known: Record<string, string> = {
-    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
-    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
-    'gemini-3.8-flash': 'Gemini 3.8 Flash',
-    'gemini-3.7-flash': 'Gemini 3.7 Flash',
-    'gemini-3.6-flash': 'Gemini 3.6 Flash',
-    'gemini-3.5-flash': 'Gemini 3.5 Flash',
-    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
-    'gemini-3-flash-preview': 'Gemini 3.0 Flash',
-    'gemini-2.5-flash': 'Gemini 2.5 Flash',
-    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
-    'gemma-4-26b-a4b-it': 'Gemma 4 26B A4B IT',
-    'gemma-4-31b-it': 'Gemma 4 31B IT'
+    'gemini-3.5-flash-lite': '3.5 Flash Lite',
+    'gemini-3.1-flash-lite': '3.1 Flash Lite',
+    'gemini-3.8-flash': '3.8 Flash',
+    'gemini-3.7-flash': '3.7 Flash',
+    'gemini-3.6-flash': '3.6 Flash',
+    'gemini-3.5-flash': '3.5 Flash',
+    'gemini-3.1-pro-preview': '3.1 Pro',
+    'gemini-3-flash-preview': '3.0 Flash',
+    'gemini-2.5-flash': '2.5 Flash',
+    'gemini-2.5-flash-lite': '2.5 Flash Lite',
+    'gemma-4-26b-a4b-it': '4 26B A4B IT',
+    'gemma-4-31b-it': '4 31B IT'
   };
-  return known[modelId] || modelId;
+  return (known[modelId] || modelId).replace(/^gemini[\s-]*/i, '');
 };
 
 export const SubjectRow = memo(({ sub, data, onChange }: { sub: any, data: any, onChange: (id: string, field: string, val: string) => void }) => {

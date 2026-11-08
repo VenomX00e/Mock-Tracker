@@ -11,7 +11,15 @@ interface MathArenaSummaryProps {
   timeElapsed: number;
   config: any;
   sessionQuotas: Record<string, SessionQuota>;
-  mistakes: Array<{ q: string; userAns: string; actual: string | number; }>;
+  mistakes: Array<{
+    q: string;
+    userAns: string;
+    actual: string | number;
+    seriesSteps?: string[];
+    patternTitle?: string;
+    seriesType?: "missing" | "wrong";
+    wrongReplacement?: number;
+  }>;
   onClose: () => void;
   onPlayAgain: () => void;
 }
@@ -51,12 +59,15 @@ export function MathArenaSummary({
             const opNames: Record<string, string> = {
               "+": "Addition",
               "-": "Subtraction",
-              "*": "Multiplication", // Use * instead of x here based on the operation type, wait the original used "x"? Let's check!
-              x: "Multiplication", // Fallback if x was used
+              "*": "Multiplication",
+              x: "Multiplication",
               "/": "Division",
               sq: "Squares",
+              cube: "Cubes",
               frac: "Fractions",
+              table: "Tables",
               mix: "Mix",
+              series: "Series",
             };
             const opName = opNames[op] || op;
 
@@ -83,7 +94,7 @@ export function MathArenaSummary({
         </div>
 
         {mistakes.length > 0 && (
-          <div className="w-full bg-slate-50 dark:bg-slate-900 rounded-xl p-5 mb-8 max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-800/50 text-left">
+          <div className="w-full bg-slate-50 dark:bg-slate-900 rounded-xl p-5 mb-8 max-h-72 overflow-y-auto border border-slate-200 dark:border-slate-800/50 text-left">
             <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-orange-500" /> Mistakes Review
             </h3>
@@ -91,17 +102,33 @@ export function MathArenaSummary({
               {mistakes.map((m, i) => (
                 <li
                   key={i}
-                  className="flex justify-between items-center text-xs md:text-sm border-b border-slate-200 dark:border-slate-800/50 pb-3 last:border-0 last:pb-0 gap-2"
+                  className="flex flex-col text-xs md:text-sm border-b border-slate-200 dark:border-slate-800/50 pb-3 last:border-0 last:pb-0 gap-1.5"
                 >
-                  <span className="text-slate-700 dark:text-slate-300 font-mono text-sm md:text-base inline-flex flex-wrap items-center">
-                    <MathRenderer expr={m.q} />{" "}
-                    <span className="font-bold text-green-600 dark:text-green-400 ml-1">
-                      {m.actual}
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-700 dark:text-slate-300 font-mono tabular-nums text-sm md:text-base inline-flex flex-wrap items-center gap-1.5">
+                      <MathRenderer expr={m.q} />
+                      <span className="font-bold text-green-600 dark:text-green-400 ml-1">
+                        {m.seriesType === "wrong" && m.wrongReplacement !== undefined
+                          ? `Wrong: ${m.actual} (Should be ${m.wrongReplacement})`
+                          : `Ans: ${m.actual}`}
+                      </span>
                     </span>
-                  </span>
-                  <span className="text-red-500 line-through bg-red-50 dark:bg-red-500/10 px-1.5 md:px-2 py-0.5 rounded font-mono shrink-0">
-                    {m.userAns}
-                  </span>
+                    <span className="text-red-500 line-through bg-red-50 dark:bg-red-500/10 px-1.5 md:px-2 py-0.5 rounded font-mono shrink-0">
+                      {m.userAns}
+                    </span>
+                  </div>
+                  {m.seriesSteps && m.seriesSteps.length > 0 && (
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {m.patternTitle && (
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                          {m.patternTitle}:
+                        </span>
+                      )}
+                      <span className="font-mono text-slate-700 dark:text-slate-300">
+                        {m.seriesSteps.join("  →  ")}
+                      </span>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

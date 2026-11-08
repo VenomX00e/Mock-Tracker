@@ -33,16 +33,31 @@ export function SpeedMathOperationTile({
       className={`bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:shadow-md transition-shadow flex flex-col gap-3 group relative ${activeSettingsTile === item.op ? "z-50" : ""}`}
     >
       <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-        {['sq', 'cube', 'frac', 'table'].includes(item.op) && (
+        {['sq', 'cube', 'frac', 'table', 'series'].includes(item.op) && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              updateTileSettings(item.op, {
-                isReverse: !getTileSetting(item.op).isReverse
-              });
+              const current = getTileSetting(item.op);
+              const nextReverse = !current.isReverse;
+              if (item.op === 'series') {
+                updateTileSettings(item.op, {
+                  isReverse: nextReverse,
+                  seriesMode: nextReverse ? 'WRONG' : 'MISSING',
+                });
+              } else {
+                updateTileSettings(item.op, {
+                  isReverse: nextReverse,
+                });
+              }
             }}
-            className={`p-1.5 rounded-lg transition-colors ${getTileSetting(item.op).isReverse ? "text-indigo-500 dark:text-indigo-400" : "text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"}`}
-            title="Reverse Type"
+            className={`p-1.5 rounded-lg transition-colors ${getTileSetting(item.op).isReverse ? "text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10" : "text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"}`}
+            title={
+              item.op === 'series'
+                ? getTileSetting(item.op).isReverse
+                  ? 'Mode: Wrong Number Series (Click for Missing)'
+                  : 'Mode: Missing Number Series (Click for Wrong)'
+                : 'Reverse Type'
+            }
           >
             <ArrowLeftRight className="w-4 h-4" />
           </button>
@@ -114,6 +129,10 @@ export function SpeedMathOperationTile({
                     getTileSetting(item.op).difficulty || "EASY",
                   customRanges:
                     getTileSetting(item.op).customRanges ?? "1-10",
+                  isReverse: getTileSetting(item.op).isReverse,
+                  seriesMode: getTileSetting(item.op).seriesMode || (getTileSetting(item.op).isReverse ? "WRONG" : "MISSING"),
+                  seriesSource: getTileSetting(item.op).seriesSource || "VAULT",
+                  seriesCategory: getTileSetting(item.op).seriesCategory || "all",
                 }}
                 onChange={(base, op) => {
                   if (base) {
@@ -138,7 +157,24 @@ export function SpeedMathOperationTile({
           {item.name}
         </h4>
         <p className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 mt-1">
-          {item.desc}
+          {item.op === "series"
+            ? (() => {
+                const s = getTileSetting("series");
+                const modeLabel =
+                  s.seriesMode === "MIXED"
+                    ? "Mixed (? & Wrong)"
+                    : s.isReverse || s.seriesMode === "WRONG"
+                    ? "Wrong Number · Options"
+                    : "Missing (?) · Keyboard";
+                const srcLabel =
+                  s.seriesSource === "BUILTIN"
+                    ? "Exam Pack"
+                    : s.seriesSource === "BOTH"
+                    ? "All Patterns"
+                    : "Saved Vault";
+                return `${modeLabel} · ${srcLabel}`;
+              })()
+            : item.desc}
         </p>
       </div>
       <button

@@ -16,6 +16,8 @@ import {
   Plus as PlusIcon,
   Trash2,
   ChevronDown,
+  Layers,
+  Zap as ZapIcon,
 } from "lucide-react";
 import { MathArena, MathArenaConfig } from "./MathArena";
 import { OperationConfigurator } from "./OperationConfigurator";
@@ -26,6 +28,10 @@ import { useSystemDocsQuery } from "../../hooks/useSystemDocsQuery";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { jarvisEventBus, JarvisActionEvent } from '../../features/jarvis/utils/eventBus';
+import { useSeriesVault } from "../../hooks/useSeriesVault";
+import { SeriesVaultDashboard } from "./speedmath/SeriesVaultDashboard";
+import { SeriesPracticeArena } from "./speedmath/SeriesPracticeArena";
+import { SeriesPattern, SeriesPracticeLevel } from "../../types/seriesTypes";
 
 export const basicOperations: {
   name: string;
@@ -97,14 +103,14 @@ export const basicOperations: {
     desc: "Mixed operations equations",
     defaultRange: [5, 50],
   },
+  {
+    name: "Number Series",
+    op: "series",
+    icon: <Layers className="w-5 h-5 text-indigo-500" />,
+    desc: "Saved & exam series patterns",
+    defaultRange: [1, 10],
+  },
 ];
-
-import { useSeriesVault } from "../../hooks/useSeriesVault";
-import { SeriesVaultDashboard } from "./speedmath/SeriesVaultDashboard";
-import { Layers, Zap as ZapIcon } from "lucide-react";
-
-import { SeriesPracticeArena } from "./speedmath/SeriesPracticeArena";
-import { SeriesPattern, SeriesPracticeLevel } from "../../types/seriesTypes";
 
 export function SpeedMathHub() {
   const [currentView, setCurrentView] = useState<"training" | "vault">("training");
@@ -176,6 +182,9 @@ export function SpeedMathHub() {
       timeUnit: "SEC" as const,
       difficulty: "EASY" as const,
       customRanges: `${defaultR[0]}-${defaultR[1]}`,
+      seriesMode: "MISSING" as const,
+      seriesSource: "VAULT" as const,
+      seriesCategory: "all",
     };
     return { ...defaultSettings, ...(tileSettings[op] || {}) };
   };
@@ -195,6 +204,9 @@ export function SpeedMathHub() {
           difficulty: settings.difficulty,
           customRanges: settings.customRanges,
           isReverse: settings.isReverse,
+          seriesMode: settings.seriesMode,
+          seriesSource: settings.seriesSource,
+          seriesCategory: settings.seriesCategory,
         },
       },
       name: basicOperations.find((b) => b.op === op)?.name || "Practice Mode",

@@ -232,7 +232,111 @@ export function OperationConfigurator({
       )}
 
       <div>
-        {isArithmetic || isMix ? (
+        {operation === "series" ? (
+          <div className="flex flex-col gap-3.5">
+            {/* 1. Series Type: Missing / Wrong / Mixed */}
+            <div>
+              <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1.5">
+                Series Mode
+              </label>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                {(
+                  [
+                    { value: "MISSING", label: "Missing (?)" },
+                    { value: "WRONG", label: "Wrong Term" },
+                    { value: "MIXED", label: "Mixed" },
+                  ] as const
+                ).map((item) => {
+                  const activeMode =
+                    opSettings.seriesMode ||
+                    (opSettings.isReverse ? "WRONG" : "MISSING");
+                  const isActive = activeMode === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() =>
+                        updateOp({
+                          seriesMode: item.value,
+                          isReverse: item.value === "WRONG",
+                        })
+                      }
+                      className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors whitespace-nowrap ${
+                        isActive
+                          ? "bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400"
+                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/50"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                {(opSettings.seriesMode || (opSettings.isReverse ? "WRONG" : "MISSING")) === "MISSING"
+                  ? "Type missing number via Keyboard / Numpad"
+                  : (opSettings.seriesMode || (opSettings.isReverse ? "WRONG" : "MISSING")) === "WRONG"
+                  ? "Tap the wrong number from series options"
+                  : "Alternates Missing (Numpad) & Wrong (Options)"}
+              </p>
+            </div>
+
+            {/* 2. Pattern Source: Saved Vault vs Built-in Exam Pack */}
+            <div>
+              <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1.5">
+                Pattern Source
+              </label>
+              <CustomSelect
+                className="w-full"
+                value={opSettings.seriesSource || "VAULT"}
+                onChange={(value) =>
+                  updateOp({ seriesSource: value as any })
+                }
+                options={[
+                  { value: "VAULT", label: "Saved Vault Patterns" },
+                  { value: "BUILTIN", label: "Built-in Exam Pack" },
+                  { value: "BOTH", label: "All (Saved + Exam Pack)" },
+                ]}
+              />
+            </div>
+
+            {/* 3. Exam Difficulty Level */}
+            <div>
+              <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1.5">
+                Exam Difficulty
+              </label>
+              <CustomSelect
+                className="w-full mb-1"
+                value={
+                  ["HARD", "CHALLENGING", "EXPERT"].includes(
+                    opSettings.difficulty || "EASY"
+                  )
+                    ? "HARD"
+                    : opSettings.difficulty === "MEDIUM"
+                    ? "MEDIUM"
+                    : "EASY"
+                }
+                onChange={(value) =>
+                  updateOp({ difficulty: value as DifficultyLevel })
+                }
+                options={[
+                  { value: "EASY", label: "Level 1 · Clerk Prelims (Easy)" },
+                  { value: "MEDIUM", label: "Level 2 · PO Prelims (Medium)" },
+                  { value: "HARD", label: "Level 3 · PO Mains (Hard)" },
+                ]}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {["HARD", "CHALLENGING", "EXPERT"].includes(
+                  opSettings.difficulty || "EASY"
+                )
+                  ? "Alternating (+/-), n²±1 camouflage & early traps"
+                  : opSettings.difficulty === "MEDIUM"
+                  ? "Gapped steps (1², 3², 5² / alt primes) & mid '?'"
+                  : "Consecutive steps, 2–3 digit numbers & end '?'"}
+              </p>
+            </div>
+          </div>
+        ) : isArithmetic || isMix ? (
           <div>
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">
               Difficulty
@@ -256,7 +360,6 @@ export function OperationConfigurator({
                 )}
               </p>
             )}
-            {/* The Mix Includes options are now implicitly true based on backend defaults */}
           </div>
         ) : (
           <div>

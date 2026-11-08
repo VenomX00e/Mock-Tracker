@@ -11,6 +11,7 @@ import { generateSquare, generateCube } from './operations/powers';
 import { generateFraction } from './operations/fractions';
 import { generateTable } from './operations/tables';
 import { generateMixture } from './operations/mixture';
+import { generateSeriesSpeedMathQuestion } from './series';
 
 const strategyMap: Record<Operation, QuestionGenerator> = {
   '+': generateAddition,
@@ -22,6 +23,7 @@ const strategyMap: Record<Operation, QuestionGenerator> = {
   'frac': generateFraction,
   'table': generateTable,
   'mix': generateMixture,
+  'series': generateSeriesSpeedMathQuestion,
 };
 
 export function generateQuestion(op: Operation, settings?: OperationSettings, legacyDigitRange?: [number, number]): Question {
