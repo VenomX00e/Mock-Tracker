@@ -11,6 +11,9 @@ import {
   deleteCustomVocabFolder,
   subscribeToFavoriteVocabIds,
   subscribeToCustomVocabFolders,
+  WRONG_VOCAB_FOLDER_ID,
+  addVocabsToWrongFolder,
+  removeVocabFromWrongFolder,
 } from '../services/vocabularyFirebaseService';
 import type { CustomVocabFolder, CustomFolder, Vocabulary } from '../types';
 
@@ -134,6 +137,7 @@ interface VocabularyState {
   canvases: EditorialCanvas[];
   isLoaded: boolean;
   favoriteVocabIds: string[];
+  wrongVocabIds: string[];
   customFolders: CustomFolder[];
   favoritedVocabsData: Vocabulary[];
 
@@ -141,6 +145,8 @@ interface VocabularyState {
   setFavoriteVocabIds: (ids: string[]) => void;
   setCustomFolders: (folders: CustomFolder[]) => void;
   toggleFavorite: (vocabId: string) => Promise<void>;
+  addWrongVocabs: (vocabIds: string[]) => Promise<void>;
+  removeWrongVocab: (vocabId: string) => Promise<void>;
   createCustomFolder: (name: string, initialVocabIds?: string[]) => Promise<CustomVocabFolder>;
   addVocabToFolder: (folderId: string, vocabId: string) => Promise<void>;
   removeVocabFromFolder: (folderId: string, vocabId: string) => Promise<void>;
@@ -170,6 +176,7 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
   canvases: [],
   isLoaded: false,
   favoriteVocabIds: [],
+  wrongVocabIds: [],
   customFolders: [],
   favoritedVocabsData: [],
   
@@ -189,8 +196,13 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
     });
   },
 
-  setCustomFolders: (customFolders) => {
-    set({ customFolders });
+  setCustomFolders: (allFolders) => {
+    const wrongFolder = allFolders.find((f) => f.id === WRONG_VOCAB_FOLDER_ID);
+    const userFolders = allFolders.filter((f) => f.id !== WRONG_VOCAB_FOLDER_ID);
+    set({
+      customFolders: userFolders,
+      wrongVocabIds: wrongFolder?.vocabIds || [],
+    });
   },
 
   toggleFavorite: async (vocabId: string) => {
@@ -224,6 +236,63 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
           favoriteVocabIds: rolledBackIds,
           favoritedVocabsData: computeFavoritedVocabsData(get().canvases, rolledBackIds),
         });
+      }
+    }
+  },
+
+  addWrongVocabs: async (vocabIds: string[]) => {
+    const cleanIds = Array.from(new Set(vocabIds.filter(Boolean)));
+    if (cleanIds.length === 0) return;
+
+    const userId = auth.currentUser?.uid;
+    const prevWrongIds = get().wrongVocabIds;
+    const prevFavIds = get().favoriteVocabIds;
+
+    const nextWrongIds = Array.from(new Set([...prevWrongIds, ...cleanIds]));
+    const missingFavIds = cleanIds.filter((id) => !prevFavIds.includes(id));
+    const nextFavIds =
+      missingFavIds.length > 0 ? [...prevFavIds, ...missingFavIds] : prevFavIds;
+
+    // Optimistic UI update
+    set({
+      wrongVocabIds: nextWrongIds,
+      favoriteVocabIds: nextFavIds,
+      favoritedVocabsData: computeFavoritedVocabsData(get().canvases, nextFavIds),
+    });
+
+    if (userId) {
+      try {
+        await addVocabsToWrongFolder(userId, cleanIds);
+        for (const favId of missingFavIds) {
+          await addFavoriteVocab(userId, favId);
+        }
+      } catch (error) {
+        console.error('Failed to add wrong vocabs in Firebase, rolling back:', error);
+        set({
+          wrongVocabIds: prevWrongIds,
+          favoriteVocabIds: prevFavIds,
+          favoritedVocabsData: computeFavoritedVocabsData(get().canvases, prevFavIds),
+        });
+        throw error;
+      }
+    }
+  },
+
+  removeWrongVocab: async (vocabId: string) => {
+    if (!vocabId) return;
+    const userId = auth.currentUser?.uid;
+    const prevWrongIds = get().wrongVocabIds;
+    if (!prevWrongIds.includes(vocabId)) return;
+
+    const nextWrongIds = prevWrongIds.filter((id) => id !== vocabId);
+    set({ wrongVocabIds: nextWrongIds });
+
+    if (userId) {
+      try {
+        await removeVocabFromWrongFolder(userId, vocabId);
+      } catch (error) {
+        console.error('Failed to remove wrong vocab in Firebase, rolling back:', error);
+        set({ wrongVocabIds: prevWrongIds });
       }
     }
   },
@@ -346,7 +415,7 @@ export const useVocabularyStore = create<VocabularyState>((set, get) => ({
 
   syncUserDataOnLogin: (userId: string | null) => {
     if (!userId) {
-      set({ favoriteVocabIds: [], customFolders: [], favoritedVocabsData: [] });
+      set({ favoriteVocabIds: [], wrongVocabIds: [], customFolders: [], favoritedVocabsData: [] });
       return () => {};
     }
 

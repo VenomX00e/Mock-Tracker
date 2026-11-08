@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 
 interface DashboardFiltersProps {
@@ -32,7 +32,33 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
   setSelectedScope,
   hasMocks
 }) => {
+  const [showAllSubFilters, setShowAllSubFilters] = useState(false);
+
+  useEffect(() => {
+    if (selectedExam !== 'All') {
+      setShowAllSubFilters(false);
+    }
+  }, [selectedExam]);
+
   if (!hasMocks) return null;
+
+  const handleExamClick = (type: string) => {
+    if (type === 'All') {
+      if (selectedExam === 'All') {
+        setShowAllSubFilters((prev) => !prev);
+      } else {
+        setSelectedExam('All');
+        setShowAllSubFilters(false);
+      }
+    } else {
+      setShowAllSubFilters(false);
+      setSelectedExam(type);
+    }
+  };
+
+  const shouldShowSubFilters =
+    (selectedExam !== 'All' || showAllSubFilters) &&
+    (availableRoles.length > 1 || availablePhases.length > 1 || availableScopes.length > 1);
 
   return (
     <>
@@ -41,8 +67,8 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
           {examTypes.map(type => (
              <button
               key={type}
-              onClick={() => setSelectedExam(type)}
-              className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors duration-200 z-10 bg-transparent border-none outline-none ${
+              onClick={() => handleExamClick(type)}
+              className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-colors duration-200 z-10 bg-transparent border-none outline-none cursor-pointer ${
                 selectedExam === type 
                   ? 'text-slate-800 dark:text-slate-100' 
                   : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -70,7 +96,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
         </div>
       </div>
 
-      {selectedExam !== 'All' && (availableRoles.length > 1 || availablePhases.length > 1 || availableScopes.length > 1) && (
+      {shouldShowSubFilters && (
         <div className="flex flex-col gap-4 mb-6 bg-slate-50/80 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 ">
           {availableRoles.length > 1 && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">

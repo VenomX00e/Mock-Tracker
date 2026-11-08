@@ -1,0 +1,1052 @@
+import express from "express";
+import { Type } from "@google/genai";
+import admin from "firebase-admin";
+import {
+  fetchWithRetry,
+  generateContentStreamWithFallback,
+  resolveGeminiProxyConfig,
+  formatGeminiError,
+  customWebSearchDeclaration,
+  performCustomSearch,
+} from "../utils/backendHelpers.js";
+
+const router = express.Router();
+
+// Server-Side Gemini Proxy Route (/api/gemini-proxy)
+router.post("/api/gemini-proxy", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: Missing or invalid token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+
+    try {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
+      console.error("Token verification failed:", authErr);
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
+    }
+
+    const { contents, systemInstruction, config: userConfig, featureKey } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, featureKey || "general_chat");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const mergedConfig: any = {
+      ...(userConfig || {}),
+    };
+    if (systemInstruction) {
+      mergedConfig.systemInstruction = systemInstruction;
+    }
+
+    const response = await fetchWithRetry(() =>
+      proxyRes.aiClient.models.generateContent({
+        model: proxyRes.model, // Forced model if global key used
+        contents: contents || [],
+        config: mergedConfig,
+      })
+    );
+
+    res.json({
+      text: response.text || "",
+      modelUsed: proxyRes.model,
+      isGlobalKeyUsed: proxyRes.isGlobalKey,
+      candidates: response.candidates,
+    });
+  } catch (error: any) {
+    console.error("Gemini Proxy Error:", error);
+    res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
+router.post("/api/generate-badge", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing or invalid token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+
+    try {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
+      console.error("Token verification failed:", authErr);
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
+    }
+
+    const { promptText } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "general_chat");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+
+    const actualPrompt = promptText || "random exciting achievement badge";
+
+    // 1. Generate Badge Name using flash model
+    const textPrompt = `You are a designer. Create a short name for a badge based on this description: "${actualPrompt}". Max 4-5 words. Return ONLY a JSON object: {"name": "The Name"}`;
+
+    const nameResponse = await fetchWithRetry(() =>
+      aiClient.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: [{ role: "user", parts: [{ text: textPrompt }] }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+            },
+          },
+        },
+      }),
+    );
+
+    let badgeName = "Achievement Badge";
+    try {
+      const parsed = JSON.parse(nameResponse.text || "{}");
+      if (parsed.name) badgeName = parsed.name;
+    } catch (e) {}
+
+    // 2. Generate Image using image model
+    const imagePrompt = `A clean, vector-style flat icon badge for an achievement: ${actualPrompt}. Keep it simple, centered, colorful, white background, no text on the image.`;
+    const imageResponse = await fetchWithRetry(() =>
+      aiClient.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: {
+          parts: [{ text: imagePrompt }],
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1",
+          },
+        },
+      }),
+    );
+
+    let base64Image = null;
+    if (imageResponse.candidates && imageResponse.candidates[0].content.parts) {
+      for (const part of imageResponse.candidates[0].content.parts) {
+        if (part.inlineData) {
+          base64Image = `data:image/jpeg;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+
+    if (!base64Image) {
+      throw new Error("No image was generated by the model");
+    }
+
+    res.json({
+      name: badgeName,
+      imageBase64: base64Image,
+    });
+  } catch (error: any) {
+    console.error("Gemini Error:", error);
+    let errorMessage = String(error.message || error);
+    if (
+      errorMessage.includes("429") ||
+      errorMessage.includes("Quota exceeded")
+    ) {
+      errorMessage =
+        "Image generation requires a billing-enabled API key or your current quota was exceeded. Please open Settings -> Secrets to select/provide a custom API Key.";
+    }
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+// Shared Error Detection Protocol for Grammar & Competitive Exams
+const ERROR_DETECTION_PROTOCOL = `
+<error_detection_protocol>
+When a user asks to find an error, spot the error, check if a sentence is grammatically correct, identify incorrect parts (A/B/C/D), or asks for sentence correction / why a sentence is wrong, you MUST strictly adhere to the following 2-step response format:
+
+<response_format>
+1. **Grammar Blueprint (JSON Block):**
+   - You MUST output the grammar rule blueprint strictly as a valid JSON code block enclosed in \`\`\`json ... \`\`\`.
+   - Do not output any conversational text, introductions, or markdown explanations outside of the JSON block. Your entire response must be contained within the grammarBlueprint object, followed ONLY by the Quick Test.
+   - The JSON object MUST have the root key "grammarBlueprint" matching the exact schema below.
+
+<json_schema>
+\`\`\`json
+{
+  "grammarBlueprint": {
+    "ruleName": "string (Concise rule name for THIS sentence)",
+    "category": "string (MUST be exactly one of: Subject-Verb Agreement, Verb Tenses & Conditionals, Pronoun Reference & Agreement, Modifiers (Misplaced & Dangling), Parallelism & Structure, Prepositions & Idioms, Nouns & Articles, Conjunctions & Clauses, Word Choice & Redundancy, General Grammar)",
+    "quickSwap": "string (A super-short 2-to-3 word replacement summary, e.g., 'is -> are' or 'cope with -> cope up with')",
+    "originalSentenceBreakdown": {
+      "prefix": "string (The part of the clean sentence BEFORE the error. DO NOT include A/B/C/D markers)",
+      "errorText": "string (The exact word/phrase that is wrong)",
+      "correctText": "string (The exact corrected word/phrase)",
+      "suffix": "string (The part of the clean sentence AFTER the error. DO NOT include A/B/C/D markers)",
+      "fixReason": "string (A short, 1-sentence reason why this exact fix is correct)"
+    },
+    "spottingStrategy": "string (Give the student a mental shortcut / exam strategy. Explicitly call out Trigger Words. MUST USE Markdown formatting: wrap trigger words in \`inline code\` and use **bolding** for emphasis. Do NOT list extra vocabulary words.)",
+    "formulas": [
+      { "text": "string (Valid formula / rule structure. MUST USE Markdown: \`keywords\` in backticks, **parts of speech** in bold, and *(examples)* in italics.)", "isValid": true },
+      { "text": "string (Forbidden trap / invalid structure)", "isValid": false }
+    ],
+    "example": {
+      "incorrect": "string (A FRESH, CLEAR example sentence DIFFERENT from the user's input sentence, with [error fragment] in brackets)",
+      "correct": "string (The same fresh sentence with [corrected fragment] in brackets)"
+    }
+  }
+}
+\`\`\`
+</json_schema>
+
+CRITICAL MANDATES FOR STEP 1:
+- You MUST classify the error into EXACTLY one of these categories: Subject-Verb Agreement, Verb Tenses & Conditionals, Pronoun Reference & Agreement, Modifiers (Misplaced & Dangling), Parallelism & Structure, Prepositions & Idioms, Nouns & Articles, Conjunctions & Clauses, Word Choice & Redundancy, General Grammar. You are forbidden from inventing new categories.
+- You MUST explicitly isolate the exact word/phrase in 'errorText' and its replacement in 'correctText'.
+- You MUST strip out all exam dividers like (A), (B), (C), (D) from the prefix and suffix.
+- NEVER write markdown text, paragraphs, or ASCII flow arrows instead of JSON.
+- The JSON block MUST be strictly valid and parseable by standard JSON.parse().
+- Always include at least 1 valid formula ("isValid": true) and 1 invalid trap ("isValid": false).
+- Under "example", ALWAYS write a FRESH, NEW, DIFFERENT illustrative sentence (DO NOT repeat or copy the user's input sentence). Use [brackets] enclosing the target words.
+
+<examples>
+FEW-SHOT DEMONSTRATION 1 (Quantifier / Determiner Agreement):
+User Input: "...yet regulatory oversight remains shockingly lax (C)/ across most semi-urban and rural region. (D)/ No error (E)"
+
+1. **Grammar Blueprint (JSON Block):**
+\`\`\`json
+{
+  "grammarBlueprint": {
+    "ruleName": "Quantifier-Noun Agreement (\\"Most + Plural Countable Noun\\")",
+    "originalSentenceBreakdown": {
+      "prefix": "...yet regulatory oversight remains shockingly lax across most semi-urban and rural ",
+      "errorText": "region.",
+      "correctText": "regions.",
+      "suffix": ""
+    },
+    "spottingStrategy": "**Trigger:** Whenever you see the quantifier \`most\`, immediately check if the countable noun following it is plural.",
+    "formulas": [
+      { "text": "\`most\` + **Plural Countable Noun** *(e.g., most regions)*", "isValid": true },
+      { "text": "\`most\` + **Singular Countable Noun** *(e.g., most region)*", "isValid": false }
+    ],
+    "example": {
+      "incorrect": "Most modern [institution] require strict compliance with regulatory standards.",
+      "correct": "Most modern [institutions] require strict compliance with regulatory standards."
+    }
+  }
+}
+\`\`\`
+
+2. **⚡ Quick Test (Active Recall):**
+   Test your understanding of this rule:
+   *(A) Despite the recent / (B) economic downturn, / (C) most local business / (D) have managed to survive. / (E) No error*
+   [TEST_KEY: {"correct": "C", "explanation": "Replace 'business' with 'businesses' because the quantifier 'most' requires a plural countable noun.", "correctSentence": "Despite the recent economic downturn, most local businesses have managed to survive."}]
+
+FEW-SHOT DEMONSTRATION 2 (Inverted Conditional):
+User Input: "Had the authorities acted promptly, (A)/ the crisis will not have caused (B)/ such severe damage. (C)/ No error (D)"
+
+1. **Grammar Blueprint (JSON Block):**
+\`\`\`json
+{
+  "grammarBlueprint": {
+    "ruleName": "Third Conditional (Past Unreal Inversion with \\"Had\\")",
+    "originalSentenceBreakdown": {
+      "prefix": "Had the authorities acted promptly, the crisis ",
+      "errorText": "will not have caused",
+      "correctText": "would not have caused",
+      "suffix": " such severe damage."
+    },
+    "spottingStrategy": "**Trigger:** When a sentence begins with \`Had\` + Subject + V3 (inverted conditional), check the main clause for \`would/could/might have + V3\`. Examiners often trap you with \`will have\`.",
+    "formulas": [
+      { "text": "\`Had\` + **Subject** + **V3** ... **Subject** + \`would / could / might have\` + **V3**", "isValid": true },
+      { "text": "\`Had\` + **Subject** + **V3** ... \`will have\` / \`would\` + **V1**", "isValid": false }
+    ],
+    "example": {
+      "incorrect": "Had the engineering team anticipated the flaw, the structure [will not have collapsed].",
+      "correct": "Had the engineering team anticipated the flaw, the structure [would not have collapsed]."
+    }
+  }
+}
+\`\`\`
+
+2. **⚡ Quick Test (Active Recall):**
+   Test your understanding of this rule:
+   *(A) Had the engineering team / (B) detected the structural flaw earlier, / (C) they will have halted / (D) the construction process immediately. / (E) No error*
+   [TEST_KEY: {"correct": "C", "explanation": "Replace 'will have halted' with 'would have halted' to match the past unreal conditional established by 'Had... detected'.", "correctSentence": "Had the engineering team detected the structural flaw earlier, they would have halted the construction process immediately."}]
+</examples>
+
+2. **⚡ Quick Test (Active Recall):**
+   - Generate exactly ONE new practice sentence to test the student's active recall of the rule you JUST taught.
+   - STRICT REQUIREMENT: The test sentence MUST test the exact same trigger word, idiom, or structural mechanic defined in the JSON blueprint above.
+   - NEGATIVE CONSTRAINT: Do NOT test a "similar" rule or a different word from the same broad category. (e.g., If the rule is about "cope with" vs "cope up with", the test MUST use "cope with". If the rule is "Hardly... when", the test MUST use "Hardly... when").
+   - Format the sentence divided into standard exam parts with (A), (B), (C), (D), and (E) No error, for example:
+     *(A) Each of the students / (B) are aware of / (C) the new policy / (D) announced yesterday. / (E) No error*
+   - MANDATORY: Always embed the exact answer key, short explanation, and the full corrected sentence in the [TEST_KEY: ...] metadata tag right after the question:
+     [TEST_KEY: {"correct": "B", "explanation": "Replace 'are' with 'is' because 'Each' takes a singular verb.", "correctSentence": "Each of the students is aware of the new policy announced yesterday."}]
+</response_format>
+
+=== QUICK TEST FOLLOW-UP HANDLING ===
+If the user's message is an answer, attempt, or query regarding a previously given '⚡ Quick Test':
+- **Do NOT re-print the grammarBlueprint JSON block** because this is a practice drill for the same rule already presented.
+- **Direct Answer / Option Selection (e.g. A/B/C/D, No Error, or typed explanation):**
+  • Evaluate their answer immediately and concisely without unnecessary conversational filler.
+  • If **Correct**: Give a brief validation, explain why it's right in 1 line, and ask if they'd like another hard challenge or to explore another topic.
+  • If **Incorrect**: Gently pinpoint where the reasoning failed, reinforce the **Spotting Strategy / Trigger Words**, and show the correct fix.
+- **Request for a Hint:** Give a subtle clue pointing to the trigger word / subject-verb agreement without giving away the full answer immediately.
+- **Request to Reveal / Explain:** Give the concise 1-2 line direct explanation of where the error lies and the corrected sentence.
+- **Request for Another Practice Question:** Output the **⚡ Quick Test:** header followed by the fresh test sentence divided into (A)/(B)/(C)/(D)/(E) and the [TEST_KEY: {"correct": "...", "explanation": "...", "correctSentence": "..."}] metadata tag. Do NOT print any rule box.
+</error_detection_protocol>
+`;
+
+// Shared Number Series Protocol for Quant / Competitive Math
+const NUMBER_SERIES_PROTOCOL = `
+<number_series_protocol>
+When a user inputs a number series (missing number series like "1, 7, 21, ?, 119, 255" or wrong number series like "12, 25, 53, 111, 225"), or asks to identify, solve, find the pattern of, or explain a number series, you MUST follow this protocol:
+
+1. **Provide a rapid, step-by-step solution in clear text**:
+   - State whether it is a Missing or Wrong number series.
+   - Show the step-by-step arithmetic/algebraic relationship between consecutive terms.
+   - Clearly state the missing number or identify the wrong number and its correct replacement.
+
+2. **Output the Series Pattern Blueprint (Strict JSON Block)**:
+   - Output the pattern blueprint strictly as a valid JSON code block enclosed in \`\`\`json:seriesBlueprint ... \`\`\`.
+   - The JSON object must strictly match the following schema:
+
+\`\`\`json:seriesBlueprint
+{
+  "patternType": "seriesBlueprint",
+  "id": "slug-identifying-the-pattern",
+  "title": "Concise Pattern Name (e.g., Multiply by 2 + Consecutive Primes)",
+  "category": "one of: difference | multiplication | powers | primes | alternating",
+  "steps": ["×2 + 5", "×2 + 7", "×2 + 11", "×2 + 13"],
+  "generatorKey": "mul_const_primes",
+  "generatorParams": { "multiplier": 2, "offsetType": "prime" }
+}
+\`\`\`
+
+RULES FOR THE BLUEPRINT JSON:
+- "category" MUST be one of: "difference", "multiplication", "powers", "primes", "alternating".
+- "steps" MUST be an array of short, plain operation strings showing the step-by-step jumps (e.g. ["+ 3²", "+ 5²", "+ 7²"] or ["×2 + 5", "×2 + 7", "×2 + 11"]). Do NOT include the series numbers in steps—only the mathematical operations!
+- "generatorKey" is an identifier for practice generation (e.g., "mul_const_primes", "odd_squares_diff", "double_diff_mul", "consecutive_cubes").
+- Do NOT output extra fields in the JSON block. Keep it minimal and strictly valid JSON.
+</number_series_protocol>
+`;
+
+// API route for Learning AI Tutor Chat
+router.post("/api/learning-chat", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing or invalid token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+
+    try {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
+      console.error("Token verification failed:", authErr);
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
+    }
+
+    const { messages, useWebSearch, chatMode, useCustomWebSearch } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "ai_tutor");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
+    let modeInstruction = "";
+    if (chatMode === "math") {
+      modeInstruction = `
+You are an expert Math / Quantitative Aptitude tutor for competitive exams (Bank PO/Clerk, SSC, etc.). Do not give conversational wrappers. Provide a rapid, step-by-step, exam-focused approach to solve the problem. Keep your explanations exceptionally concise and structured. Only provide a deep theoretical explanation if the user explicitly asks for 'full explanation'.
+${NUMBER_SERIES_PROTOCOL}
+`;
+    } else if (chatMode === "english") {
+      modeInstruction = `
+You are an expert English tutor for competitive exams (Bank PO/Clerk, SSC CGL/CHSL, CAT, GRE, etc.).
+Provide brief, rule-based, exam-focused explanations for grammar, vocabulary, idioms, sentence improvement, cloze tests, or comprehension. Keep explanations crisp, structured, and free of conversational fluff.
+${ERROR_DETECTION_PROTOCOL}
+`;
+    } else if (chatMode === "reasoning") {
+      modeInstruction = `
+You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do NOT immediately declare the final answer to puzzles. Instead, outline a detailed step-by-step approach to solve it. 2. For seating arrangements (circular, linear), always suggest applying the 'Thread Method' to unfold the problem. Include the traditional approach only if requested. 3. If the user provides an attempted answer, you must cross-check their answer against EVERY given condition in the problem. If their answer violates a condition, explicitly state which condition fails. If their answer satisfies ALL conditions, state 'Your arrangement satisfies all conditions and is correct'.
+`;
+    } else {
+      modeInstruction = `
+${ERROR_DETECTION_PROTOCOL}
+${NUMBER_SERIES_PROTOCOL}
+`;
+    }
+
+    let systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
+Provide concise, clear, and educational responses. If explaining complex topics, use analogies. ${modeInstruction}
+You have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.
+
+CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
+- NEVER append promotional messages, reminders, or recommendations about app features (e.g., "Speed Math", "Learning Hub") at the end of your educational answers.
+- DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
+- ONLY provide explanations of app features and markdown navigation buttons IF AND ONLY IF the user explicitly asks about the app's features, navigation, what the app can do, OR if they send a very generic greeting (like "hi", "hello" without asking a question).
+- Available pages and their relative URLs for markdown links:
+  - Home: [Go to Home](/home)
+  - Dashboard: [View Dashboard](/dashboard)
+  - Action Items / Tasks: [Go to Tasks](/tasks)
+  - Community: [Explore Community](/community)
+  - Learning: [Learning Hub](/learning) (Includes Speed Math practice)
+  - Profile: [View Profile](/profile)`;
+
+    const contents = messages.map((m: any) => {
+      const parts: any[] = [];
+      if (m.attachments && Array.isArray(m.attachments)) {
+        m.attachments.forEach((att: any) => {
+          parts.push({
+            inlineData: {
+              data: att.data,
+              mimeType: att.mimeType,
+            },
+          });
+          if (att.pages && att.mimeType === "application/pdf") {
+            parts.push({
+              text: `\n[NOTE FOR AI: Only extract information and answer questions based on pages ${att.pages} of this PDF Document.]\n`,
+            });
+          }
+        });
+      }
+      parts.push({ text: m.text });
+      return {
+        role: m.role || "user",
+        parts,
+      };
+    });
+
+    if (useCustomWebSearch) {
+      systemInstruction += "\n\nYou have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.";
+    }
+
+    const now = new Date();
+    const istDateTime = now.toLocaleString("en-IN", { 
+      timeZone: "Asia/Kolkata", 
+      dateStyle: "full", 
+      timeStyle: "long" 
+    });
+    systemInstruction += `\n\nImportant Context: The current date and time is ${istDateTime} (Indian Standard Time). Please use this as the absolute reference for words like "today", "tomorrow", or "recent".`;
+
+    const config: any = {
+      systemInstruction,
+    };
+    
+    config.tools = [];
+
+    if (useWebSearch) {
+      config.tools.push({ googleSearch: {} });
+    }
+    
+    if (useCustomWebSearch) {
+      config.tools.push({
+        functionDeclarations: [
+          {
+            name: "custom_web_search",
+            description: "Search the web for information",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                query: {
+                  type: "STRING",
+                  description: "The optimized search query"
+                },
+                search_type: {
+                  type: "STRING",
+                  description: "Category of search",
+                  enum: ["news_and_facts", "semantic_concept", "general"]
+                }
+              },
+              required: ["query", "search_type"]
+            }
+          }
+        ]
+      });
+    }
+    
+    if (config.tools.length === 0) {
+      delete config.tools;
+    }
+
+    if (useCustomWebSearch) {
+      config.tools = config.tools || [];
+      config.tools.push({ functionDeclarations: [customWebSearchDeclaration] });
+    }
+
+    const response = await fetchWithRetry(() =>
+      aiClient.models.generateContent({
+        model: modelToUse,
+        contents: contents,
+        config: config,
+      }),
+    );
+
+    let citations: { uri: string; title: string }[] = [];
+    if (response?.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+      const chunks = response.candidates[0].groundingMetadata.groundingChunks;
+      chunks.forEach((chunk: any) => {
+        if (chunk.web?.uri && chunk.web?.title) {
+          citations.push({
+            uri: chunk.web.uri,
+            title: chunk.web.title,
+          });
+        }
+      });
+    }
+
+    res.json({
+      reply: response.text || "Sorry, I couldn't generate a response.",
+      citations,
+    });
+  } catch (error: any) {
+    console.error("Gemini Chat Error:", error);
+    res.status(500).json({ error: formatGeminiError(error) });
+  }
+});
+
+// API route for Jarvis Brain Engine Chat (/api/jarvis/chat)
+router.post("/api/jarvis/chat", async (req, res) => {
+  try {
+    const { messages, message, context } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "jarvis");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
+    let screenContextBlock = "";
+    if (context) {
+      const nav = context.visionContext?.navigation || { currentTab: context.location?.activeTab || "Dashboard", activeSubject: null, activeMockId: null };
+      const screen = context.visionContext?.screenData || { title: "Overview", visibleSummary: {}, activeQuestion: null, visibleItems: [] };
+      const user = context.visionContext?.userState || { targetExam: context.data?.targetExam || "JEE 2026", totalMocksAttempted: 0, weakSubjects: [], strongSubjects: [] };
+
+      let activeRouteStr = context.location?.activeTab || nav.currentTab || "Dashboard";
+      if (nav.activeMockId) activeRouteStr += ` -> ${nav.activeMockId}`;
+      else if (nav.activeSubject) activeRouteStr += ` -> ${nav.activeSubject}`;
+
+      const metricsEntries = Object.entries(screen.visibleSummary || {}).filter(([_, v]) => v !== undefined && v !== null);
+      const metricsStr = metricsEntries.length > 0
+        ? metricsEntries.map(([k, v]) => `  • ${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join('\n')
+        : '  • No specific score metrics on screen';
+
+      let focusedQStr = 'None';
+      if (screen.activeQuestion) {
+        const q = screen.activeQuestion;
+        focusedQStr = `${q.id || 'Question'} (${q.topic || q.subject || 'General'}${q.status ? ` - ${q.status}` : ''})`;
+      }
+
+      const weakStr = user.weakSubjects && user.weakSubjects.length > 0 ? user.weakSubjects.join(', ') : 'None identified yet';
+      const profileStr = `Target ${user.targetExam || 'Competitive Exam'}${weakStr !== 'None identified yet' ? ` | Weak Area: ${weakStr}` : ''}`;
+
+      const itemsStr = screen.visibleItems && screen.visibleItems.length > 0
+        ? `- Visible Items Snapshot:\n${screen.visibleItems.map((item: string) => `  • ${item}`).join('\n')}`
+        : '';
+
+      const navigatedFrom = context.location?.navigatedFrom || context.navigatedFrom;
+
+      screenContextBlock = `<CURRENT_USER_SCREEN_CONTEXT>
+- Active Page / Route: ${activeRouteStr}
+${navigatedFrom ? `- Auto-Navigated: Yes\n- Navigated From: ${navigatedFrom}` : ''}
+- Screen Header: "${screen.title || 'Screen Overview'}"
+- Visible Metrics on Screen:
+${metricsStr}
+- Currently Focused Question: ${focusedQStr}
+- User Profile: ${profileStr}
+${itemsStr ? `${itemsStr}` : ''}
+</CURRENT_USER_SCREEN_CONTEXT>`;
+    } else {
+      screenContextBlock = `<CURRENT_USER_SCREEN_CONTEXT>
+- Active Page / Route: Home
+- Screen Header: "Home Dashboard"
+- Visible Metrics on Screen:
+  • General Screen View (No specific test score metric active)
+- Currently Focused Question: None
+- User Profile: Target Competitive Exam
+</CURRENT_USER_SCREEN_CONTEXT>`;
+    }
+
+    const systemInstruction = `SYSTEM INSTRUCTION:
+You are Jarvis, an intelligent AI study partner for competitive exam preparation.
+You have real-time visibility into the user's screen and study progress.
+
+${screenContextBlock}
+
+CRITICAL CONSTRAINTS FOR PAGE SUMMARIES:
+- You must base your page summary STRICTLY AND ONLY on what is listed inside <CURRENT_USER_SCREEN_CONTEXT>.
+- If auto-navigation has taken place (indicated by "Auto-Navigated: Yes" and "Navigated From" in <CURRENT_USER_SCREEN_CONTEXT>), acknowledge the page navigation naturally at the beginning of your response (e.g., "I've navigated you to the Live Mocks section...").
+- NEVER mention or hallucinate mock test scores, percentiles, accuracy percentages, study streak days, or mock test performance history logs when the user is on 'home', 'community', 'profile', 'learning', or 'tasks' pages, unless those exact metrics appear explicitly in 'Visible Metrics on Screen' or 'Visible Items Snapshot' for this prompt.
+- On the HOME page (route: home): summarize ONLY the Welcome Greeting, Daily Motivation Quote, and Activity Heatmap Map. Do NOT mention mock test performance, percentile, accuracy, or study streak.
+- On the PROFILE page (route: profile): summarize ONLY profile settings (Display Name, Target Exam, Sector, Bio). Do NOT mention mock test performance, percentile, accuracy, study streak, or mock history log.
+- Do NOT output placeholder or hallucinated performance metrics. Describe ONLY what is strictly visible in <CURRENT_USER_SCREEN_CONTEXT>.
+
+INSTRUCTIONS & RESPONSE TRACES:
+1. Use the screen context above to answer user questions directly without asking them what they are looking at.
+2. If the user asks a question about a section or page that required auto-navigation, acknowledge switching to that view and answer based on the newly updated screen context.
+3. If the user asks "How did I do on my last mock?", strictly analyze ONLY the data present in the screen context.
+   - For full mocks: Report overall score, percentile, and subject breakdowns for sections with scores.
+   - For sectional mocks (e.g. Reasoning Sectional Test): Report ONLY on the single active subject score present. NEVER hallucinate scores or topics for N/A or '-' sections (such as Quant, English, or GA) when they are not part of the test.
+4. If the user asks "Can you summarize what I am looking at right now?" or "What am I looking at?", summarize the active screen components directly from the screen context items and metrics.
+5. Keep responses strictly truthful to the visible screen context, helpful, concise, friendly, and structured.`;
+
+    const chatMessages = messages || (message ? [{ role: "user", text: message }] : []);
+    const contents = chatMessages.map((m: any) => ({
+      role: m.role === "assistant" || m.role === "model" ? "model" : "user",
+      parts: [{ text: m.text || m.content || "" }]
+    }));
+
+    const response = await aiClient.models.generateContent({
+      model: modelToUse,
+      contents: contents,
+      config: {
+        systemInstruction
+      }
+    });
+
+    res.json({
+      reply: response.text || "No response generated.",
+      text: response.text || "No response generated.",
+      screenContextUsed: screenContextBlock
+    });
+  } catch (error: any) {
+    console.error("Jarvis Chat API Error:", error);
+    res.status(500).json({ error: error.message || "Failed to process Jarvis query." });
+  }
+});
+
+// API route for Jarvis Intent Determination (/api/jarvis/intent)
+router.post("/api/jarvis/intent", async (req, res) => {
+  try {
+    const { userInput, context, tools } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "jarvis");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
+    const functionDeclarations = (tools || []).map((action: any) => {
+      const properties: Record<string, any> = {};
+      const buildParam = (p: string) => {
+        if (p === 'options') return { type: 'ARRAY', items: { type: 'STRING' }, description: 'List of options' };
+        if (p === 'isMulti') return { type: 'BOOLEAN', description: 'Is multi select' };
+        if (p === 'optionIndex') return { type: 'NUMBER', description: 'Option index' };
+        return { type: 'STRING', description: `Parameter ${p}` };
+      };
+      (action.requiredParams || []).forEach((p: string) => { properties[p] = buildParam(p); });
+      (action.optionalParams || []).forEach((p: string) => { properties[p] = buildParam(p); });
+
+      return {
+        name: action.name,
+        description: action.description,
+        parameters: {
+          type: "OBJECT",
+          properties: Object.keys(properties).length > 0 ? properties : undefined,
+          required: action.requiredParams && action.requiredParams.length > 0 ? action.requiredParams : undefined
+        }
+      };
+    });
+
+    const activeTab = context?.location?.activeTab || 'Dashboard';
+    const systemInstruction = `You are the Jarvis UI Controller for an Exam Prep Application. Current active view: ${activeTab}.
+
+Guidelines:
+1. Call function tools ONLY when the user explicitly requests a UI action (e.g., "go to dashboard", "open settings", "change theme to dark", "create task", "start math drill").
+2. CRITICAL EXCEPTION: Do NOT call any function tool if the user is asking an informational, analytical, performance evaluation, data inquiry, or screen summary question (e.g., "Who is in the top of the leaderboard?", "Who is rank 1?", "How did I do on my last mock?", "What am I looking at?", "Can you summarize what I am looking at right now?", "How are my scores?", "Summarize my performance", "Explain this section"). For these queries, DO NOT invoke any tool or function call so that Jarvis can answer using the full screen context.`;
+
+    const response = await aiClient.models.generateContent({
+      model: modelToUse,
+      contents: userInput,
+      config: {
+        systemInstruction,
+        tools: functionDeclarations.length > 0 ? [{ functionDeclarations }] : undefined,
+        temperature: 0.1
+      }
+    });
+
+    const call = response.functionCalls?.[0];
+    if (call) {
+      return res.json({
+        intent: {
+          action: call.name,
+          parameters: call.args || {}
+        }
+      });
+    }
+
+    res.json({ intent: null });
+  } catch (error: any) {
+    console.error("Jarvis Intent API Error:", error);
+    res.json({ intent: null });
+  }
+});
+
+router.post("/api/tutor-chat-stream", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Missing or invalid token" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+
+    try {
+      await admin.auth().verifyIdToken(token);
+    } catch (authErr: any) {
+      console.error("Token verification failed:", authErr);
+      return res.status(403).json({
+        error: "Forbidden: Invalid token. " + (authErr?.message || ""),
+      });
+    }
+
+    const { messages, useWebSearch, useCustomWebSearch, chatMode, customSearchApi } = req.body;
+
+    let proxyRes;
+    try {
+      proxyRes = await resolveGeminiProxyConfig(req.body, req.headers, "ai_tutor");
+    } catch (proxyErr: any) {
+      return res.status(proxyErr.status || 403).json({ error: proxyErr.message || String(proxyErr) });
+    }
+
+    const aiClient = proxyRes.aiClient;
+    const modelToUse = proxyRes.model;
+
+    let modeInstruction = "";
+    if (chatMode === "math") {
+      modeInstruction = `
+You are an expert Math / Quantitative Aptitude tutor for competitive exams (Bank PO/Clerk, SSC, etc.). Do not give conversational wrappers. Provide a rapid, step-by-step, exam-focused approach to solve the problem. Keep your explanations exceptionally concise and structured. Only provide a deep theoretical explanation if the user explicitly asks for 'full explanation'.
+${NUMBER_SERIES_PROTOCOL}
+`;
+    } else if (chatMode === "english") {
+      modeInstruction = `
+You are an expert English tutor for competitive exams (Bank PO/Clerk, SSC CGL/CHSL, CAT, GRE, etc.).
+Provide brief, rule-based, exam-focused explanations for grammar, vocabulary, idioms, sentence improvement, cloze tests, or comprehension. Keep explanations crisp, structured, and free of conversational fluff.
+${ERROR_DETECTION_PROTOCOL}
+`;
+    } else if (chatMode === "reasoning") {
+      modeInstruction = `
+You are an expert analytical Reasoning tutor. Follow these STRICT rules: 1. Do NOT immediately declare the final answer to puzzles. Instead, outline a detailed step-by-step approach to solve it. 2. For seating arrangements (circular, linear), always suggest applying the 'Thread Method' to unfold the problem. Include the traditional approach only if requested. 3. If the user provides an attempted answer, you must cross-check their answer against EVERY given condition in the problem. If their answer violates a condition, explicitly state which condition fails. If their answer satisfies ALL conditions, state 'Your arrangement satisfies all conditions and is correct'.
+`;
+    } else {
+      modeInstruction = `
+${ERROR_DETECTION_PROTOCOL}
+${NUMBER_SERIES_PROTOCOL}
+`;
+    }
+
+    let systemInstruction = `You are a helpful and encouraging AI Tutor focused on helping the user learn. 
+Provide concise, clear, and educational responses. If explaining complex topics, use analogies. ${modeInstruction}
+
+CRITICAL INSTRUCTION FOR NAVIGATION LINKS & FEATURES:
+- NEVER append promotional messages, reminders, or recommendations about app features (e.g., "Speed Math", "Learning Hub") at the end of your educational answers.
+- DO NOT provide UI navigation links (e.g., Action Items, Dashboard, Mock Tests) if the user is asking a question about a concept, studying, learning a topic, or math/science. 
+- ONLY provide explanations of app features and markdown navigation buttons IF AND ONLY IF the user explicitly asks about the app's features, navigation, what the app can do, OR if they send a very generic greeting (like "hi", "hello" without asking a question).
+- Available pages and their relative URLs for markdown links:
+  - Home: [Go to Home](/home)
+  - Dashboard: [View Dashboard](/dashboard)
+  - Action Items / Tasks: [Go to Tasks](/tasks)
+  - Community: [Explore Community](/community)
+  - Learning: [Learning Hub](/learning) (Includes Speed Math practice)
+  - Profile: [View Profile](/profile)`;
+
+    let hasImageAttachment = false;
+    const contents = messages.map((m: any) => {
+      const parts: any[] = [];
+      if (m.attachments && Array.isArray(m.attachments)) {
+        m.attachments.forEach((att: any) => {
+          if (att && att.data) {
+            let mimeType = att.mimeType || "image/jpeg";
+            if (!mimeType.includes("/")) mimeType = "image/jpeg";
+            if (mimeType.startsWith("image/")) {
+              hasImageAttachment = true;
+            }
+            parts.push({
+              inlineData: {
+                data: att.data,
+                mimeType: mimeType,
+              },
+            });
+            if (att.pages && att.mimeType === "application/pdf") {
+              parts.push({
+                text: `\n[NOTE FOR AI: Only extract information and answer questions based on pages ${att.pages} of this PDF Document.]\n`,
+              });
+            }
+          }
+        });
+      }
+      const textContent = typeof m.text === "string" ? m.text.trim() : "";
+      if (textContent) {
+        parts.push({ text: textContent });
+      } else if (parts.length === 0) {
+        parts.push({ text: "Hello" });
+      } else if (!parts.some((p: any) => p.text)) {
+        parts.push({ text: "Please analyze the attached image." });
+      }
+      return {
+        role: m.role || "user",
+        parts,
+      };
+    });
+
+    if (useCustomWebSearch) {
+      systemInstruction += "\n\nYou have access to a custom web search tool. Categorize your search as 'news_and_facts' for current events/data, 'semantic_concept' for abstract topics/blogs, or 'general' for basic queries.";
+    }
+
+    const now = new Date();
+    const istDateTime = now.toLocaleString("en-IN", { 
+      timeZone: "Asia/Kolkata", 
+      dateStyle: "full", 
+      timeStyle: "long" 
+    });
+    systemInstruction += `\n\nImportant Context: The current date and time is ${istDateTime} (Indian Standard Time). Please use this as the absolute reference for words like "today", "tomorrow", or "recent".`;
+
+    const config: any = {
+      systemInstruction,
+    };
+    
+    config.tools = [];
+
+    // Gemini API does not allow googleSearch grounding together with multimodal (image) inputs.
+    // Only enable Google Search grounding if there are no image attachments in the request.
+    if (useWebSearch && !hasImageAttachment) {
+      config.tools.push({ googleSearch: {} });
+    }
+    
+    if (useCustomWebSearch) {
+      config.tools.push({
+        functionDeclarations: [
+          {
+            name: "custom_web_search",
+            description: "Search the web for information",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                query: {
+                  type: "STRING",
+                  description: "The optimized search query"
+                },
+                search_type: {
+                  type: "STRING",
+                  description: "Category of search",
+                  enum: ["news_and_facts", "semantic_concept", "general"]
+                }
+              },
+              required: ["query", "search_type"]
+            }
+          }
+        ]
+      });
+    }
+    
+    if (config.tools.length === 0) {
+      delete config.tools;
+    }
+
+    try {
+      let activeModel = modelToUse || "gemini-2.5-flash";
+      let activeConfig = { ...config };
+
+      let responseStream: any = null;
+      let firstChunk: any = null;
+
+      try {
+        responseStream = await aiClient.models.generateContentStream({
+          model: activeModel,
+          contents: contents,
+          config: activeConfig,
+        });
+        const iterator = responseStream[Symbol.asyncIterator]();
+        const first = await iterator.next();
+        if (!first.done) {
+          firstChunk = first.value;
+        }
+      } catch (streamErr: any) {
+        console.warn(`Primary stream failed with model ${activeModel} (${streamErr?.message}), retrying fallback...`);
+        activeModel = "gemini-2.5-flash";
+        const safeTools = (activeConfig.tools || []).filter((t: any) => !t.googleSearch);
+        activeConfig = {
+          ...activeConfig,
+          ...(safeTools.length > 0 ? { tools: safeTools } : {}),
+        };
+        if (safeTools.length === 0) delete activeConfig.tools;
+
+        responseStream = await aiClient.models.generateContentStream({
+          model: activeModel,
+          contents: contents,
+          config: activeConfig,
+        });
+        const iterator = responseStream[Symbol.asyncIterator]();
+        const first = await iterator.next();
+        if (!first.done) {
+          firstChunk = first.value;
+        }
+      }
+
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+
+      let groundingChunksSet = new Set<string>();
+      let citations: { uri: string; title: string }[] = [];
+      let isFunctionCall = false;
+      let functionCallPart: any = null;
+      let fullModelParts: any[] = [];
+
+      const processChunk = (chunk: any) => {
+        if (!chunk) return;
+        if (chunk.candidates?.[0]?.content?.parts) {
+          for (const part of chunk.candidates[0].content.parts) {
+            if (part.functionCall) {
+              isFunctionCall = true;
+              functionCallPart = part.functionCall;
+              fullModelParts = chunk.candidates[0].content.parts;
+              return;
+            }
+          }
+        }
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        }
+        if (chunk.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+          const metadataChunks =
+            chunk.candidates[0].groundingMetadata.groundingChunks;
+          metadataChunks.forEach((metaChunk: any) => {
+            if (metaChunk.web?.uri && metaChunk.web?.title) {
+              const key = metaChunk.web.uri;
+              if (!groundingChunksSet.has(key)) {
+                groundingChunksSet.add(key);
+                citations.push({
+                  uri: metaChunk.web.uri,
+                  title: metaChunk.web.title,
+                });
+              }
+            }
+          });
+        }
+      };
+
+      if (firstChunk) {
+        processChunk(firstChunk);
+      }
+
+      if (!isFunctionCall && responseStream) {
+        for await (const chunk of responseStream) {
+          processChunk(chunk);
+          if (isFunctionCall) break;
+        }
+      }
+      
+      if (isFunctionCall && functionCallPart) {
+        if (functionCallPart.name === "custom_web_search") {
+          const { query, search_type } = functionCallPart.args as any;
+          
+          res.write(`data: ${JSON.stringify({ text: "\n*(Searching the web for: " + query + ")*\n" })}\n\n`);
+          
+          const searchResults = await performCustomSearch(query, search_type, customSearchApi);
+          
+          if (searchResults.results) {
+             searchResults.results.forEach((r: any) => {
+               citations.push({ uri: r.url, title: r.title });
+             });
+          }
+          
+          contents.push({
+            role: "model",
+            parts: fullModelParts
+          });
+          
+          contents.push({
+            role: "user",
+            parts: [{
+              functionResponse: {
+                name: "custom_web_search",
+                response: searchResults,
+                id: functionCallPart.id
+              }
+            }]
+          });
+
+          const followUpStream = await generateContentStreamWithFallback(aiClient, {
+            model: modelToUse || "gemini-2.5-flash-lite",
+            contents: contents,
+            config: config,
+          });
+
+          for await (const nextChunk of followUpStream) {
+             if (nextChunk.text) {
+               res.write(`data: ${JSON.stringify({ text: nextChunk.text })}\n\n`);
+             }
+          }
+        }
+      }
+
+      if (citations.length > 0) {
+        res.write(`data: ${JSON.stringify({ citations })}\n\n`);
+      }
+      res.end();
+    } catch (genError: any) {
+      console.error("Gemini API Error in Tutor:", genError);
+      const errMsg = genError.message || String(genError);
+      if (!res.headersSent) {
+        if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+          return res.status(429).json({ error: errMsg });
+        }
+        if (errMsg.includes("404") || errMsg.includes("NOT_FOUND")) {
+          return res.status(404).json({ error: errMsg });
+        }
+        return res.status(500).json({ error: formatGeminiError(genError) });
+      } else {
+        res.write(
+          `data: ${JSON.stringify({ error: errMsg })}\n\n`,
+        );
+        res.end();
+      }
+    }
+  } catch (error: any) {
+    console.error("Gemini Chat Stream Error:", error);
+    if (!res.headersSent) {
+      const errMsg = error.message || String(error);
+      if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+        return res.status(429).json({ error: errMsg });
+      }
+      if (errMsg.includes("404") || errMsg.includes("NOT_FOUND")) {
+        return res.status(404).json({ error: errMsg });
+      }
+      res.status(500).json({ error: formatGeminiError(error) });
+    }
+  }
+});
+
+export default router;

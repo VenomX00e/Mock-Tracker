@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export function useChallengesManager(
@@ -35,7 +35,7 @@ export function useChallengesManager(
 
   const handleApproveChallenge = async (id: string) => {
     try {
-      await setDoc(doc(db, 'challenges', id), { approvalStatus: 'approved' }, { merge: true });
+      await updateDoc(doc(db, 'challenges', id), { approvalStatus: 'approved' });
       await fetchAnnouncement();
       alert("Challenge approved successfully!");
     } catch (error) {
@@ -46,7 +46,7 @@ export function useChallengesManager(
 
   const handleRejectChallenge = async (id: string) => {
     try {
-      await setDoc(doc(db, 'challenges', id), { approvalStatus: 'rejected' }, { merge: true });
+      await updateDoc(doc(db, 'challenges', id), { approvalStatus: 'rejected' });
       await fetchAnnouncement();
       alert("Challenge rejected successfully!");
     } catch (error) {
@@ -64,11 +64,11 @@ export function useChallengesManager(
           await batch.commit();
           await deleteDoc(doc(db, 'challenges', challenge.id));
       } else if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
-          await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: true }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: true });
       } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
-          await setDoc(doc(db, 'challenges', challenge.id), { deletedByCreator: true }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { deletedByCreator: true });
       } else {
-          await setDoc(doc(db, 'challenges', challenge.id), { status: 'deleted' }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { status: 'deleted' });
       }
       await fetchAnnouncement();
       console.log('Challenge deleted successfully');
@@ -110,9 +110,9 @@ export function useChallengesManager(
   const handleRestoreChallenge = async (challenge: any) => {
     try {
       if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
-          await setDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: false, permanentlyDeletedByAdmin: false }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { deletedByAdmin: false, permanentlyDeletedByAdmin: false });
       } else {
-          await setDoc(doc(db, 'challenges', challenge.id), { status: 'active', deletedByCreator: false, permanentlyDeletedByCreator: false }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { status: 'active', deletedByCreator: false, permanentlyDeletedByCreator: false });
       }
       await fetchAnnouncement();
       console.log('Challenge restored successfully');
@@ -131,9 +131,9 @@ export function useChallengesManager(
           await batch.commit();
           await deleteDoc(doc(db, 'challenges', challenge.id));
       } else if (adminPermissions?.canManageChallenges && challenge.creatorId !== user?.uid) {
-          await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByAdmin: true }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByAdmin: true });
       } else if (challenge.visibility === 'global' && challenge.approvalStatus === 'approved') {
-          await setDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByCreator: true }, { merge: true });
+          await updateDoc(doc(db, 'challenges', challenge.id), { permanentlyDeletedByCreator: true });
       } else {
           await deleteDoc(doc(db, 'challenges', challenge.id));
       }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import type { QuizQuestion } from '../../../types';
 
 interface SpotErrorRendererProps {
@@ -17,31 +17,35 @@ export const SpotErrorRenderer: React.FC<SpotErrorRendererProps> = ({
   totalQuestions,
   selectedIndex,
   onSelectAnswer,
-  showFeedback = false,
 }) => {
   const hasAnswered = typeof selectedIndex === 'number';
 
-  // Use either predefined chunks or options as the segments
   const chunks =
     question.sentenceChunks && question.sentenceChunks.length > 0
       ? question.sentenceChunks
       : question.options;
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-5 animate-fadeIn">
       {/* Header Prompt */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-3 py-1 rounded-full">
-            Spot the Error • Q{questionIndex + 1} of {totalQuestions}
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 tabular-nums">
+            Spot the Error · Question {questionIndex + 1} of {totalQuestions}
           </span>
-          <span className="text-xs text-slate-500">
-            Tap the segment containing the error
-          </span>
+          {hasAnswered && question.testedWord ? (
+            <span className="text-xs text-slate-500 dark:text-slate-400 animate-fadeIn">
+              Tested Word: <strong className="text-slate-800 dark:text-slate-200">{question.testedWord}</strong>
+            </span>
+          ) : (
+            <span className="text-xs text-slate-500">
+              Tap the segment with the error
+            </span>
+          )}
         </div>
 
         <p className="text-sm md:text-base text-slate-600 dark:text-slate-300">
-          The sentence below is divided into 4 parts. Identify which segment contains an error in vocabulary, phrasing, or grammar:
+          The sentence below is divided into {chunks.length} parts. Identify which segment contains an error in vocabulary usage, phrasing, or grammar:
         </p>
       </div>
 
@@ -77,7 +81,7 @@ export const SpotErrorRenderer: React.FC<SpotErrorRendererProps> = ({
             >
               <div className="flex items-start gap-4">
                 <span
-                  className={`mt-0.5 px-2.5 py-0.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`mt-0.5 px-2.5 py-0.5 rounded-lg text-xs font-bold transition-colors shrink-0 ${
                     hasAnswered && isCorrect
                       ? 'bg-emerald-500 text-white'
                       : hasAnswered && isSelected
@@ -87,7 +91,7 @@ export const SpotErrorRenderer: React.FC<SpotErrorRendererProps> = ({
                 >
                   Part {String.fromCharCode(65 + chunkIdx)}
                 </span>
-                <span className="text-base font-medium leading-relaxed">
+                <span className="text-sm sm:text-base font-medium leading-relaxed">
                   {chunk}
                 </span>
               </div>

@@ -563,8 +563,6 @@ export default function AdminDialog({
                 setTelegramText={setTelegramText}
                 mockExtractionModel={mockExtractionModel}
                 setMockExtractionModel={setMockExtractionModel}
-                yptSyncIntervalMinutes={yptSyncIntervalMinutes}
-                setYptSyncIntervalMinutes={setYptSyncIntervalMinutes}
                 savingSettings={savingAnnouncement}
                 saveSettings={saveSettings}
                 isOwner={!!isOwner}

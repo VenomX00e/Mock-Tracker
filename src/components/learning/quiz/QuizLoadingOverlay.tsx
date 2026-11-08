@@ -6,15 +6,18 @@ interface QuizLoadingOverlayProps {
   theme?: string;
 }
 
-export const QuizLoadingOverlay: React.FC<QuizLoadingOverlayProps> = ({ format = 'cloze', theme = '' }) => {
+export const QuizLoadingOverlay: React.FC<QuizLoadingOverlayProps> = ({
+  format = 'cloze',
+  theme = '',
+}) => {
   const [stepIndex, setStepIndex] = useState(0);
 
-  // Dynamic loading messages cycling every 1.8s
   const loadingSteps = [
     {
       text: 'Analyzing your vocabulary list...',
       icon: BookOpen,
       subtext: 'Scanning meanings, nuances, and exam-yield frequencies',
+      progress: 25,
     },
     {
       text: theme
@@ -26,23 +29,26 @@ export const QuizLoadingOverlay: React.FC<QuizLoadingOverlayProps> = ({ format =
         : 'Synthesizing editorial questions...',
       icon: PenTool,
       subtext: 'Weaving target words into rich exam scenarios',
+      progress: 55,
     },
     {
       text: 'Preparing competitive options & distractors...',
       icon: Brain,
       subtext: 'Balancing answer plausibility and difficulty',
+      progress: 80,
     },
     {
-      text: 'Finalizing pedagogical explanations & answers...',
+      text: 'Finalizing explanations & interactive quiz...',
       icon: Lightbulb,
-      subtext: 'Formatting strict JSON for instant interactive feedback',
+      subtext: 'Verifying answers and contextual feedback',
+      progress: 94,
     },
   ];
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setStepIndex((prev) => (prev + 1) % loadingSteps.length);
-    }, 1800);
+      setStepIndex((prev) => Math.min(prev + 1, loadingSteps.length - 1));
+    }, 2200);
     return () => clearInterval(timer);
   }, [loadingSteps.length]);
 
@@ -52,18 +58,19 @@ export const QuizLoadingOverlay: React.FC<QuizLoadingOverlayProps> = ({ format =
   return (
     <div className="space-y-6 text-center">
       <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
-        {/* Outer glowing pulsing ring */}
         <div className="absolute inset-0 rounded-3xl bg-indigo-500/20 dark:bg-indigo-500/30 animate-ping opacity-75" />
         <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
-          <StepIcon className="w-8 h-8 transition-all duration-300 animate-bounce" />
+          <StepIcon className="w-8 h-8 transition-all duration-300" />
           <Sparkles className="w-4 h-4 absolute -top-1 -right-1 text-amber-300 animate-pulse" />
         </div>
       </div>
 
       <div className="space-y-2 min-h-[70px]">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/60 text-indigo-600 dark:text-indigo-300 text-xs font-semibold">
+        <div className="inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-300 text-xs font-semibold tabular-nums">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          <span>Step {stepIndex + 1} of {loadingSteps.length}</span>
+          <span>
+            Step {stepIndex + 1} of {loadingSteps.length}
+          </span>
         </div>
 
         <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 transition-all duration-300">
@@ -74,11 +81,11 @@ export const QuizLoadingOverlay: React.FC<QuizLoadingOverlayProps> = ({ format =
         </p>
       </div>
 
-      {/* Progress ticker bar */}
+      {/* Progress bar */}
       <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out"
-          style={{ width: `${((stepIndex + 1) / loadingSteps.length) * 100}%` }}
+          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-700 ease-out"
+          style={{ width: `${currentStep.progress}%` }}
         />
       </div>
     </div>

@@ -4,12 +4,11 @@ import { GlobalGeminiSystemConfig } from '../types';
 
 export const DEFAULT_GLOBAL_GEMINI_CONFIG: GlobalGeminiSystemConfig = {
   features: {
-    ypt_screenshot_parser: { enabled: true, defaultModel: 'gemini-2.5-flash', allowCustomKeyOverride: true },
-    ai_tutor: { enabled: false, defaultModel: 'gemini-2.5-flash', allowCustomKeyOverride: true },
-    jarvis: { enabled: false, defaultModel: 'gemini-2.5-flash', allowCustomKeyOverride: true },
-    mock_exam_generator: { enabled: false, defaultModel: 'gemini-2.5-flash', allowCustomKeyOverride: true },
-    flashcards: { enabled: false, defaultModel: 'gemini-2.5-flash', allowCustomKeyOverride: true },
-    general_chat: { enabled: false, defaultModel: 'gemini-2.5-flash', allowCustomKeyOverride: true },
+    ypt_screenshot_parser: { enabled: true, defaultModel: 'gemini-3.5-flash-lite', lockForNonKeyUsers: true, lockForKeyUsers: false, allowCustomKeyOverride: true },
+    ai_tutor: { enabled: false, defaultModel: 'gemini-3.5-flash-lite', lockForNonKeyUsers: true, lockForKeyUsers: false, allowCustomKeyOverride: true },
+    jarvis: { enabled: false, defaultModel: 'gemini-3.5-flash-lite', lockForNonKeyUsers: true, lockForKeyUsers: false, allowCustomKeyOverride: true },
+    mock_score_extractor: { enabled: false, defaultModel: 'gemini-3.1-flash-lite', lockForNonKeyUsers: true, lockForKeyUsers: false, allowCustomKeyOverride: true },
+    vocab_extractor: { enabled: false, defaultModel: 'gemini-3.5-flash-lite', lockForNonKeyUsers: true, lockForKeyUsers: false, allowCustomKeyOverride: true },
   },
   updatedAt: Date.now(),
   updatedBy: 'system',
@@ -17,11 +16,52 @@ export const DEFAULT_GLOBAL_GEMINI_CONFIG: GlobalGeminiSystemConfig = {
 
 export const GLOBAL_GEMINI_DOC_REF = doc(db, 'system_config', 'global_gemini');
 
+export function normalizeConfig(raw: any): GlobalGeminiSystemConfig {
+  const mergedFeatures: any = { ...DEFAULT_GLOBAL_GEMINI_CONFIG.features };
+  if (raw && raw.features) {
+    if (!raw.features.mock_score_extractor && raw.features.mock_exam_generator) {
+      mergedFeatures.mock_score_extractor = {
+        ...raw.features.mock_exam_generator,
+        lockForNonKeyUsers: raw.features.mock_exam_generator.lockForNonKeyUsers ?? true,
+        lockForKeyUsers: raw.features.mock_exam_generator.lockForKeyUsers ?? false,
+      };
+    }
+    if (!raw.features.vocab_extractor && raw.features.flashcards) {
+      mergedFeatures.vocab_extractor = {
+        ...raw.features.flashcards,
+        lockForNonKeyUsers: raw.features.flashcards.lockForNonKeyUsers ?? true,
+        lockForKeyUsers: raw.features.flashcards.lockForKeyUsers ?? false,
+      };
+    }
+    for (const key of Object.keys(mergedFeatures)) {
+      if (raw.features[key]) {
+        const rawModel = raw.features[key].defaultModel;
+        const cleanModel =
+          typeof rawModel === 'string' && rawModel.trim()
+            ? rawModel.replace(/^google[/:\s-]+/i, '').trim()
+            : mergedFeatures[key].defaultModel;
+        mergedFeatures[key] = {
+          ...mergedFeatures[key],
+          ...raw.features[key],
+          defaultModel: cleanModel,
+          lockForNonKeyUsers: raw.features[key].lockForNonKeyUsers !== undefined ? Boolean(raw.features[key].lockForNonKeyUsers) : true,
+          lockForKeyUsers: Boolean(raw.features[key].lockForKeyUsers),
+        };
+      }
+    }
+  }
+  return {
+    features: mergedFeatures,
+    updatedAt: raw?.updatedAt || Date.now(),
+    updatedBy: raw?.updatedBy || 'system',
+  };
+}
+
 export async function getGlobalGeminiConfig(): Promise<GlobalGeminiSystemConfig> {
   try {
     const snap = await getDoc(GLOBAL_GEMINI_DOC_REF);
     if (snap.exists()) {
-      return snap.data() as GlobalGeminiSystemConfig;
+      return normalizeConfig(snap.data());
     }
   } catch (err) {
     console.error('Error reading system_config/global_gemini:', err);
@@ -36,7 +76,7 @@ export function subscribeGlobalGeminiConfig(
     GLOBAL_GEMINI_DOC_REF,
     (snap) => {
       if (snap.exists()) {
-        callback(snap.data() as GlobalGeminiSystemConfig);
+        callback(normalizeConfig(snap.data()));
       } else {
         callback(DEFAULT_GLOBAL_GEMINI_CONFIG);
       }

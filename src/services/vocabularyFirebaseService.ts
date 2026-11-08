@@ -289,6 +289,60 @@ export async function removeVocabFromCustomFolder(
   }
 }
 
+export const WRONG_VOCAB_FOLDER_ID = 'folder_wrong_words';
+
+/**
+ * Add multiple vocabIds to the reserved Wrong folder (creates it if it doesn't exist).
+ */
+export async function addVocabsToWrongFolder(
+  userId: string,
+  vocabIds: string[]
+): Promise<void> {
+  if (!userId || !vocabIds || vocabIds.length === 0) return;
+  const path = `${USERS_COLLECTION}/${userId}/${CUSTOM_FOLDERS_SUBCOLLECTION}/${WRONG_VOCAB_FOLDER_ID}`;
+  const folderRef = doc(
+    db,
+    USERS_COLLECTION,
+    userId,
+    CUSTOM_FOLDERS_SUBCOLLECTION,
+    WRONG_VOCAB_FOLDER_ID
+  );
+
+  try {
+    await updateDoc(folderRef, {
+      vocabIds: arrayUnion(...vocabIds),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error: any) {
+    if (error?.code === 'not-found' || String(error?.message || '').includes('No document to update')) {
+      try {
+        await setDoc(folderRef, {
+          id: WRONG_VOCAB_FOLDER_ID,
+          name: 'Wrong',
+          vocabIds: Array.from(new Set(vocabIds)),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      } catch (nestedError) {
+        handleFirestoreError(nestedError, OperationType.CREATE, path);
+      }
+    }
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+/**
+ * Remove a vocabId from the reserved Wrong folder.
+ */
+export async function removeVocabFromWrongFolder(
+  userId: string,
+  vocabId: string
+): Promise<void> {
+  if (!userId || !vocabId) return;
+  await removeVocabFromCustomFolder(userId, WRONG_VOCAB_FOLDER_ID, vocabId);
+}
+
 /**
  * Delete a custom folder.
  */

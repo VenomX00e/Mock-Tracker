@@ -36,10 +36,28 @@ export function useGeminiResolution(featureKey: FeatureKey): GeminiResolutionRes
     const syncState = () => {
       setLocalKey(getActiveApiKey());
       if (typeof window !== 'undefined') {
-        const subTabKey = featureKey === 'ai_tutor' ? 'ai' : featureKey;
-        const savedSubModel = localStorage.getItem(`geminiModel_${subTabKey}`);
-        const savedGlobalModel = localStorage.getItem('geminiModel');
-        setSubModel(savedSubModel || savedGlobalModel);
+        const lookupKey = (featureKey as string) === 'mock_exam_generator'
+          ? 'mock_score_extractor'
+          : (featureKey as string) === 'flashcards'
+          ? 'vocab_extractor'
+          : featureKey;
+
+        const subTabKey = lookupKey === 'ai_tutor'
+          ? 'ai'
+          : lookupKey === 'mock_score_extractor'
+          ? 'mock'
+          : lookupKey === 'vocab_extractor'
+          ? 'vocab'
+          : lookupKey === 'ypt_screenshot_parser'
+          ? 'ypt'
+          : lookupKey;
+
+        // Strictly check feature-specific model choice; never leak global learning page model
+        const savedSubModel =
+          localStorage.getItem(`geminiModel_${lookupKey}`) ||
+          localStorage.getItem(`geminiModel_${subTabKey}`);
+        
+        setSubModel(savedSubModel || null);
       }
     };
 
@@ -65,18 +83,29 @@ export function useGeminiResolution(featureKey: FeatureKey): GeminiResolutionRes
     profile?.geminiApiKey || (localKey && localKey.trim().length > 0)
   );
 
-  const featureConfig = globalConfig?.features?.[featureKey];
+  const lookupKey = (featureKey as string) === 'mock_exam_generator'
+    ? 'mock_score_extractor'
+    : (featureKey as string) === 'flashcards'
+    ? 'vocab_extractor'
+    : featureKey;
+
+  const featureConfig = globalConfig?.features?.[lookupKey] || globalConfig?.features?.[featureKey];
+
+  const defaultModel = featureConfig?.defaultModel || 'gemini-3.5-flash-lite';
 
   const isFeatureAllowed = userHasPersonalKey || Boolean(featureConfig?.enabled);
 
-  // If user has personal key -> user can choose model freely per subpage.
-  // If using global key -> model is locked to owner's featureConfig.defaultModel.
-  const storedPreferredModel = typeof window !== 'undefined' ? localStorage.getItem('preferredModel') : null;
-  const activeModel = userHasPersonalKey
-    ? (subModel || profile?.preferredModel || storedPreferredModel || 'gemini-2.5-flash-lite')
-    : (featureConfig?.defaultModel || 'gemini-2.5-flash-lite');
+  // Model locking logic:
+  // - If user has personal key: locked only if featureConfig.lockForKeyUsers is checked
+  // - If user is using global key: locked if featureConfig.lockForNonKeyUsers is checked (defaults to true if undefined)
+  const isModelLocked = userHasPersonalKey
+    ? Boolean(featureConfig?.lockForKeyUsers)
+    : featureConfig?.lockForNonKeyUsers !== false && Boolean(featureConfig?.enabled);
 
-  const isModelLocked = !userHasPersonalKey && Boolean(featureConfig?.enabled);
+  // Strictly use defaultModel from admin matrix if locked, or if no feature-specific override exists
+  const activeModel = isModelLocked
+    ? defaultModel
+    : (subModel || defaultModel);
 
   return {
     isFeatureAllowed,

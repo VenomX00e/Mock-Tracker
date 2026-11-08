@@ -2,40 +2,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
-  Youtube,
-  Clock,
   CheckCircle2,
   AlertCircle,
-  Loader2,
-  Copy,
   Check,
   Sparkles,
-  RefreshCw,
   FileText,
-  BookOpen,
-  ArrowRight,
-  ArrowLeft,
-  Sliders,
-  SlidersHorizontal,
-  ExternalLink,
   Upload,
-  Image as ImageIcon,
-  Type,
-  Trash2,
   Edit2,
-  Plus,
-  Search,
   RotateCcw,
   CheckCheck,
-  ChevronDown,
-  ChevronUp,
-  Languages,
-  BookMarked,
-  Settings2,
-  Download,
-  Code,
-  Eye,
-  FileDown,
 } from 'lucide-react';
 import {
   extractVocabFromEditorialTranscript,
@@ -49,7 +24,6 @@ import {
   ExtractionSourceMetadata,
 } from '../../types/extraction';
 import { ExtractionCacheManager } from '../../utils/extractionCacheManager';
-import { getActiveApiKey } from '../../utils/apiKeyManager';
 import { truncatePdf } from '../../utils/pdfTruncation';
 import { getLearningSettings } from '../../services/learningSettingsFirebaseService';
 import {
@@ -60,8 +34,13 @@ import {
   parseVocabMarkdown,
   formatVocabToMarkdown,
   formatVocabToCleanText,
-  ParsedVocabWord,
 } from '../../utils/vocabMarkdownParser';
+import { useGeminiResolution } from '../../hooks/useGeminiResolution';
+import { StagingWord } from './extraction/StagingWordCard';
+import { StagingIdiom } from './extraction/StagingIdiomCard';
+import { ExtractionStep1Source } from './extraction/ExtractionStep1Source';
+import { ExtractionStep2Verify } from './extraction/ExtractionStep2Verify';
+import { ExtractionStep3Staging } from './extraction/ExtractionStep3Staging';
 
 interface UniversalExtractionModalProps {
   isOpen: boolean;
@@ -69,455 +48,6 @@ interface UniversalExtractionModalProps {
   targetCanvasId?: string | null;
   initialSourceType?: ExtractionSourceType;
   onSuccess?: (canvasId: string, extractedData: ExtractedEditorialVocabulary) => void;
-}
-
-interface StagingWord {
-  id: string;
-  word: string;
-  pos: string;
-  meaning: string;
-  mnemonic?: string;
-  synonyms: string[];
-  antonyms: string[];
-  additional?: string;
-  additionalGroups?: Array<{ theme: string; terms: string }>;
-  example?: string;
-  editorialContext?: string;
-}
-
-interface StagingIdiom {
-  id: string;
-  phrase: string;
-  meaning: string;
-  example?: string;
-}
-
-function StagingWordCard({
-  word,
-  isEditing,
-  onStartEdit,
-  onSave,
-  onCancel,
-  onDelete,
-}: {
-  word: StagingWord;
-  isEditing: boolean;
-  onStartEdit: () => void;
-  onSave: (updates: Partial<StagingWord>) => void;
-  onCancel: () => void;
-  onDelete: () => void;
-}) {
-  const [draftWord, setDraftWord] = useState(word.word);
-  const [draftPos, setDraftPos] = useState(word.pos || 'Noun');
-  const [draftMeaning, setDraftMeaning] = useState(word.meaning || '');
-  const [draftSynonyms, setDraftSynonyms] = useState(word.synonyms?.join(', ') || '');
-  const [draftAntonyms, setDraftAntonyms] = useState(word.antonyms?.join(', ') || '');
-  const [draftAdditional, setDraftAdditional] = useState(
-    word.additional ||
-      (word.additionalGroups
-        ? word.additionalGroups.map((g) => `(${g.theme}): ${g.terms}`).join('\n')
-        : '')
-  );
-  const [draftExample, setDraftExample] = useState(word.example || '');
-
-  useEffect(() => {
-    setDraftWord(word.word);
-    setDraftPos(word.pos || 'Noun');
-    setDraftMeaning(word.meaning || '');
-    setDraftSynonyms(word.synonyms?.join(', ') || '');
-    setDraftAntonyms(word.antonyms?.join(', ') || '');
-    setDraftAdditional(
-      word.additional ||
-        (word.additionalGroups
-          ? word.additionalGroups.map((g) => `(${g.theme}): ${g.terms}`).join('\n')
-          : '')
-    );
-    setDraftExample(word.example || '');
-  }, [word, isEditing]);
-
-  const handleSave = () => {
-    const synList = draftSynonyms
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const antList = draftAntonyms
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const additionalLines = draftAdditional.split('\n');
-    const groups: Array<{ theme: string; terms: string }> = [];
-    for (const line of additionalLines) {
-      const match = line.match(/^\s*\(([^)]+)\)\s*:\s*(.+)$/);
-      if (match) {
-        groups.push({ theme: match[1].trim(), terms: match[2].trim() });
-      } else if (line.trim()) {
-        groups.push({ theme: 'Related', terms: line.trim() });
-      }
-    }
-
-    onSave({
-      word: draftWord.trim() || 'Untitled Word',
-      pos: draftPos.trim() || 'Noun',
-      meaning: draftMeaning.trim(),
-      synonyms: synList,
-      antonyms: antList,
-      additional: draftAdditional.trim(),
-      additionalGroups: groups,
-      example: draftExample.trim(),
-      editorialContext: draftAdditional.trim(),
-    });
-  };
-
-  if (isEditing) {
-    return (
-      <div className="p-4 bg-indigo-50/50 dark:bg-slate-900/90 border-2 border-indigo-500/80 rounded-2xl space-y-3.5 shadow-sm animate-in fade-in duration-150">
-        {/* Header: Word Name & POS */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-indigo-100 dark:border-slate-800">
-          <div className="flex items-center gap-2 flex-1">
-            <input
-              type="text"
-              value={draftWord}
-              onChange={(e) => setDraftWord(e.target.value)}
-              placeholder="Word / Term..."
-              className="px-3 py-1.5 font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 flex-1 max-w-xs"
-              autoFocus
-            />
-            <select
-              value={draftPos}
-              onChange={(e) => setDraftPos(e.target.value)}
-              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="Noun">Noun</option>
-              <option value="Verb">Verb</option>
-              <option value="Adjective">Adjective</option>
-              <option value="Adverb">Adverb</option>
-              <option value="Idiom">Idiom</option>
-              <option value="Phrasal Verb">Phrasal Verb</option>
-              <option value="Preposition">Preposition</option>
-              <option value="Conjunction">Conjunction</option>
-              <option value="Interjection">Interjection</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-1.5 self-end sm:self-center">
-            <button
-              type="button"
-              onClick={handleSave}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>Save</span>
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Cancel</span>
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-              title="Delete Word"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Meaning */}
-        <div className="space-y-1">
-          <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            Meaning:
-          </label>
-          <textarea
-            rows={2}
-            value={draftMeaning}
-            onChange={(e) => setDraftMeaning(e.target.value)}
-            placeholder="Definitions and contextual meaning..."
-            className="w-full px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
-          />
-        </div>
-
-        {/* Synonyms & Antonyms */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <div className="space-y-1">
-            <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              Synonyms (comma-separated):
-            </label>
-            <input
-              type="text"
-              value={draftSynonyms}
-              onChange={(e) => setDraftSynonyms(e.target.value)}
-              placeholder="e.g. Turbulent, Tumultuous, Volatile"
-              className="w-full px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              Antonyms (comma-separated):
-            </label>
-            <input
-              type="text"
-              value={draftAntonyms}
-              onChange={(e) => setDraftAntonyms(e.target.value)}
-              placeholder="e.g. Tranquil, Calm, Placid, Serene"
-              className="w-full px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-        </div>
-
-        {/* Additional Themes & Words */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              Additional Themes & Related Words:
-            </label>
-            <span className="text-[10px] text-slate-400 font-mono">
-              Format: (Theme): Word1, Word2
-            </span>
-          </div>
-          <textarea
-            rows={3}
-            value={draftAdditional}
-            onChange={(e) => setDraftAdditional(e.target.value)}
-            placeholder={`(Extreme Turmoil/Chaos): Turmoil, Turbulence, Cataclysmic\n(Uncontrolled Emotions): Uncontrolled excitement`}
-            className="w-full px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 font-mono leading-relaxed"
-          />
-        </div>
-
-        {/* Example Sentence */}
-        <div className="space-y-1">
-          <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-            Example Sentence:
-          </label>
-          <textarea
-            rows={2}
-            value={draftExample}
-            onChange={(e) => setDraftExample(e.target.value)}
-            placeholder="e.g. The country endured a very turbulent period..."
-            className="w-full px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      onDoubleClick={onStartEdit}
-      className="group relative p-4 bg-slate-50/70 hover:bg-slate-100/90 dark:bg-slate-900/40 dark:hover:bg-slate-900/80 border border-slate-200/80 hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-900/60 rounded-2xl space-y-1.5 transition-all duration-150"
-    >
-      {/* Top Bar with Word Title and Floating Edit / Delete Controls */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
-          {word.word} ({word.pos || 'Noun'})
-        </div>
-        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={onStartEdit}
-            className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-            title="Edit this word entry"
-          >
-            <Edit2 className="w-3 h-3" />
-            <span>Edit</span>
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1.5 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors cursor-pointer shadow-2xs"
-            title="Delete this word"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </div>
-      </div>
-
-      {/* Meaning */}
-      {word.meaning && (
-        <div className="text-slate-800 dark:text-slate-200">
-          <span className="font-medium text-slate-900 dark:text-slate-100">Meaning: </span>
-          <span>{word.meaning}</span>
-        </div>
-      )}
-
-      {/* Synonyms */}
-      {word.synonyms && word.synonyms.length > 0 && (
-        <div className="text-slate-800 dark:text-slate-200">
-          <span className="font-medium text-slate-900 dark:text-slate-100">Synonyms: </span>
-          <span>{word.synonyms.join(', ')}</span>
-        </div>
-      )}
-
-      {/* Antonyms */}
-      {word.antonyms && word.antonyms.length > 0 && (
-        <div className="text-slate-800 dark:text-slate-200">
-          <span className="font-medium text-slate-900 dark:text-slate-100">Antonyms: </span>
-          <span>{word.antonyms.join(', ')}</span>
-        </div>
-      )}
-
-      {/* Additional Themes & Words */}
-      {(word.additional || (word.additionalGroups && word.additionalGroups.length > 0)) && (
-        <div className="text-slate-800 dark:text-slate-200">
-          <div className="font-medium text-slate-900 dark:text-slate-100">Additional:</div>
-          {word.additionalGroups && word.additionalGroups.length > 0 ? (
-            <div className="space-y-0.5 mt-0.5">
-              {word.additionalGroups.map((g, gIdx) => (
-                <div key={gIdx} className="text-slate-800 dark:text-slate-200">
-                  ({g.theme}): {g.terms}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="whitespace-pre-wrap mt-0.5">{word.additional}</div>
-          )}
-        </div>
-      )}
-
-      {/* Example */}
-      {word.example && (
-        <div className="text-slate-800 dark:text-slate-200">
-          <span className="font-medium text-slate-900 dark:text-slate-100">Example: </span>
-          <span>{word.example}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StagingIdiomCard({
-  idiom,
-  isEditing,
-  onStartEdit,
-  onSave,
-  onCancel,
-  onDelete,
-}: {
-  idiom: StagingIdiom;
-  isEditing: boolean;
-  onStartEdit: () => void;
-  onSave: (updates: Partial<StagingIdiom>) => void;
-  onCancel: () => void;
-  onDelete: () => void;
-}) {
-  const [draftPhrase, setDraftPhrase] = useState(idiom.phrase);
-  const [draftMeaning, setDraftMeaning] = useState(idiom.meaning);
-  const [draftExample, setDraftExample] = useState(idiom.example || '');
-
-  useEffect(() => {
-    setDraftPhrase(idiom.phrase);
-    setDraftMeaning(idiom.meaning);
-    setDraftExample(idiom.example || '');
-  }, [idiom, isEditing]);
-
-  const handleSave = () => {
-    onSave({
-      phrase: draftPhrase.trim() || 'Untitled Idiom',
-      meaning: draftMeaning.trim(),
-      example: draftExample.trim(),
-    });
-  };
-
-  if (isEditing) {
-    return (
-      <div className="p-3.5 bg-indigo-50/50 dark:bg-slate-900/90 border-2 border-indigo-500/80 rounded-xl space-y-2.5 animate-in fade-in duration-150">
-        <div className="flex items-center justify-between gap-2">
-          <input
-            type="text"
-            value={draftPhrase}
-            onChange={(e) => setDraftPhrase(e.target.value)}
-            placeholder="Idiom / Phrase..."
-            className="px-2.5 py-1 font-bold text-xs sm:text-sm bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 flex-1"
-            autoFocus
-          />
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleSave}
-              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <Check className="w-3 h-3" />
-              <span>Save</span>
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
-              title="Delete Idiom"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-        <input
-          type="text"
-          value={draftMeaning}
-          onChange={(e) => setDraftMeaning(e.target.value)}
-          placeholder="Meaning..."
-          className="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-        <input
-          type="text"
-          value={draftExample}
-          onChange={(e) => setDraftExample(e.target.value)}
-          placeholder="Example sentence..."
-          className="w-full px-2.5 py-1 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      onDoubleClick={onStartEdit}
-      className="group p-3 bg-slate-50/70 hover:bg-slate-100/90 dark:bg-slate-900/40 dark:hover:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 transition-all"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
-          {idiom.phrase}
-        </div>
-        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={onStartEdit}
-            className="px-2 py-0.5 bg-white dark:bg-slate-800 hover:bg-indigo-50 text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
-          >
-            <Edit2 className="w-2.5 h-2.5" /> Edit
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-1 bg-white dark:bg-slate-800 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded text-[11px] cursor-pointer"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        </div>
-      </div>
-      {idiom.meaning && (
-        <div className="text-xs text-slate-700 dark:text-slate-300">
-          <span className="font-medium">Meaning: </span>
-          {idiom.meaning}
-        </div>
-      )}
-      {idiom.example && (
-        <div className="text-xs text-slate-600 dark:text-slate-400">
-          <span className="font-medium">Example: </span>
-          {idiom.example}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function UniversalExtractionModal({
@@ -528,6 +58,7 @@ export function UniversalExtractionModal({
   onSuccess,
 }: UniversalExtractionModalProps) {
   const { canvases, addCanvas, addVocab, addTextEntry } = useVocabularyStore();
+  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('vocab_extractor');
 
   // Wizard Step: 1 = Source Ingestion, 2 = Raw Text Verification, 3 = Staging Review, 4 = Success/Commit
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
@@ -652,16 +183,6 @@ export function UniversalExtractionModal({
     if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     if (parts.length === 2) return parts[0] * 60 + parts[1];
     return parseInt(str, 10) || 0;
-  };
-
-  const formatSeconds = (totalSec: number): string => {
-    const hours = Math.floor(totalSec / 3600);
-    const minutes = Math.floor((totalSec % 3600) / 60);
-    const seconds = Math.floor(totalSec % 60);
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   // Persist session state helper
@@ -880,9 +401,8 @@ export function UniversalExtractionModal({
       return;
     }
 
-    const apiKey = getActiveApiKey();
-    if (!apiKey) {
-      setErrorMessage('Please configure your Gemini API Key in the AI Settings (top right of Learning Hub).');
+    if (!isFeatureAllowed) {
+      setErrorMessage('An API Key is required for Editorial Vocabulary Extractor. Please add your Gemini key in Settings or request access from your Administrator.');
       return;
     }
 
@@ -1007,9 +527,8 @@ export function UniversalExtractionModal({
       return;
     }
 
-    const apiKey = getActiveApiKey();
-    if (!apiKey) {
-      setErrorMessage('Please configure your Gemini API Key in the AI Settings (top right of Learning Hub).');
+    if (!isFeatureAllowed) {
+      setErrorMessage('An API Key is required for Editorial Vocabulary Extractor. Please add your Gemini key in Settings or request access from your Administrator.');
       return;
     }
 
@@ -1459,7 +978,6 @@ export function UniversalExtractionModal({
           ].map((s, idx) => {
             const isCompleted = currentStep > s.num;
             const isCurrent = currentStep === s.num;
-            const Icon = s.icon;
             return (
               <React.Fragment key={s.num}>
                 <div
@@ -1540,728 +1058,96 @@ export function UniversalExtractionModal({
 
         {/* Modal Body: Active Step View */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 custom-scrollbar">
-          {/* ======================================================== */}
-          {/* STEP 1: SOURCE INGESTION                                 */}
-          {/* ======================================================== */}
+          {/* STEP 1: SOURCE INGESTION */}
           {currentStep === 1 && (
-            <div className="space-y-5 animate-in fade-in duration-150">
-              {/* Source Tabs */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { type: 'youtube' as const, label: 'YouTube Video', icon: Youtube, color: 'text-red-500' },
-                  { type: 'pdf' as const, label: 'PDF Document', icon: FileText, color: 'text-rose-500' },
-                  { type: 'image' as const, label: 'Image / OCR', icon: ImageIcon, color: 'text-emerald-500' },
-                  { type: 'text' as const, label: 'Raw Text', icon: Type, color: 'text-blue-500' },
-                ].map((tab) => {
-                  const Icon = tab.icon;
-                  const active = sourceType === tab.type;
-                  return (
-                    <button
-                      key={tab.type}
-                      type="button"
-                      onClick={() => {
-                        setSourceType(tab.type);
-                        setErrorMessage(null);
-                      }}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
-                        active
-                          ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-900 dark:text-indigo-200 shadow-sm font-semibold'
-                          : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80'
-                      }`}
-                    >
-                      <Icon className={`w-5 h-5 mb-1.5 ${tab.color}`} />
-                      <span className="text-xs">{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Source 1: YouTube */}
-              {sourceType === 'youtube' && (
-                <form onSubmit={handleFetchYouTubeTranscript} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      YouTube Class / Editorial Video URL
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                        placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        autoFocus
-                      />
-                      <Youtube className="w-4 h-4 text-red-500 absolute left-3.5 top-3.5" />
-                    </div>
-                  </div>
-
-                  {/* Time Range Filter Toggle */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={useCustomRange}
-                          onChange={(e) => setUseCustomRange(e.target.checked)}
-                          className="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500"
-                        />
-                        <span>Extract specific class time range (e.g. first 30 mins)</span>
-                      </label>
-                      <span className="text-[11px] text-slate-400">Default: 00:00 - 30:00</span>
-                    </div>
-
-                    {useCustomRange && (
-                      <div className="grid grid-cols-2 gap-3 pt-1">
-                        <div>
-                          <label className="block text-[11px] text-slate-500 mb-1">Start Time (MM:SS)</label>
-                          <input
-                            type="text"
-                            value={startTimeStr}
-                            onChange={(e) => setStartTimeStr(e.target.value)}
-                            placeholder="00:00"
-                            className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-slate-500 mb-1">End Time (MM:SS)</label>
-                          <input
-                            type="text"
-                            value={endTimeStr}
-                            onChange={(e) => setEndTimeStr(e.target.value)}
-                            placeholder="30:00"
-                            className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isLoading || !youtubeUrl.trim()}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>{loadingMessage || 'Fetching Transcript...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Fetch Transcript & Proceed to Step 2</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-
-                  <div className="pt-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSourceType('text');
-                        setSourceMetadata({
-                          title: youtubeUrl ? `YouTube: ${youtubeUrl}` : 'Pasted Lecture Transcript',
-                          url: youtubeUrl || undefined,
-                        });
-                        setCurrentStep(2);
-                      }}
-                      className="inline-flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium hover:underline transition-all"
-                    >
-                      <Type className="w-3.5 h-3.5" />
-                      <span>I already have the transcript → Skip to Step 2</span>
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Source 2: PDF Document */}
-              {sourceType === 'pdf' && (
-                <div className="space-y-4">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-2xl p-6 text-center cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/30"
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="application/pdf"
-                      onChange={handleFileInputChange}
-                      className="hidden"
-                    />
-                    <FileText className="w-10 h-10 text-rose-500 mx-auto mb-2" />
-                    <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      {selectedFile ? selectedFile.name : 'Click to select or drag a PDF file here'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      {selectedFile
-                        ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB PDF selected`
-                        : 'Supports editorial PDFs, class notes, and magazine cutouts'}
-                    </p>
-                  </div>
-
-                  {selectedFile && (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Page Range (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={pageRange === 'All pages selected' ? '' : pageRange}
-                        onChange={(e) => setPageRange(e.target.value || 'All pages selected')}
-                        placeholder="e.g. 1-3, 5 (or leave empty for all)"
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm"
-                      />
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleProcessDocumentFile}
-                    disabled={isLoading || !selectedFile}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>{loadingMessage || 'Transcribing PDF...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Transcribe PDF & Proceed to Step 2</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Source 3: Image / OCR */}
-              {sourceType === 'image' && (
-                <div className="space-y-4">
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-2xl p-6 text-center cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-900/30"
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileInputChange}
-                      className="hidden"
-                    />
-                    {imagePreviewUrl ? (
-                      <div className="max-h-40 mx-auto overflow-hidden rounded-lg mb-2 inline-block">
-                        <img
-                          src={imagePreviewUrl}
-                          alt="Upload preview"
-                          className="max-h-40 object-contain rounded-lg"
-                        />
-                      </div>
-                    ) : (
-                      <ImageIcon className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-                    )}
-                    <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200">
-                      {selectedFile ? selectedFile.name : 'Click to select or drag an Image/Screenshot'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Supports PNG, JPEG, WEBP screenshots of vocab tables or editorial columns
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleProcessDocumentFile}
-                    disabled={isLoading || !selectedFile}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>{loadingMessage || 'Scanning Image OCR...'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>OCR Image & Proceed to Step 2</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Source 4: Raw Text */}
-              {sourceType === 'text' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Paste Vocabulary Notes / Editorial Article Text
-                    </label>
-                    <textarea
-                      rows={8}
-                      value={rawText}
-                      onChange={(e) => setRawText(e.target.value)}
-                      placeholder="Paste your raw editorial text, vocabulary list, or transcript here..."
-                      className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleProceedWithRawText}
-                    disabled={!rawText.trim()}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
-                  >
-                    <span>Verify Content in Step 2</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
+            <ExtractionStep1Source
+              sourceType={sourceType}
+              setSourceType={setSourceType}
+              setErrorMessage={setErrorMessage}
+              youtubeUrl={youtubeUrl}
+              setYoutubeUrl={setYoutubeUrl}
+              useCustomRange={useCustomRange}
+              setUseCustomRange={setUseCustomRange}
+              startTimeStr={startTimeStr}
+              setStartTimeStr={setStartTimeStr}
+              endTimeStr={endTimeStr}
+              setEndTimeStr={setEndTimeStr}
+              isLoading={isLoading}
+              loadingMessage={loadingMessage}
+              handleFetchYouTubeTranscript={handleFetchYouTubeTranscript}
+              setSourceMetadata={setSourceMetadata}
+              setCurrentStep={setCurrentStep}
+              fileInputRef={fileInputRef}
+              handleFileInputChange={handleFileInputChange}
+              selectedFile={selectedFile}
+              pageRange={pageRange}
+              setPageRange={setPageRange}
+              handleProcessDocumentFile={handleProcessDocumentFile}
+              imagePreviewUrl={imagePreviewUrl}
+              rawText={rawText}
+              setRawText={setRawText}
+              handleProceedWithRawText={handleProceedWithRawText}
+            />
           )}
 
-          {/* ======================================================== */}
-          {/* STEP 2: RAW TEXT VERIFICATION & AI PROMPT INJECTION      */}
-          {/* ======================================================== */}
+          {/* STEP 2: RAW TEXT VERIFICATION & AI PROMPT INJECTION */}
           {currentStep === 2 && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              {/* Context Summary Header */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 truncate">
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                    {sourceMetadata.title || 'Extracted Source'}
-                  </span>
-                  {sourceMetadata.channel && (
-                    <span className="text-slate-400 truncate">• {sourceMetadata.channel}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded font-mono text-[11px]">
-                    {rawWordCount} words
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCopyRawText}
-                    className="flex items-center gap-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Raw Text Textarea */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Extracted Raw Text (Editable)
-                </label>
-                <textarea
-                  rows={9}
-                  value={rawText}
-                  onChange={(e) => {
-                    setRawText(e.target.value);
-                    ExtractionCacheManager.saveSession({
-                      sourceType,
-                      sourceMetadata,
-                      rawText: e.target.value,
-                      customInstructions,
-                      aiOutput: null,
-                      currentStep: 2,
-                      lastUpdated: Date.now(),
-                    });
-                  }}
-                  placeholder="Raw text will appear here..."
-                  className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono leading-relaxed custom-scrollbar"
-                />
-              </div>
-
-              {/* Custom AI Instructions Box (Collapsible, Collapsed by Default) */}
-              <div className="bg-gradient-to-br from-indigo-50/70 via-slate-50 to-purple-50/40 dark:from-indigo-950/30 dark:via-slate-900/60 dark:to-purple-950/20 border border-indigo-200/80 dark:border-indigo-900/60 rounded-2xl p-3.5 shadow-sm transition-all">
-                {/* Header (Clickable Accordion Trigger) */}
-                <div
-                  onClick={() => setShowInstructionField(!showInstructionField)}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-xl shadow-xs shrink-0">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-                          Custom AI Instructions & Master Prompt
-                        </h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 dark:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300">
-                          {defaultsLoaded ? 'Platform Defaults Active' : 'Loading...'}
-                        </span>
-                        {!showInstructionField && customInstructions && (
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            ({customInstructions.length} chars)
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        {showInstructionField
-                          ? 'These instructions will directly guide Gemini AI during vocabulary extraction.'
-                          : 'Click to expand and view or customize master instructions.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[11px] self-end sm:self-center">
-                    {showInstructionField && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCustomInstructions(globalDefaults.defaultCustomInstructions || '');
-                          }}
-                          className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 rounded-lg font-medium flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <RotateCcw className="w-3 h-3" /> Re-sync platform defaults
-                        </button>
-                        {customInstructions && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCustomInstructions('');
-                            }}
-                            className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-lg font-medium transition-colors cursor-pointer"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Toggle instructions"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      {showInstructionField ? (
-                        <ChevronUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded Body */}
-                {showInstructionField && (
-                  <div className="pt-3 space-y-2 border-t border-indigo-100 dark:border-indigo-900/40 mt-3 animate-in fade-in slide-in-from-top-1 duration-150">
-                    <div className="relative">
-                      <textarea
-                        rows={6}
-                        value={customInstructions}
-                        onChange={(e) => setCustomInstructions(e.target.value)}
-                        placeholder="Enter your custom system prompt or extraction instructions here..."
-                        className="w-full p-3 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/60 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono leading-relaxed custom-scrollbar"
-                      />
-                      <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400 dark:text-slate-500 px-1">
-                        <span>Active Prompt Length: {customInstructions.length} characters</span>
-                        {customInstructions.trim() && (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                            Custom instructions will override generic extraction defaults
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Step 2 Bottom Actions */}
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(1)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium text-xs sm:text-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Back to Source</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateVocabulary}
-                  disabled={isLoading || !rawText.trim()}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>{loadingMessage || 'Generating AI Vocabulary...'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      <span>Generate AI Vocabulary & Review in Step 3</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            <ExtractionStep2Verify
+              sourceType={sourceType}
+              sourceMetadata={sourceMetadata}
+              rawWordCount={rawWordCount}
+              copied={copied}
+              handleCopyRawText={handleCopyRawText}
+              rawText={rawText}
+              setRawText={setRawText}
+              customInstructions={customInstructions}
+              setCustomInstructions={setCustomInstructions}
+              showInstructionField={showInstructionField}
+              setShowInstructionField={setShowInstructionField}
+              defaultsLoaded={defaultsLoaded}
+              globalDefaults={globalDefaults}
+              setCurrentStep={setCurrentStep}
+              handleGenerateVocabulary={handleGenerateVocabulary}
+              isLoading={isLoading}
+              loadingMessage={loadingMessage}
+            />
           )}
 
-          {/* ======================================================== */}
-          {/* STEP 3: SINGLE PAGE DOCUMENT VIEW & MARKDOWN EDITOR       */}
-          {/* ======================================================== */}
+          {/* STEP 3: SINGLE PAGE DOCUMENT VIEW & MARKDOWN EDITOR */}
           {currentStep === 3 && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              {/* Header Title, Count & Action Controls */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <input
-                      type="text"
-                      value={stagingTitle}
-                      onChange={(e) => {
-                        setStagingTitle(e.target.value);
-                        const newMd = formatVocabToMarkdown({
-                          title: e.target.value,
-                          words: stagingWords,
-                        });
-                        setStagingMarkdown(newMd);
-                      }}
-                      placeholder="Core Vocabularies & Additional Words"
-                      className="font-bold text-slate-900 dark:text-slate-100 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-indigo-500 outline-none text-sm sm:text-base px-1 py-0.5 w-full max-w-md"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      {stagingWords.length} Core Vocabularies
-                    </span>
-                    <span>• Single Document View</span>
-                  </div>
-                </div>
-
-                {/* View Mode & Export Actions */}
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                  {/* Toggle Rendered vs Markdown */}
-                  <div className="flex items-center p-0.5 bg-slate-200/80 dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700">
-                    <button
-                      type="button"
-                      onClick={() => setStep3ViewMode('rendered')}
-                      className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                        step3ViewMode === 'rendered'
-                          ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                      }`}
-                      title="Stylized Document View"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Document</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStep3ViewMode('editor')}
-                      className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                        step3ViewMode === 'editor'
-                          ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                      }`}
-                      title="Edit Raw Markdown"
-                    >
-                      <Code className="w-3.5 h-3.5" />
-                      <span>Markdown</span>
-                    </button>
-                  </div>
-
-                  {/* Copy Markdown Button */}
-                  <button
-                    type="button"
-                    onClick={handleCopyMarkdown}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all ${
-                      copiedMarkdown
-                        ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-                    }`}
-                    title="Copy full vocabulary list in Markdown"
-                  >
-                    {copiedMarkdown ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Download Markdown Button */}
-                  <button
-                    type="button"
-                    onClick={handleDownloadMarkdown}
-                    className="p-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg text-xs font-medium flex items-center gap-1 transition-all"
-                    title="Download as .md file"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Filter Search Bar (when in Rendered View) */}
-              {step3ViewMode === 'rendered' && (
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      value={stagingSearch}
-                      onChange={(e) => setStagingSearch(e.target.value)}
-                      placeholder="Filter words, meanings, or additional themes..."
-                      className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddNewWord}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 hover:text-indigo-600 rounded-xl text-xs font-medium flex items-center gap-1 transition-colors shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Word</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Document Container */}
-              {step3ViewMode === 'rendered' ? (
-                <div className="p-4 sm:p-6 bg-white dark:bg-[#13141b] border border-slate-200 dark:border-slate-800 rounded-2xl max-h-[54vh] overflow-y-auto custom-scrollbar select-text space-y-6">
-                  {/* Clean Main Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800/80">
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-slate-100 text-base sm:text-lg">
-                        {stagingTitle || 'Core Vocabularies & Additional Words'}
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        💡 Click <span className="font-semibold text-indigo-600 dark:text-indigo-400">Edit</span> or double-click any card to modify definitions, themes, and examples.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 self-start sm:self-center">
-                      <button
-                        type="button"
-                        onClick={handleAddNewWord}
-                        className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add Word</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAddNewIdiom}
-                        className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Add Idiom</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Vocabulary Word Cards */}
-                  {filteredWords.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-slate-500">
-                      No vocabulary items match your filter.
-                    </div>
-                  ) : (
-                    <div className="space-y-4 text-xs sm:text-sm leading-relaxed">
-                      {filteredWords.map((word) => (
-                        <StagingWordCard
-                          key={word.id}
-                          word={word}
-                          isEditing={editingWordId === word.id}
-                          onStartEdit={() => setEditingWordId(word.id)}
-                          onSave={(updates) => handleUpdateWord(word.id, updates)}
-                          onCancel={() => setEditingWordId(null)}
-                          onDelete={() => handleDeleteWord(word.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Idioms & Phrases Section (if any present) */}
-                  {stagingIdioms.length > 0 && (
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
-                          Idioms & Phrases ({stagingIdioms.length})
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleAddNewIdiom}
-                          className="px-2 py-0.5 text-xs text-indigo-600 dark:text-indigo-400 font-medium hover:underline flex items-center gap-0.5"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>Add Idiom</span>
-                        </button>
-                      </div>
-                      <div className="space-y-2.5">
-                        {filteredIdioms.map((idiom) => (
-                          <StagingIdiomCard
-                            key={idiom.id}
-                            idiom={idiom}
-                            isEditing={editingIdiomId === idiom.id}
-                            onStartEdit={() => setEditingIdiomId(idiom.id)}
-                            onSave={(updates) => handleUpdateIdiom(idiom.id, updates)}
-                            onCancel={() => setEditingIdiomId(null)}
-                            onDelete={() => handleDeleteIdiom(idiom.id)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Raw Markdown Editor */
-                <div className="space-y-2">
-                  <div className="relative">
-                    <textarea
-                      rows={14}
-                      value={stagingMarkdown}
-                      onChange={(e) => handleMarkdownChange(e.target.value)}
-                      placeholder="#### Core Vocabularies & Additional Words&#10;* **Debilitating (Adjective)**&#10;    * **Meaning:** ...&#10;    * **Synonyms:** ...&#10;    * **Antonyms:** ...&#10;    * **Additional:**&#10;        (weak): Feeble, Frail...&#10;    * **Example:** ..."
-                      className="w-full p-4 bg-slate-950 text-slate-100 font-mono text-xs leading-relaxed rounded-2xl border border-slate-800 outline-none focus:ring-1 focus:ring-indigo-500 custom-scrollbar resize-y max-h-[52vh]"
-                      spellCheck={false}
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    💡 Edits made in this Markdown editor synchronize directly with the parsed vocabulary entries and canvas commit.
-                  </p>
-                </div>
-              )}
-
-              {/* Step 3 Bottom Action Controls */}
-              <div className="flex items-center gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(2)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium text-xs sm:text-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Back to Text</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApproveAndCommit}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    Approve & Commit to Canvas ({stagingWords.length} Core Words)
-                  </span>
-                </button>
-              </div>
-            </div>
+            <ExtractionStep3Staging
+              stagingTitle={stagingTitle}
+              setStagingTitle={setStagingTitle}
+              stagingWords={stagingWords}
+              stagingIdioms={stagingIdioms}
+              stagingMarkdown={stagingMarkdown}
+              setStagingMarkdown={setStagingMarkdown}
+              step3ViewMode={step3ViewMode}
+              setStep3ViewMode={setStep3ViewMode}
+              copiedMarkdown={copiedMarkdown}
+              handleCopyMarkdown={handleCopyMarkdown}
+              handleDownloadMarkdown={handleDownloadMarkdown}
+              stagingSearch={stagingSearch}
+              setStagingSearch={setStagingSearch}
+              handleAddNewWord={handleAddNewWord}
+              handleAddNewIdiom={handleAddNewIdiom}
+              filteredWords={filteredWords}
+              filteredIdioms={filteredIdioms}
+              editingWordId={editingWordId}
+              setEditingWordId={setEditingWordId}
+              handleUpdateWord={handleUpdateWord}
+              handleDeleteWord={handleDeleteWord}
+              editingIdiomId={editingIdiomId}
+              setEditingIdiomId={setEditingIdiomId}
+              handleUpdateIdiom={handleUpdateIdiom}
+              handleDeleteIdiom={handleDeleteIdiom}
+              handleMarkdownChange={handleMarkdownChange}
+              setCurrentStep={setCurrentStep}
+              handleApproveAndCommit={handleApproveAndCommit}
+            />
           )}
 
-          {/* ======================================================== */}
-          {/* STEP 4: SUCCESS / COMMITTED CONFIRMATION                 */}
-          {/* ======================================================== */}
+          {/* STEP 4: SUCCESS / COMMITTED CONFIRMATION */}
           {currentStep === 4 && (
             <div className="py-8 px-4 text-center space-y-4 animate-in fade-in duration-200">
               <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-inner">

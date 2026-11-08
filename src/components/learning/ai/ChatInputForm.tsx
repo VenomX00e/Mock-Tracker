@@ -34,12 +34,76 @@ export function ChatInputForm({ onSend, isLoading, showWebSearchButton, showProm
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const processImageFile = async (file: File): Promise<{ data: string; mimeType: string }> => {
+    let resolvedMime = file.type;
+    if (!resolvedMime || resolvedMime === 'application/octet-stream') {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'png') resolvedMime = 'image/png';
+      else if (ext === 'webp') resolvedMime = 'image/webp';
+      else if (ext === 'gif') resolvedMime = 'image/gif';
+      else resolvedMime = 'image/jpeg';
+    }
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onerror = () => {
+        resolve({ data: '', mimeType: resolvedMime || 'image/jpeg' });
+      };
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (!result) {
+          resolve({ data: '', mimeType: resolvedMime || 'image/jpeg' });
+          return;
+        }
+
+        const img = new Image();
+        img.onerror = () => {
+          const base64 = result.includes(',') ? result.split(',')[1] : result;
+          resolve({ data: base64, mimeType: resolvedMime || 'image/jpeg' });
+        };
+        img.onload = () => {
+          try {
+            const maxDim = 1600;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+              const base64 = dataUrl.split(',')[1];
+              resolve({ data: base64, mimeType: 'image/jpeg' });
+              return;
+            }
+          } catch (e) {
+            // ignore canvas error and fall back
+          }
+          const base64 = result.includes(',') ? result.split(',')[1] : result;
+          resolve({ data: base64, mimeType: resolvedMime || 'image/jpeg' });
+        };
+        img.src = result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'pdf') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("File is too large. Please keep it under 5MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File is too large. Please keep it under 10MB.");
       e.target.value = '';
       return;
     }
@@ -49,21 +113,20 @@ export function ChatInputForm({ onSend, isLoading, showWebSearchButton, showProm
         name: file.name,
         type,
         file: file,
-        mimeType: file.type,
+        mimeType: file.type || 'application/pdf',
       });
       setPdfPagesInput('');
     } else {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = (reader.result as string).split(',')[1];
-        setAttachment({
-          name: file.name,
-          type,
-          data: base64String,
-          mimeType: file.type
-        });
-      };
-      reader.readAsDataURL(file);
+      processImageFile(file).then(({ data, mimeType }) => {
+        if (data) {
+          setAttachment({
+            name: file.name,
+            type,
+            data,
+            mimeType,
+          });
+        }
+      });
     }
     e.target.value = '';
   };

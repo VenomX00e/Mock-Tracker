@@ -1,3 +1,5 @@
+import { calculatePointsFromRules } from '../services/ypt/yptPointEngine.js';
+
 /**
  * Formats a decimal hours duration (e.g., 7.205) into "H:MM" format (e.g., "7:12").
  */
@@ -355,7 +357,7 @@ export function areYptHandlesMatching(
  * 1. Checks if member joined after the target date -> Fully exempt (0 net points)
  * 2. Unlocked / Live Day with 0 hours -> Does NOT apply penalties while day is actively accumulating
  * 3. Penalties are ONLY applied when the day is officially locked/finalized or past closed
- * 4. Normal point calculation for study intervals + custom bonuses & penalties
+ * 4. Normal point calculation for study intervals + custom bonuses & penalties via canonical calculatePointsFromRules
  */
 export interface CalculatedDailyMemberPoints {
   basePoints: number;
@@ -406,7 +408,6 @@ export function evaluateMemberDailyPoints(
   }
 
   // 2. Unlocked / Live Day with 0 hours -> Do NOT apply penalties yet!
-  // Penalties should ONLY be applied when the day is officially closed/locked at 5:00 AM IST
   if (!isDayLocked && safeHours === 0) {
     return {
       basePoints: 0,
@@ -417,170 +418,23 @@ export function evaluateMemberDailyPoints(
     };
   }
 
-  // 3. Interval Base Study Points Calculation
-  const intervalVal = rules.studyIntervalValue ?? 1;
-  const intervalUnit = rules.studyIntervalUnit ?? 'hours';
-  const intervalHours = intervalUnit === 'minutes' ? intervalVal / 60 : intervalVal || 1;
-  const ptsPerInterval = rules.pointsPerInterval ?? rules.pointsPerStudyHour ?? 1;
-
-  const basePoints = Math.floor(safeHours / (intervalHours || 1)) * ptsPerInterval;
-
-  // 4. Penalty Check (Only when day is officially locked / closed)
-  const penaltyThresholdVal = rules.penaltyThresholdValue ?? rules.noStudyPenaltyThresholdHours ?? 3;
-  const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
-  const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
-
-  const isPenalized = isDayLocked && safeHours < penaltyThresholdHours;
-  const penaltyVal = isPenalized ? (rules.penaltyPoints || 0) : 0;
-
-  // 5. Custom Rules Calculation
-  const appliedRules: Array<{
-    ruleId?: string;
-    ruleName: string;
-    emoji: string;
-    points: number;
-    type?: 'bonus' | 'penalty' | 'base' | 'milestone' | 'exempt';
-  }> = [];
-
-  let bonusPoints = 0;
-  let customPenaltiesSum = 0;
-
-  if (Array.isArray(rules.customRules)) {
-    for (const cr of rules.customRules) {
-      if (!cr || !cr.name) continue;
-
-      const ruleEmoji = cr.emoji ? String(cr.emoji).trim() : '';
-      const nameLower = cr.name.toLowerCase();
-
-      const hasNativeId = Boolean(cr.nativeChallengeId);
-      const targetCid = Number(cr.nativeChallengeId);
-
-      const isNativeChallengeCompleted = Boolean(
-        hasNativeId &&
-        !isNaN(targetCid) &&
-        (completedNativeChallengeIds.includes(targetCid) ||
-         completedNativeChallengeIds.map(String).includes(String(targetCid)))
-      );
-
-      // If linked to a native challenge ID, strictly evaluate that challenge ID completion!
-      const missionMatched = hasNativeId
-        ? isNativeChallengeCompleted
-        : (
-            Boolean(ruleEmoji && detectedEmojis.some((e) => e.includes(ruleEmoji) || ruleEmoji.includes(e))) ||
-            Boolean(hasSnap && (nameLower.includes('snap') || ruleEmoji === '☀️'))
-          );
-
-      const minHours = cr.minHoursNeeded ?? 0;
-      const hoursMatched = safeHours >= minHours;
-
-      const condition = cr.conditionType || 'emoji_only';
-      let isMet = false;
-
-      switch (condition) {
-        case 'hours_only':
-          isMet = hoursMatched;
-          break;
-        case 'both':
-          isMet = missionMatched && hoursMatched;
-          break;
-        case 'either':
-          isMet = missionMatched || hoursMatched;
-          break;
-        case 'emoji_only':
-        default:
-          isMet = missionMatched;
-          break;
-      }
-
-      if (isMet) {
-        const p = Number(cr.points) || 0;
-        const awardedPts = cr.type === 'bonus' ? p : -p;
-        const isTeamAll = cr.scope === 'team_all';
-        const effectivePts = isTeamAll ? 0 : awardedPts;
-
-        if (effectivePts > 0) {
-          bonusPoints += effectivePts;
-        } else if (effectivePts < 0) {
-          // If unlocked live day, do not apply custom penalties prematurely
-          if (!isDayLocked) {
-            continue;
-          }
-          customPenaltiesSum += Math.abs(effectivePts);
-        }
-
-        appliedRules.push({
-          ruleId: cr.id,
-          ruleName: cr.name,
-          emoji: cr.emoji || (cr.type === 'bonus' ? '☀️' : '📱'),
-          points: effectivePts,
-          type: cr.type === 'bonus' ? 'bonus' : 'penalty',
-        });
-      }
-    }
-  }
-
-  if (isPenalized && (rules.penaltyPoints || 0) > 0) {
-    appliedRules.push({
-      ruleId: 'no_study_penalty',
-      ruleName: 'No Study Penalty',
-      emoji: '⚠️',
-      points: -(rules.penaltyPoints || 0),
-      type: 'penalty',
-    });
-  }
-
-  // Evaluate the Fake Session / Max Continuous Trap
-  let maxContinuousPenaltyDeduction = 0;
-  const maxContThreshold = rules.maxContinuousHoursThreshold;
-  if (typeof maxContThreshold === 'number' && maxContThreshold > 0 && maxContinuousMs > 0) {
-    const maxContHours = maxContinuousMs / 3600000;
-    if (maxContHours > maxContThreshold) {
-      const penaltyType = rules.maxContinuousPenaltyType || 'variable';
-
-      if (penaltyType === 'fixed') {
-        const fixedDeduction = typeof rules.maxContinuousFixedPenalty === 'number' ? rules.maxContinuousFixedPenalty : 0;
-        if (fixedDeduction > 0) {
-          maxContinuousPenaltyDeduction = fixedDeduction;
-          appliedRules.push({
-            ruleId: 'max_continuous_fake_session_penalty',
-            ruleName: `Fake Session Penalty (>${maxContThreshold}hrs - Flat Deduction)`,
-            emoji: '🚨',
-            points: -fixedDeduction,
-            type: 'penalty',
-          });
-        }
-      } else {
-        const mode = rules.maxContinuousPenaltyMode || 'excess';
-        const targetHours = mode === 'whole' ? maxContHours : maxContHours - maxContThreshold;
-
-        if (targetHours > 0) {
-          const multiplier = rules.maxContinuousPenaltyMultiplier ?? 1;
-          const baseTargetPoints = Math.floor(targetHours / (intervalHours || 1)) * ptsPerInterval;
-          const calculatedPenalty = Math.max(0, baseTargetPoints * multiplier);
-
-          if (calculatedPenalty > 0) {
-            maxContinuousPenaltyDeduction = calculatedPenalty;
-            appliedRules.push({
-              ruleId: 'max_continuous_fake_session_penalty',
-              ruleName: `Fake Session Penalty (>${maxContThreshold}hrs)`,
-              emoji: '🚨',
-              points: -calculatedPenalty,
-              type: 'penalty',
-            });
-          }
-        }
-      }
-    }
-  }
-
-  const totalPenaltyPoints = penaltyVal + customPenaltiesSum + maxContinuousPenaltyDeduction;
-  const netPoints = basePoints + bonusPoints - totalPenaltyPoints;
+  // 3. Delegate to canonical point engine
+  const calculated = calculatePointsFromRules(
+    safeHours,
+    rules,
+    detectedEmojis,
+    hasSnap,
+    completedNativeChallengeIds,
+    isDayLocked,
+    maxContinuousMs
+  );
 
   return {
-    basePoints,
-    bonusPoints,
-    penaltyPoints: totalPenaltyPoints,
-    netPoints,
-    appliedRules,
+    basePoints: calculated.baseStudyPoints,
+    bonusPoints: calculated.bonusPoints,
+    penaltyPoints: calculated.penaltyPoints,
+    netPoints: calculated.netPoints,
+    appliedRules: calculated.appliedRules,
   };
 }
+

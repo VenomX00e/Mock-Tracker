@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Clock, Award, ShieldAlert, Sparkles, Check, Plus, Trash2, Calendar, User, Save } from 'lucide-react';
-import { YptChallenge, YptCustomRule, YptExtractedMemberData, YptSubmissionLog } from '../../../types/yptTypes';
-import { addYptSubmissionLog, recalculateTeamPointsFromSubmissions } from '../../../services/yptService';
-import { useAuthCtx } from '../../../context/AppContext';
-import { formatStudyDuration, getLocalYmd } from '../../../utils/yptUtils';
+import { X, Clock, Check, Calendar, User, Save } from 'lucide-react';
+import { YptChallenge, YptCustomRule, YptDailyDaySnapshot } from '../../../types/yptTypes';
+import { updateMemberInDailySnapshot } from '../../../services/yptService';
+import { areYptHandlesMatching, formatStudyDuration, getYptDayYmd } from '../../../utils/yptUtils';
 
 interface YptMemberEditModalProps {
   isOpen: boolean;
@@ -12,7 +11,7 @@ interface YptMemberEditModalProps {
   challenge: YptChallenge;
   memberHandle: string;
   initialDateYmd?: string;
-  submissions: YptSubmissionLog[];
+  dailySnapshots: YptDailyDaySnapshot[];
   onSuccess: () => void;
 }
 
@@ -22,15 +21,13 @@ export function YptMemberEditModal({
   challenge,
   memberHandle,
   initialDateYmd,
-  submissions,
+  dailySnapshots,
   onSuccess,
 }: YptMemberEditModalProps) {
-  const { user } = useAuthCtx();
-
   const cleanHandle = memberHandle.replace(/^@/, '').trim().toLowerCase();
   const displayHandle = memberHandle.replace(/^@/, '').trim();
 
-  const todayYmd = getLocalYmd(new Date());
+  const todayYmd = getYptDayYmd();
   const [selectedDate, setSelectedDate] = useState<string>(initialDateYmd || todayYmd);
 
   const [hoursInput, setHoursInput] = useState<number>(0);
@@ -40,47 +37,65 @@ export function YptMemberEditModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Load existing data for member & selectedDate when date or modal state changes
+  // Load existing data for member & selectedDate from dailySnapshots when date or modal state changes
   useEffect(() => {
     if (!isOpen) return;
 
     const targetYmd = selectedDate || initialDateYmd || todayYmd;
     setSelectedDate(targetYmd);
 
-    // Find submission log for this member & target date
-    const memberSub = submissions.find((sub) => {
-      const subDate = sub.targetDateYmd || sub.dateYmd || getLocalYmd(sub.timestamp);
-      if (subDate !== targetYmd) return false;
-      return (sub.extractedMembers || []).some(
-        (m) => m.yptHandle && m.yptHandle.replace(/^@/, '').trim().toLowerCase() === cleanHandle
-      );
-    });
+    const snapshot = dailySnapshots.find(
+      (s) => (s.targetDateYmd || s.dateYmd) === targetYmd
+    );
 
-    if (memberSub) {
-      const memberData = memberSub.extractedMembers.find(
-        (m) => m.yptHandle && m.yptHandle.replace(/^@/, '').trim().toLowerCase() === cleanHandle
+    if (snapshot) {
+      let memberSnap = snapshot.memberSnapshots?.[cleanHandle];
+      if (!memberSnap && snapshot.memberSnapshots) {
+        const matchKey = Object.keys(snapshot.memberSnapshots).find((k) =>
+          areYptHandlesMatching(snapshot.memberSnapshots[k].handle, memberHandle)
+        );
+        if (matchKey) memberSnap = snapshot.memberSnapshots[matchKey];
+      }
+
+      const memberRec = (snapshot.memberRecords || []).find((r) =>
+        areYptHandlesMatching(r.yptHandle, memberHandle, r.userId)
       );
 
-      if (memberData) {
-        const totalHours = memberData.hoursStudied || 0;
+      if (memberSnap || memberRec) {
+        const totalHours = memberSnap?.hoursStudied ?? memberRec?.hoursStudied ?? 0;
         const hrs = Math.floor(totalHours);
         const mins = Math.round((totalHours - hrs) * 60);
         setHoursInput(hrs);
         setMinutesInput(mins);
 
-        if (Array.isArray(memberData.detectedRules)) {
-          setSelectedRules(memberData.detectedRules);
-        } else {
-          setSelectedRules([]);
-        }
+        const rawRules = memberSnap?.appliedRuleBreakdown || memberRec?.appliedRules || [];
+        const customRulesList = rawRules
+          .filter(
+            (r: any) =>
+              r.ruleId !== 'base_study' &&
+              r.ruleId !== 'no_study_penalty' &&
+              r.ruleId !== 'max_continuous_penalty' &&
+              r.ruleId !== 'manual_bonus_xp'
+          )
+          .map((r: any) => ({
+            ruleId: r.ruleId,
+            ruleName: r.ruleName,
+            emoji: r.emoji || '⭐',
+            points: r.points || 0,
+          }));
+
+        const manualRule = rawRules.find((r: any) => r.ruleId === 'manual_bonus_xp');
+        setSelectedRules(customRulesList);
+        setManualBonusXp(manualRule?.points || 0);
+        return;
       }
-    } else {
-      setHoursInput(0);
-      setMinutesInput(0);
-      setSelectedRules([]);
-      setManualBonusXp(0);
     }
-  }, [isOpen, selectedDate, initialDateYmd, memberHandle, submissions]);
+
+    setHoursInput(0);
+    setMinutesInput(0);
+    setSelectedRules([]);
+    setManualBonusXp(0);
+  }, [isOpen, selectedDate, initialDateYmd, memberHandle, dailySnapshots]);
 
   if (!isOpen) return null;
 
@@ -99,7 +114,7 @@ export function YptMemberEditModal({
   const penaltyThresholdUnit = rules.penaltyThresholdUnit ?? 'hours';
   const penaltyThresholdHours = penaltyThresholdUnit === 'minutes' ? penaltyThresholdVal / 60 : penaltyThresholdVal || 3;
 
-  const isPenalized = totalHoursStudied < penaltyThresholdHours;
+  const isPenalized = selectedDate < todayYmd && totalHoursStudied < penaltyThresholdHours;
   const penaltyDeduction = isPenalized ? (rules.penaltyPoints || 0) : 0;
 
   const rulePointsSum = selectedRules.reduce((sum, r) => sum + (r.points || 0), 0);
@@ -131,24 +146,12 @@ export function YptMemberEditModal({
     setError('');
 
     try {
-      const extractedMemberData: YptExtractedMemberData = {
-        yptHandle: cleanHandle,
+      await updateMemberInDailySnapshot(challenge, memberHandle, selectedDate, {
         hoursStudied: Math.max(0, Number(totalHoursStudied.toFixed(2))),
-        pointsEarned: calculatedTotalXp,
-        morningSnap: false,
-        detectedRules: selectedRules,
-      };
-
-      await addYptSubmissionLog(challenge.id, {
-        uploaderUid: user?.uid || 'admin_manual',
-        imageUrl: '',
-        extractedMembers: [extractedMemberData],
-        status: 'verified',
-        targetDateYmd: selectedDate,
-        dateYmd: selectedDate,
+        appliedRules: selectedRules,
+        manualBonusXp,
       });
 
-      await recalculateTeamPointsFromSubmissions(challenge.id);
       onSuccess();
       onClose();
     } catch (err: any) {

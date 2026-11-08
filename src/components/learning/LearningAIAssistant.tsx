@@ -27,7 +27,7 @@ import { getActiveApiKey } from '../../utils/apiKeyManager';
 export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIAssistantProps) {
   const { setActiveTab } = useUIStore();
   const { isOwner } = useContext(AppStateCtx) || { isOwner: false };
-  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('ai_tutor');
+  const { isFeatureAllowed, isModelLocked, activeModel, userHasPersonalKey } = useGeminiResolution('ai_tutor');
   const { messagesByMode, setMessages, persistLocally, toggleLocalPersistence, clearHistory, showWebSearchButton, toggleWebSearchButton, useCustomWebSearch, toggleCustomWebSearch, customSearchApi, setCustomSearchApi } = useChatStore();
   const [isLoading, setIsLoading] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
@@ -108,9 +108,9 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     const userMessage: ChatMessage = { 
       role: 'user', 
       text: input.trim() || (attachment && pagesText ? `Please analyze the attached file (Pages ${pagesText}).` : 'Please analyze this attachment.'),
-      attachments: attachment && finalAttachmentData && attachment.mimeType ? [{
+      attachments: attachment && finalAttachmentData ? [{
         data: finalAttachmentData,
-        mimeType: attachment.mimeType,
+        mimeType: attachment.mimeType || (attachment.type === 'pdf' ? 'application/pdf' : 'image/jpeg'),
         pages: pagesText || undefined
       }] : undefined
     };
@@ -129,10 +129,22 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
     }
 
     try {
-      const subpageModel = localStorage.getItem('geminiModel_ai') || localStorage.getItem('geminiModel');
-      const modelToUse = isModelLocked ? activeModel : (subpageModel || activeModel || 'gemini-2.5-flash-lite');
+      const modelToUse = activeModel;
       
-      const reply = await askLearningTutor(chatHistory, useWebSearch, useCustomWebSearch, modelToUse, chatMode, customSearchApi, (text, citations) => {
+      // Keep payload lightweight by not re-sending large base64 attachments from older turns
+      const sanitizedHistory: ChatMessage[] = chatHistory.map((msg, index) => {
+        const isLatest = index === chatHistory.length - 1;
+        if (isLatest || !msg.attachments || msg.attachments.length === 0) {
+          return msg;
+        }
+        return {
+          ...msg,
+          attachments: undefined,
+          text: msg.text.includes("[Image") ? msg.text : `${msg.text} [Image attached in previous turn]`
+        };
+      });
+
+      const reply = await askLearningTutor(sanitizedHistory, useWebSearch, useCustomWebSearch, modelToUse, chatMode, customSearchApi, (text, citations) => {
         setIsLoading(false);
         setMessages(chatMode, [...chatHistory, { role: 'model', text: text, citations }]);
       });
@@ -164,7 +176,7 @@ export function LearningAIAssistant({ isEnlarged, onToggleEnlarge }: LearningAIA
             {isModelLocked && (
               <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 mt-0.5">
                 <Lock className="w-2.5 h-2.5 shrink-0 text-amber-500" />
-                <span>{activeModel} (Global Key) • Add personal key to switch model</span>
+                <span>{activeModel} • Model locked by Admin {userHasPersonalKey ? '(Custom Key)' : '(Global Access)'}</span>
               </p>
             )}
           </div>

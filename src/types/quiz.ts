@@ -11,10 +11,12 @@ export type QuizFormat =
   | 'mixed';
 
 export interface QuizConfig {
-  sourceWords: VocabularyItem[]; // Array of up to 15-20 words to test
+  sourceWords: VocabularyItem[]; // Array of words to test
   format: QuizFormat;
-  theme: string; // The custom text box input (e.g., "Cybersecurity", "Harry Potter")
+  theme: string; // Custom theme or instructions
   scope: 'strict' | 'expanded'; // Strict (exact words) vs Expanded (synonyms/antonyms)
+  questionCount?: 5 | 10 | 15 | 20;
+  wordPool?: 'all' | 'starred' | 'wrong';
 }
 
 export interface QuizQuestion {

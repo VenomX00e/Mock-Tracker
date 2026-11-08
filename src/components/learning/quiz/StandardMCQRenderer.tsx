@@ -17,32 +17,31 @@ export const StandardMCQRenderer: React.FC<StandardMCQRendererProps> = ({
   totalQuestions,
   selectedIndex,
   onSelectAnswer,
-  showFeedback = false,
 }) => {
   const hasAnswered = typeof selectedIndex === 'number';
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-5 animate-fadeIn">
       {/* Question Prompt Card */}
-      <div className="p-6 md:p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-3 py-1 rounded-full">
+      <div className="p-6 md:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 tabular-nums">
             Question {questionIndex + 1} of {totalQuestions}
           </span>
-          {question.testedWord && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Focus: <strong className="text-slate-700 dark:text-slate-200">{question.testedWord}</strong>
+          {hasAnswered && question.testedWord && (
+            <span className="text-xs text-slate-500 dark:text-slate-400 animate-fadeIn">
+              Tested Word: <strong className="text-slate-800 dark:text-slate-200">{question.testedWord}</strong>
             </span>
           )}
         </div>
 
-        <h3 className="text-lg md:text-xl font-medium text-slate-900 dark:text-slate-100 leading-relaxed">
+        <h3 className="text-base sm:text-lg md:text-xl font-medium text-slate-900 dark:text-slate-100 leading-relaxed">
           {question.questionText}
         </h3>
       </div>
 
       {/* 4 Interactive Option Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {question.options.map((option, optIdx) => {
           const isSelected = selectedIndex === optIdx;
           const isCorrect = optIdx === question.correctAnswerIndex;
@@ -73,7 +72,7 @@ export const StandardMCQRenderer: React.FC<StandardMCQRendererProps> = ({
             >
               <div className="flex items-center gap-3.5">
                 <span
-                  className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold transition-colors ${
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold transition-colors shrink-0 ${
                     hasAnswered && isCorrect
                       ? 'bg-emerald-500 text-white'
                       : hasAnswered && isSelected
@@ -89,7 +88,7 @@ export const StandardMCQRenderer: React.FC<StandardMCQRendererProps> = ({
               </div>
 
               {hasAnswered && (
-                <div>
+                <div className="ml-2 shrink-0">
                   {isCorrect ? (
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                   ) : isSelected ? (

@@ -1,0 +1,6 @@
+{
+  "summary":  "Comprehensive implementation plan to redesign and fix the AI Vocab Quiz, including a compact single-screen configuration modal with Question Count and Word Pool controls, spoiler-free Instant Practice feedback across Cloze/Reading Comprehension/Mixed formats, two-zone split passage layout, Global Gemini key resolution alignment, and post-quiz revision tools (Retry Missed Words, Star/Bookmark, and Side-by-Side Passage & Answer Review).",
+  "updatedAt":  "2026-10-30T17:43:25.495963275Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

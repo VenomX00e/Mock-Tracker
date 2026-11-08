@@ -5,6 +5,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { RuleCard } from './RuleCard';
 import { QuickTestCard } from './QuickTestCard';
+import { SeriesPatternCard } from './SeriesPatternCard';
 
 function getTextFromNode(node: any): string {
   if (!node) return '';
@@ -45,7 +46,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
 }
 
 interface ContentSegment {
-  type: 'markdown' | 'rule_box' | 'quick_test';
+  type: 'markdown' | 'rule_box' | 'series_box' | 'quick_test';
   content: string;
 }
 
@@ -54,12 +55,12 @@ function parseMessageSegments(text: string): ContentSegment[] {
 
   const segments: ContentSegment[] = [];
 
-  // 1. Primary Structured JSON Block Parser (Matching ```json ... "grammarBlueprint" ... ```)
-  // Extract the complete block inside code fences when closed, or streaming block when unclosed
-  const jsonCodeblockRegex = /```(?:json)?\s*([\s\S]*?"grammarBlueprint"[\s\S]*?)\s*```/gi;
+  // 1. Unified Structured JSON Block Parser (Matching grammarBlueprint OR seriesBlueprint)
+  // Matches ```json ... "grammarBlueprint" ... ``` OR ```json:seriesBlueprint ... ``` OR ```json ... "seriesBlueprint" ... ```
+  const jsonCodeblockRegex = /```(?:json(?::seriesBlueprint)?)?\s*([\s\S]*?(?:"grammarBlueprint"|"seriesBlueprint"|seriesBlueprint)[\s\S]*?)\s*```/gi;
   
-  // Check for unclosed streaming JSON block that has started outputting "grammarBlueprint"
-  const streamingJsonStartRegex = /```(?:json)?\s*([\s\S]*?"grammarBlueprint"[\s\S]*$)/i;
+  // Check for unclosed streaming JSON block that has started outputting blueprint
+  const streamingJsonStartRegex = /```(?:json(?::seriesBlueprint)?)?\s*([\s\S]*?(?:"grammarBlueprint"|"seriesBlueprint"|seriesBlueprint)[\s\S]*$)/i;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -71,6 +72,7 @@ function parseMessageSegments(text: string): ContentSegment[] {
     }
 
     let jsonContent = match[1].trim();
+    const isSeries = jsonContent.includes('"seriesBlueprint"') || jsonContent.includes('seriesBlueprint') || match[0].includes('seriesBlueprint');
 
     // If the JSON block swallowed the subsequent Quick Test, cleanly isolate it
     const quickTestInsideRegex = /(?:^|\n)(?=(?:\d+\.\s*)?\*{0,2}⚡\s*Quick Test[\s\S]*?:?|(?:###?\s*)?⚡\s*Quick Test[\s\S]*?:?|\[TEST_KEY:)/i;
@@ -83,7 +85,7 @@ function parseMessageSegments(text: string): ContentSegment[] {
 
     if (jsonContent) {
       segments.push({
-        type: 'rule_box',
+        type: isSeries ? 'series_box' : 'rule_box',
         content: jsonContent,
       });
     }
@@ -101,12 +103,13 @@ function parseMessageSegments(text: string): ContentSegment[] {
     if (streamMatch) {
       const before = text.slice(0, streamMatch.index).trim();
       const streamingContent = streamMatch[1].trim();
+      const isSeries = streamingContent.includes('"seriesBlueprint"') || streamingContent.includes('seriesBlueprint') || streamMatch[0].includes('seriesBlueprint');
       if (before) {
         segments.push(...splitQuickTest(before));
       }
       if (streamingContent) {
         segments.push({
-          type: 'rule_box',
+          type: isSeries ? 'series_box' : 'rule_box',
           content: streamingContent,
         });
       }
@@ -341,6 +344,9 @@ export function ChatMessage({ msg, idx, setActiveTab, onSendAnswer, isLoading = 
           {segments.map((segment, segIdx) => {
             if (segment.type === 'rule_box') {
               return <RuleCard key={segIdx} content={segment.content} />;
+            }
+            if (segment.type === 'series_box') {
+              return <SeriesPatternCard key={segIdx} content={segment.content} />;
             }
             if (segment.type === 'quick_test') {
               return <QuickTestCard key={segIdx} content={segment.content} onSendAnswer={onSendAnswer} disabled={isLoading} />;

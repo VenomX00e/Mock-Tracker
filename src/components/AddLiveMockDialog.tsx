@@ -8,6 +8,7 @@ import { X, Save, FileText, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../services/AuthContext';
 import { usePublicSettingsCtx } from '../context/AppContext';
 import { getErrorMessage } from '../lib/errorUtils';
+import { useGeminiResolution } from '../hooks/useGeminiResolution';
 
 interface AddLiveMockDialogProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface AddLiveMockDialogProps {
 export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, categoryId, categories }: AddLiveMockDialogProps) {
   const { user } = useAuth();
   const { mockExtractionModel } = usePublicSettingsCtx();
+  const { activeModel } = useGeminiResolution('mock_score_extractor');
   const getInitialLiveMockData = () => {
     const nextDay = new Date();
     nextDay.setDate(nextDay.getDate() + 1);
@@ -80,9 +82,7 @@ export default function AddLiveMockDialog({ isOpen, onClose, onSuccess, category
       }
 
       if (imagesPayload.length > 0) {
-        const subpageModel = localStorage.getItem('geminiModel_practice') || localStorage.getItem('geminiModel');
-        const modelToUse = subpageModel || mockExtractionModel;
-        const extractedData = await parseMockAnnouncementImage(imagesPayload, modelToUse);
+        const extractedData = await parseMockAnnouncementImage(imagesPayload, activeModel);
         
         if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
         if (extractedData.examRole && !ROLES.includes(extractedData.examRole)) setIsCustomRole(true);

@@ -286,6 +286,10 @@ service cloud.firestore {
           && incoming().id == existing().id;
         allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(folderId);
       }
+
+      match /seriesVault/{patternId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     match /{path=**}/mocks/{mockId} {

@@ -61,7 +61,7 @@ import { getActiveApiKey } from '../utils/apiKeyManager';
  */
 function getAiSettings() {
   const customApiKey = getActiveApiKey();
-  const model = localStorage.getItem('geminiModel_vocab') || localStorage.getItem('geminiModel') || 'gemini-3.1-flash-lite';
+  const model = localStorage.getItem('geminiModel_vocab_extractor') || localStorage.getItem('geminiModel_vocab') || 'gemini-3.1-flash-lite';
   return { customApiKey, model };
 }
 
@@ -81,7 +81,7 @@ export async function generateWordDetails(word: string): Promise<WordDetails> {
   const response = await fetch('/api/generate-word-details', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ word, customApiKey: customApiKey || null, model, featureKey: 'flashcards' })
+    body: JSON.stringify({ word, customApiKey: customApiKey || null, model, featureKey: 'vocab_extractor' })
   });
 
   if (!response.ok) {
@@ -109,7 +109,7 @@ export async function extractContentFromDocument(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const payload: any = { customApiKey: customApiKey || null, model, featureKey: 'flashcards' };
+  const payload: any = { customApiKey: customApiKey || null, model, featureKey: 'vocab_extractor' };
   if (typeof data === 'string') {
     payload.base64Data = data;
     payload.mimeType = mimeType;
@@ -159,7 +159,7 @@ export async function extractVocabFromEditorialTranscript(
   const payload: any = {
     customApiKey: customApiKey || null,
     model,
-    featureKey: 'flashcards',
+    featureKey: 'vocab_extractor',
     textBody: textBodyOrTranscript,
     transcript: textBodyOrTranscript, // Backward compatibility
     context: typeof context === 'string' ? context : undefined,
@@ -200,7 +200,7 @@ export async function extractRawTextFromDocument(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const payload: any = { customApiKey: customApiKey || null, model, featureKey: 'flashcards' };
+  const payload: any = { customApiKey: customApiKey || null, model, featureKey: 'vocab_extractor' };
   if (typeof data === 'string') {
     payload.base64Data = data;
     payload.mimeType = mimeType;

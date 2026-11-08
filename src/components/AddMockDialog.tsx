@@ -1,16 +1,17 @@
-import React, { useState, useRef, useMemo, useCallback, memo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MockScore, ExamCategory } from '../types';
 import { parseScorecardImage } from '../services/geminiService';
-import { X, Upload, Loader2, ArrowLeft, Image as ImageIcon, BarChart3, Settings, Calculator, Activity, Trophy, Lock, AlertCircle } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { X, Loader2, ArrowLeft, Settings } from 'lucide-react';
 import { CustomDropdown } from './CustomDropdown';
 import { usePublicSettingsCtx } from '../context/AppContext';
 import { jarvisEventBus, JarvisActionEvent } from '../features/jarvis/utils/eventBus';
 import { useGeminiResolution } from '../hooks/useGeminiResolution';
 
-import { EXAMS as fallback_EXAMS, ROLES as fallback_ROLES, PHASES as fallback_PHASES, SCOPES as fallback_SCOPES, PLATFORMS as fallback_PLATFORMS } from '../lib/constants';
+import { EXAMS as fallback_EXAMS, ROLES as fallback_ROLES, PHASES as fallback_PHASES, PLATFORMS as fallback_PLATFORMS } from '../lib/constants';
 import { getErrorMessage } from '../lib/errorUtils';
+import { compressScorecardImages, ScorecardUploadSection } from './mocks/ScorecardUploadSection';
+import { MockPerformanceSection } from './mocks/MockPerformanceSection';
 
 interface AddMockDialogProps {
   isOpen: boolean;
@@ -21,51 +22,6 @@ interface AddMockDialogProps {
   categoryId?: string;
   asPage?: boolean;
 }
-
-const SubjectRow = memo(({ sub, data, onChange }: { sub: any, data: any, onChange: (id: string, field: string, val: string) => void }) => {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:border-indigo-300 dark:hover:border-indigo-500/50">
-      <div className="w-full sm:w-[140px] shrink-0 font-semibold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-        <div className="w-2 h-2 shrink-0 rounded-full bg-indigo-500"></div>
-        <span className="truncate">{sub.name} {sub.short ? <span className="text-slate-400 font-normal ml-1">({sub.short})</span> : ''}</span>
-      </div>
-      <div className="flex-1 grid grid-cols-3 gap-3">
-        <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
-            type="search" inputMode="decimal" step="0.01"
-            placeholder="Score"
-            value={data?.score ?? ''}
-            onChange={(e) => onChange(sub.id, 'score', e.target.value)}
-            className="w-full px-1.5 sm:px-3 py-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs sm:text-sm dark:text-slate-200 transition-all placeholder:text-[10px] sm:placeholder:text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-        </div>
-        <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
-            type="search" inputMode="decimal" step="0.01"
-            placeholder="Percentile"
-            value={data?.percentile ?? ''}
-            onChange={(e) => onChange(sub.id, 'percentile', e.target.value)}
-            className="w-full px-1.5 sm:px-3 py-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs sm:text-sm dark:text-slate-200 transition-all placeholder:text-[10px] sm:placeholder:text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-        </div>
-        <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-          <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"
-            type="search" inputMode="decimal" step="0.01"
-            placeholder="Accuracy %"
-            value={data?.accuracy ?? ''}
-            onChange={(e) => onChange(sub.id, 'accuracy', e.target.value)}
-            className="w-full px-1.5 sm:px-3 py-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs sm:text-sm dark:text-slate-200 transition-all placeholder:text-[10px] sm:placeholder:text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}, (prev, next) => {
-  return prev.sub.id === next.sub.id &&
-         prev.data?.score === next.data?.score &&
-         prev.data?.percentile === next.data?.percentile &&
-         prev.data?.accuracy === next.data?.accuracy;
-});
 
 export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, categories, categoryId, asPage = false }: AddMockDialogProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -103,11 +59,10 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
     ...Object.fromEntries(allSubjects.map((s: any) => [s.id, { score: '', percentile: '', accuracy: '' }]))
   }), [PHASES, SCOPES, allSubjects]);
 
-
-  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('mock_exam_generator');
+  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('mock_score_extractor');
   const [formData, setFormData] = useState<any>(defaultFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const subjects = useMemo(() => allSubjects.filter((s: any) => {
     if (!s.phases || s.phases.length === 0) return true;
     return s.phases.includes(formData.examPhase);
@@ -147,7 +102,7 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
              safeDate = safeDate.slice(0, 16);
           }
 
-          setFormData(prev => ({ 
+          setFormData((prev: any) => ({ 
             ...defaultFormData, 
             ...prev, 
             ...initialMock, 
@@ -220,62 +175,18 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
     setError('');
 
     try {
-      const imagesPayload: { base64: string, mimeType: string }[] = [];
-      
-      for (const file of files) {
-        const base64Data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-             const img = new Image();
-             img.onload = () => {
-               const canvas = document.createElement('canvas');
-               let width = img.width;
-               let height = img.height;
-               const maxDim = 1200; 
-               if (width > maxDim || height > maxDim) {
-                 if (width > height) {
-                   height = Math.round((height * maxDim) / width);
-                   width = maxDim;
-                 } else {
-                   width = Math.round((width * maxDim) / height);
-                   height = maxDim;
-                 }
-               }
-               canvas.width = width;
-               canvas.height = height;
-               const ctx = canvas.getContext('2d');
-               if (ctx) {
-                 ctx.drawImage(img, 0, 0, width, height);
-                 const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-                 const result = dataUrl.split(',')[1];
-                 if (result) resolve(result);
-                 else reject(new Error("Failed to compress image"));
-               } else {
-                 const result = reader.result?.toString().split(',')[1];
-                 resolve(result || '');
-               }
-             };
-             img.onerror = () => {
-                const result = reader.result?.toString().split(',')[1];
-                resolve(result || '');
-             };
-             img.src = reader.result?.toString() || '';
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        imagesPayload.push({ base64: base64Data, mimeType: 'image/jpeg' });
-      }
+      const imagesPayload = await compressScorecardImages(files);
 
       if (imagesPayload.length > 0) {
-        const subpageModel = localStorage.getItem('geminiModel_practice') || localStorage.getItem('geminiModel');
-        const modelToUse = isModelLocked ? activeModel : (subpageModel || activeModel || mockExtractionModel);
-        const extractedData = await parseScorecardImage(imagesPayload, allSubjects, modelToUse);
+        const extractedData = await parseScorecardImage(imagesPayload, allSubjects, activeModel);
         
-        if (extractedData.examType && !EXAMS.includes(extractedData.examType)) setIsCustomExam(true);
-        if (extractedData.examRole && !ROLES.includes(extractedData.examRole)) setIsCustomRole(true);
+        setIsCustomExam(Boolean(extractedData.examType && !EXAMS.includes(extractedData.examType)));
+        setIsCustomRole(Boolean(extractedData.examRole && !ROLES.includes(extractedData.examRole)));
 
-        if (extractedData.ga && (extractedData.ga.score != null || extractedData.ga.percentile != null)) {
+        if (
+          (extractedData.ga && (extractedData.ga.score != null || extractedData.ga.percentile != null || extractedData.ga.accuracy != null)) ||
+          ((extractedData as any).computer && ((extractedData as any).computer.score != null || (extractedData as any).computer.percentile != null))
+        ) {
           extractedData.examPhase = 'Mains';
         }
 
@@ -443,56 +354,15 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
         <div className="max-w-4xl mx-auto space-y-8">
           
           {/* AI Upload Section */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-indigo-500" />
-                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">AI Scorecard Upload</h3>
-              </div>
-            </div>
-
-            {!isFeatureAllowed ? (
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
-                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-sm mb-0.5 text-amber-900 dark:text-amber-100">API Key Required</p>
-                  <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed">
-                    An API Key is required for Mock Exam Generator. Please add your Gemini key in Settings or request access from your Administrator.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center w-full h-36 sm:h-40 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-2xl cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-slate-800/40 hover:border-indigo-400 transition-all bg-white dark:bg-slate-800/20 group relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/20 to-transparent dark:from-indigo-900/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="flex flex-col items-center justify-center relative z-10 py-6">
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-3" />
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Processing scorecard...</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-14 h-14 bg-indigo-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                        <Upload className="w-6 h-6 text-indigo-500 dark:text-indigo-400" />
-                      </div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Upload Image(s)</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Multi-select supported (PNG, JPG)</p>
-                    </>
-                  )}
-                </div>
-                <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"    
-                  ref={fileInputRef}
-                  type="file" 
-                  multiple
-                  className="hidden" 
-                  accept="image/*" 
-                  onChange={handleFileChange}
-                  disabled={isProcessing || !isFeatureAllowed}
-                  autoCorrect="off" spellCheck={false}     />
-              </label>
-            )}
-            {error && <p className="mt-2.5 text-sm text-red-500 font-medium px-2 flex items-center gap-1.5"><X className="w-4 h-4"/> {error}</p>}
-          </section>
+          <ScorecardUploadSection
+            activeModel={activeModel}
+            isModelLocked={isModelLocked}
+            isFeatureAllowed={isFeatureAllowed}
+            isProcessing={isProcessing}
+            error={error}
+            fileInputRef={fileInputRef}
+            onFileChange={handleFileChange}
+          />
 
           {/* Details Section */}
           <section>
@@ -719,133 +589,14 @@ export default function AddMockDialog({ isOpen, onClose, onSave, initialMock, ca
           </section>
 
           {/* Performance Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Trophy className="w-5 h-5 text-amber-500" />
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Metrics & Performance</h3>
-            </div>
-            
-            {formData.examScope === 'Sectional' ? (
-              <div className="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 p-5 sm:p-7 shadow-sm">
-                 <div className="mb-6 flex flex-wrap gap-2">
-                   {subjects.map((s, idx) => {
-                     const isSelected = selectedSection === s.id;
-                     return (
-                       <button 
-                         key={s.id} 
-                         type="button" 
-                         onClick={() => setSelectedSection(s.id)} 
-                         className={`px-5 py-2 rounded-xl font-medium text-sm transition-all shadow-sm
-                         ${isSelected ? 'bg-indigo-500 text-white shadow-indigo-200 dark:shadow-none translate-y-[-2px]' : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700'}`}
-                       >
-                         {s.name}
-                       </button>
-                     );
-                   })}
-                 </div>
-                 
-                 <div className="bg-slate-50 dark:bg-slate-900/50 p-5 sm:p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700 inset-shadow-sm">
-                   <h4 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-5 pb-3 border-b border-slate-200 dark:border-slate-800/50 flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-indigo-500" />
-                      {subjects.find(s => s.id === selectedSection)?.name} Summary
-                   </h4>
-                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                      <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                        <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Score</label>
-                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
-                          type="search" inputMode="decimal" step="0.01"
-                          value={formData[selectedSection]?.score ?? ''}
-                          onChange={e => handleSectionChange(selectedSection, 'score', e.target.value)}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-medium dark:text-slate-100 shadow-sm transition-shadow hover:shadow-md"
-                        />
-                      </div>
-                      <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                        <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Percentile</label>
-                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
-                          type="search" inputMode="decimal" step="0.01"
-                          value={formData[selectedSection]?.percentile ?? ''}
-                          onChange={e => handleSectionChange(selectedSection, 'percentile', e.target.value)}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-medium dark:text-slate-100 shadow-sm transition-shadow hover:shadow-md"
-                        />
-                      </div>
-                      <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                        <label className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Accuracy %</label>
-                        <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
-                          type="search" inputMode="decimal" step="0.01"
-                          value={(formData as any)[selectedSection]?.accuracy ?? ''}
-                          onChange={e => handleSectionChange(selectedSection, 'accuracy', e.target.value)}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-medium dark:text-slate-100 shadow-sm transition-shadow hover:shadow-md"
-                        />
-                      </div>
-                   </div>
-                 </div>
-              </div>
-            ) : (
-              <div className="space-y-5">
-                {/* Overall Performance */}
-                <div className="bg-slate-50/50 dark:bg-slate-900/40 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-5 text-slate-500">
-                    <Activity className="w-32 h-32" />
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 inline-flex items-center gap-2 relative z-10">
-                    <BarChart3 className="w-4 h-4 text-slate-500" /> Overall Performance
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-5 relative z-10">
-                    <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Score</label>
-                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
-                        type="search" inputMode="decimal" step="0.01"
-                        name="score"
-                        value={formData.score ?? ''}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
-                        required
-                        autoCorrect="off" spellCheck={false}     />
-                    </div>
-                    <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Percentile</label>
-                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
-                        type="search" inputMode="decimal" step="0.01"
-                        name="percentile"
-                        value={formData.percentile ?? ''}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
-                        autoCorrect="off" spellCheck={false}     />
-                    </div>
-                    <div className="space-y-1.5 focus-within:relative focus-within:z-10">
-                      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-1">Accuracy %</label>
-                      <input  autoComplete="new-password" list="autocompleteOff"   data-1p-ignore="true" data-lpignore="true" data-form-type="other"   
-                        type="search" inputMode="decimal" step="0.01"
-                        name="accuracy"
-                        value={formData.accuracy ?? ''}
-                        onChange={handleChange}
-                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-base font-semibold dark:text-slate-100 shadow-sm transition-colors hover:border-slate-300 dark:hover:border-slate-700"
-                        autoCorrect="off" spellCheck={false}     />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sectional Breakdown */}
-                {subjects.length > 0 && (
-                  <div className="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/80 p-5 sm:p-6 shadow-sm">
-                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-5 pb-3 border-b border-slate-100 dark:border-slate-700/50 inline-flex items-center gap-2">
-                       <Calculator className="w-4 h-4 text-slate-400" /> Sectional Breakdown 
-                    </h4>
-                    <div className="grid grid-cols-1 gap-4">
-                      {subjects.map(sub => (
-                        <SubjectRow 
-                          key={sub.id} 
-                          sub={sub} 
-                          data={formData[sub.id]} 
-                          onChange={handleSectionChange} 
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
+          <MockPerformanceSection
+            formData={formData}
+            subjects={subjects}
+            selectedSection={selectedSection}
+            setSelectedSection={setSelectedSection}
+            handleChange={handleChange}
+            handleSectionChange={handleSectionChange}
+          />
 
         </div>
       </div>

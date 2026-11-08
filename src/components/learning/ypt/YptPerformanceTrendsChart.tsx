@@ -12,7 +12,6 @@ import {
 import {
   YptChallenge,
   YptDailyDaySnapshot,
-  YptSubmissionLog,
   YptApiMember,
 } from '../../../types/yptTypes';
 import {
@@ -25,7 +24,6 @@ import {
 interface YptPerformanceTrendsChartProps {
   challenge: YptChallenge;
   dailySnapshots: YptDailyDaySnapshot[];
-  submissions?: YptSubmissionLog[];
   liveRosterMembers?: YptApiMember[];
   isSoloMode?: boolean;
 }
@@ -44,7 +42,6 @@ const COLOR_PALETTE = [
 export const YptPerformanceTrendsChart: React.FC<YptPerformanceTrendsChartProps> = ({
   challenge,
   dailySnapshots,
-  submissions,
   liveRosterMembers = [],
   isSoloMode = false,
 }) => {
@@ -158,7 +155,7 @@ export const YptPerformanceTrendsChart: React.FC<YptPerformanceTrendsChartProps>
     });
 
     return { chartData: data, seriesKeys: keys };
-  }, [challenge, dailySnapshots, submissions, liveRosterMembers, isSoloMode]);
+  }, [challenge, dailySnapshots, liveRosterMembers, isSoloMode]);
 
   if (chartData.length === 0 || seriesKeys.length === 0) {
     return (

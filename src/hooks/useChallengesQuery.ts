@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 async function fetchChallengesData(args: any) {
@@ -10,6 +10,25 @@ async function fetchChallengesData(args: any) {
   
   chalSnap.forEach(d => {
     const data = d.data();
+    const resolvedTitle = typeof data.title === 'string'
+      ? data.title.trim()
+      : typeof data.name === 'string'
+      ? data.name.trim()
+      : '';
+
+    // Skip nameless stub/ghost documents so they never appear in Active Challenges
+    if (!resolvedTitle) {
+      if (isOwner && !data.creatorId && !data.startDate) {
+        deleteDoc(doc(db, 'challenges', d.id)).catch(() => {});
+      }
+      return;
+    }
+
+    const normalizedData = {
+      ...data,
+      title: resolvedTitle,
+    };
+
     const isDeletedByCreator = data.deletedByCreator === true;
     const isPermanentlyDeletedByCreator = data.permanentlyDeletedByCreator === true;
     const isDeletedByAdmin = data.deletedByAdmin === true;
@@ -23,14 +42,14 @@ async function fetchChallengesData(args: any) {
        if (data.creatorId === uid) {
           if (isPermanentlyDeletedByCreator) return;
           if (isDeletedByCreator) {
-              delChallenges.push({ id: d.id, ...data });
+              delChallenges.push({ id: d.id, ...normalizedData });
               return;
           }
        } else {
           if (canManageChallenges) {
              if (isPermanentlyDeletedByAdmin) return;
              if (isDeletedByAdmin) {
-                 delChallenges.push({ id: d.id, ...data });
+                 delChallenges.push({ id: d.id, ...normalizedData });
                  return;
              }
           } else {
@@ -46,12 +65,12 @@ async function fetchChallengesData(args: any) {
             }
           }
        }
-       activeChallenges.push({ id: d.id, ...data });
+       activeChallenges.push({ id: d.id, ...normalizedData });
     } else if (data.status === 'deleted') {
        if (data.creatorId === uid && !isPermanentlyDeletedByCreator) {
-         delChallenges.push({ id: d.id, ...data });
+         delChallenges.push({ id: d.id, ...normalizedData });
        } else if (canManageChallenges && data.creatorId !== uid && !isPermanentlyDeletedByAdmin) {
-         delChallenges.push({ id: d.id, ...data });
+         delChallenges.push({ id: d.id, ...normalizedData });
        }
     }
   });

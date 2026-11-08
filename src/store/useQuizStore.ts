@@ -26,6 +26,7 @@ export interface QuizState {
   prevQuestion: () => void;
   submitQuiz: () => void;
   resetQuizSession: () => void;
+  retryMissedWords: (missedWords: VocabularyItem[]) => Promise<void>;
 }
 
 export const useQuizStore = create<QuizState>((set, get) => ({
@@ -76,7 +77,7 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       set({
         activeQuiz: quizData,
         isGenerating: false,
-        isModalOpen: false, // Close config dialog as we transition to playing
+        isModalOpen: false,
       });
     } catch (err: any) {
       console.error('useQuizStore: Error generating quiz:', err);
@@ -129,7 +130,32 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       userAnswers: {},
       isSubmitted: false,
       generationError: null,
-      isModalOpen: true, // Re-open configuration modal for a new attempt
+      isModalOpen: true,
     });
+  },
+
+  retryMissedWords: async (missedWords: VocabularyItem[]) => {
+    if (!missedWords || missedWords.length === 0) return;
+    const { activeConfig } = get();
+    const retryCount = (
+      missedWords.length <= 5
+        ? 5
+        : missedWords.length <= 10
+        ? 10
+        : missedWords.length <= 15
+        ? 15
+        : 20
+    ) as 5 | 10 | 15 | 20;
+
+    const nextConfig: QuizConfig = {
+      sourceWords: missedWords,
+      format: activeConfig?.format || 'fillers',
+      theme: activeConfig?.theme || '',
+      scope: activeConfig?.scope || 'strict',
+      questionCount: retryCount,
+      wordPool: activeConfig?.wordPool || 'all',
+    };
+
+    await get().startGeneratingQuiz(nextConfig);
   },
 }));

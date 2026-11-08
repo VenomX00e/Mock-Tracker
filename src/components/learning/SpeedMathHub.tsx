@@ -99,7 +99,20 @@ export const basicOperations: {
   },
 ];
 
+import { useSeriesVault } from "../../hooks/useSeriesVault";
+import { SeriesVaultDashboard } from "./speedmath/SeriesVaultDashboard";
+import { Layers, Zap as ZapIcon } from "lucide-react";
+
+import { SeriesPracticeArena } from "./speedmath/SeriesPracticeArena";
+import { SeriesPattern, SeriesPracticeLevel } from "../../types/seriesTypes";
+
 export function SpeedMathHub() {
+  const [currentView, setCurrentView] = useState<"training" | "vault">("training");
+  const [activeSeriesDrill, setActiveSeriesDrill] = useState<{
+    pattern: SeriesPattern | 'ALL';
+    level: SeriesPracticeLevel;
+  } | null>(null);
+  const { patterns } = useSeriesVault();
   const { isOwner, adminPermissions } = useContext(AppStateCtx)!;
   const canManageLearning = isOwner || adminPermissions?.canManageLearning;
 
@@ -341,15 +354,57 @@ export function SpeedMathHub() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col gap-8 pb-10">
-      <div>
-        <h2 className="text-xl md:text-2xl font-semibold text-slate-800 dark:text-white mb-1 md:mb-2 text-balance">
-          Speed Math Training
-        </h2>
-        <p className="text-sm md:text-base text-slate-500 dark:text-slate-400">
-          Improve your calculation speed for banking exams.
-        </p>
+    <div className="w-full h-full flex flex-col gap-6 pb-10">
+      {/* Sub-Header Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button
+          onClick={() => setCurrentView("training")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+            currentView === "training"
+              ? "bg-indigo-600 text-white shadow-xs"
+              : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60 border border-slate-200 dark:border-slate-700"
+          }`}
+        >
+          <ZapIcon className="w-4 h-4" />
+          <span>Training</span>
+        </button>
+
+        <button
+          onClick={() => setCurrentView("vault")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+            currentView === "vault"
+              ? "bg-indigo-600 text-white shadow-xs"
+              : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60 border border-slate-200 dark:border-slate-700"
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Pattern Vault</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+            currentView === "vault"
+              ? "bg-white/20 text-white"
+              : "bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300"
+          }`}>
+            {patterns.length}
+          </span>
+        </button>
       </div>
+
+      {currentView === "vault" ? (
+        <SeriesVaultDashboard 
+          onStartPractice={(pat, lvl) => {
+            setActiveSeriesDrill({ pattern: pat, level: lvl });
+          }}
+        />
+      ) : (
+        <>
+          <div>
+            <h2 className="text-xl md:text-2xl font-semibold text-slate-800 dark:text-white mb-1 md:mb-2 text-balance">
+              Speed Math Training
+            </h2>
+            <p className="text-sm md:text-base text-slate-500 dark:text-slate-400">
+              Improve your calculation speed for banking exams.
+            </p>
+          </div>
 
       {/* Basic Operations Grid */}
       <section>
@@ -402,6 +457,8 @@ export function SpeedMathHub() {
           ))}
         </div>
       </section>
+      </>
+    )}
 
       {/* Create / Edit Preset Modal */}
       <SpeedMathPresetModal
@@ -439,6 +496,19 @@ export function SpeedMathHub() {
           setPresetOverrides({});
         }}
       />
+
+      {/* Series Practice Arena Drill Modal */}
+      {activeSeriesDrill && (
+        <SeriesPracticeArena
+          pattern={activeSeriesDrill.pattern}
+          availablePatterns={patterns}
+          level={activeSeriesDrill.level}
+          onClose={() => setActiveSeriesDrill(null)}
+          onSwitchLevel={(newLevel) => {
+            setActiveSeriesDrill(prev => prev ? { ...prev, level: newLevel } : null);
+          }}
+        />
+      )}
     </div>
   );
 }

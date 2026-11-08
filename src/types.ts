@@ -319,9 +319,11 @@ export interface CloudinaryWebhookLog {
 }
 
 export interface GlobalGeminiFeatureConfig {
-  enabled: boolean;          // Whether non-key users can use the global key for this feature
-  defaultModel: string;      // Enforced model (e.g., 'gemini-2.5-flash', 'gemini-2.5-pro')
-  allowCustomKeyOverride: boolean; // True by default (personal keys always override)
+  enabled: boolean;                // Whether non-key users can use the global key for this feature
+  defaultModel: string;            // Default / target model (e.g., 'gemini-3.5-flash-lite')
+  allowCustomKeyOverride?: boolean; // Backward compatibility
+  lockForNonKeyUsers?: boolean;    // When checked (true), non-key users cannot switch models
+  lockForKeyUsers?: boolean;       // When checked (true), key-added users cannot switch models
 }
 
 export interface GlobalGeminiSystemConfig {
@@ -329,9 +331,9 @@ export interface GlobalGeminiSystemConfig {
     ypt_screenshot_parser: GlobalGeminiFeatureConfig;
     ai_tutor: GlobalGeminiFeatureConfig;
     jarvis: GlobalGeminiFeatureConfig;
-    mock_exam_generator: GlobalGeminiFeatureConfig;
-    flashcards: GlobalGeminiFeatureConfig;
-    general_chat: GlobalGeminiFeatureConfig;
+    mock_score_extractor: GlobalGeminiFeatureConfig;
+    vocab_extractor: GlobalGeminiFeatureConfig;
+    [key: string]: GlobalGeminiFeatureConfig | undefined;
   };
   updatedAt: number;
   updatedBy: string;

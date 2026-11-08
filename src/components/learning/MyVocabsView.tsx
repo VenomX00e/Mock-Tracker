@@ -21,6 +21,7 @@ import {
   Activity,
   Lightbulb,
   Type,
+  AlertCircle,
 } from 'lucide-react';
 import { useVocabularyStore, VocabEntry } from '../../store/vocabularyStore';
 import { useAppStateCtx } from '../../context/AppContext';
@@ -30,7 +31,13 @@ import { fetchVocabulariesInChunks } from '../../services/vocabularyFirebaseServ
 import { Vocabulary } from '../../types';
 import { VocabQuizContainer } from './quiz/VocabQuizContainer';
 
-type PredefinedCategory = 'all' | 'vocab' | 'phrasal_verb' | 'idiom' | 'one_word_sub';
+type PredefinedCategory =
+  | 'all'
+  | 'vocab'
+  | 'phrasal_verb'
+  | 'idiom'
+  | 'one_word_sub'
+  | 'wrong';
 
 interface PredefinedTabDef {
   id: PredefinedCategory;
@@ -44,6 +51,7 @@ const PREDEFINED_TABS: PredefinedTabDef[] = [
   { id: 'phrasal_verb', label: 'Phrasal Verbs', icon: Zap },
   { id: 'idiom', label: 'Idioms & Phrases', icon: Sparkles },
   { id: 'one_word_sub', label: 'One Word Substitutions', icon: FileText },
+  { id: 'wrong', label: 'Wrong', icon: AlertCircle },
 ];
 
 export function MyVocabsView() {
@@ -52,12 +60,14 @@ export function MyVocabsView() {
 
   const {
     favoriteVocabIds,
+    wrongVocabIds,
     customFolders,
     canvases,
     favoritedVocabsData,
     createCustomFolder,
     deleteCustomFolder,
     removeVocabFromFolder,
+    removeWrongVocab,
     toggleFavorite,
     updateVocab,
   } = useVocabularyStore();
@@ -124,14 +134,16 @@ export function MyVocabsView() {
 
   // Tab counts
   const counts = useMemo(() => {
+    const wrongSet = new Set(wrongVocabIds);
     return {
       all: fetchedWords.length,
       vocab: fetchedWords.filter((w) => w.type === 'vocab').length,
       phrasal_verb: fetchedWords.filter((w) => w.type === 'phrasal_verb').length,
       idiom: fetchedWords.filter((w) => w.type === 'idiom').length,
       one_word_sub: fetchedWords.filter((w) => w.type === 'one_word_sub').length,
+      wrong: fetchedWords.filter((w) => wrongSet.has(w.id)).length,
     };
-  }, [fetchedWords]);
+  }, [fetchedWords, wrongVocabIds]);
 
   // Main Filtering Logic:
   // Predefined tabs: data.filter(word => word.type === ...)
@@ -149,6 +161,9 @@ export function MyVocabsView() {
       result = fetchedWords.filter((word) => word.type === 'idiom');
     } else if (activeTab === 'one_word_sub') {
       result = fetchedWords.filter((word) => word.type === 'one_word_sub');
+    } else if (activeTab === 'wrong') {
+      const wrongSet = new Set(wrongVocabIds);
+      result = fetchedWords.filter((word) => wrongSet.has(word.id));
     } else if (activeCustomFolder) {
       const folderSet = new Set(activeCustomFolder.vocabIds || []);
       result = fetchedWords.filter((word) => folderSet.has(word.id));
@@ -168,7 +183,7 @@ export function MyVocabsView() {
     }
 
     return result;
-  }, [fetchedWords, activeTab, activeCustomFolder, searchQuery]);
+  }, [fetchedWords, activeTab, activeCustomFolder, searchQuery, wrongVocabIds]);
 
   // Split items by category for the editorial "All Saved" 2-column view
   const allVocabWords = useMemo(
@@ -292,6 +307,7 @@ export function MyVocabsView() {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const count = counts[tab.id];
+            const isWrongTab = tab.id === 'wrong';
 
             return (
               <button
@@ -300,16 +316,30 @@ export function MyVocabsView() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400/20'
+                    ? isWrongTab
+                      ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-400/20'
+                      : 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400/20'
+                    : isWrongTab && count > 0
+                    ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60 hover:bg-rose-100 dark:hover:bg-rose-900/50'
                     : 'bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/80'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <Icon
+                  className={`w-3.5 h-3.5 ${
+                    isActive
+                      ? 'text-white'
+                      : isWrongTab
+                      ? 'text-rose-500'
+                      : 'text-slate-400'
+                  }`}
+                />
                 <span>{tab.label}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
                     isActive
                       ? 'bg-white/25 text-white'
+                      : isWrongTab && count > 0
+                      ? 'bg-rose-200/70 dark:bg-rose-900/70 text-rose-700 dark:text-rose-300'
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                   }`}
                 >
@@ -571,7 +601,9 @@ export function MyVocabsView() {
                       }
                     }}
                     onDelete={() => {
-                      if (activeCustomFolder) {
+                      if (activeTab === 'wrong') {
+                        removeWrongVocab(item.id);
+                      } else if (activeCustomFolder) {
                         removeVocabFromFolder(activeCustomFolder.id, item.id);
                       } else {
                         toggleFavorite(item.id);
@@ -581,7 +613,22 @@ export function MyVocabsView() {
                   />
                 )}
 
-                {/* Active folder removal pill if inside custom folder */}
+                {/* Active folder removal pill if inside custom folder or Wrong tab */}
+                {activeTab === 'wrong' && (
+                  <div className="mt-1.5 flex items-center justify-between px-2 text-[11px] text-slate-500">
+                    <span className="text-rose-500 dark:text-rose-400 font-medium">
+                      Saved in Wrong list
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeWrongVocab(item.id)}
+                      className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold cursor-pointer"
+                    >
+                      Mark Mastered · Remove from Wrong
+                    </button>
+                  </div>
+                )}
+
                 {activeCustomFolder && (
                   <div className="mt-1.5 flex items-center justify-between px-2 text-[11px] text-slate-500">
                     <span>Folder: {activeCustomFolder.name}</span>

@@ -5,9 +5,9 @@ import type { QuizConfig, AIQuizResponse } from "../types";
 function getAiSettings() {
   const customApiKey = getActiveApiKey();
   const model =
+    localStorage.getItem("geminiModel_vocab_extractor") ||
     localStorage.getItem("geminiModel_vocab") ||
-    localStorage.getItem("geminiModel") ||
-    "gemini-2.5-flash";
+    "gemini-3.1-flash-lite";
   return { customApiKey, model };
 }
 
@@ -34,18 +34,19 @@ export async function generateAIQuiz(config: QuizConfig): Promise<AIQuizResponse
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  // Sample 15-20 words maximum if list is large (e.g. 100 words) to avoid token limits
-  const sampledWords = sampleVocabularyWords(config.sourceWords, 20);
+  const requestedCount = config.questionCount || 5;
+  const maxWordsToSample = Math.max(20, requestedCount);
+  const sampledWords = sampleVocabularyWords(config.sourceWords, maxWordsToSample);
 
   const payload = {
     customApiKey: customApiKey || null,
     model,
-    featureKey: "vocab_quiz",
+    featureKey: "vocab_extractor",
     config: {
       format: config.format,
       theme: config.theme,
       scope: config.scope,
-      // Pass the essential fields of the sampled words (max 20)
+      questionCount: requestedCount,
       words: sampledWords.map((w) => ({
         id: w.id,
         word: w.word,

@@ -236,15 +236,13 @@ export default function Dashboard() {
 
   // Derive unique roles and scopes for the current selection
   const availableRoles = useMemo(() => {
-    if (selectedExam === 'All') return [];
-    const baseSelected = mocks.filter(m => m.examType === selectedExam);
+    const baseSelected = selectedExam === 'All' ? mocks : mocks.filter(m => m.examType === selectedExam);
     const roles = new Set<string>(baseSelected.map(m => m.examRole).filter((t): t is string => !!t));
     return roles.size > 0 ? ['All', ...Array.from<string>(roles).sort()] : [];
   }, [mocks, selectedExam]);
 
   const availablePhases = useMemo(() => {
-    if (selectedExam === 'All') return [];
-    let baseSelected = mocks.filter(m => m.examType === selectedExam);
+    let baseSelected = selectedExam === 'All' ? mocks : mocks.filter(m => m.examType === selectedExam);
     if (selectedRole !== 'All') {
       baseSelected = baseSelected.filter(m => m.examRole === selectedRole);
     }
@@ -253,8 +251,7 @@ export default function Dashboard() {
   }, [mocks, selectedExam, selectedRole]);
 
   const availableScopes = useMemo(() => {
-    if (selectedExam === 'All') return [];
-    let baseSelected = mocks.filter(m => m.examType === selectedExam);
+    let baseSelected = selectedExam === 'All' ? mocks : mocks.filter(m => m.examType === selectedExam);
     if (selectedRole !== 'All') {
       baseSelected = baseSelected.filter(m => m.examRole === selectedRole);
     }

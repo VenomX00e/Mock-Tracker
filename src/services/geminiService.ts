@@ -12,7 +12,7 @@ export async function parseMockAnnouncementImage(images: { base64: string, mimeT
   const response = await fetch('/api/extract-mock', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ images, customApiKey: customKey || null, model, featureKey: 'mock_exam_generator' })
+    body: JSON.stringify({ images, customApiKey: customKey || null, model, featureKey: 'mock_score_extractor' })
   });
   
   if (!response.ok) {
@@ -62,10 +62,11 @@ export async function generateBadge(promptText: string): Promise<{ name: string,
 }
 
 function extractNum(val: any): number | null {
-
   if (val == null || val === '') return null;
-  const str = String(val).trim();
-  const match = str.match(/(?:\b|^)-?\d+(?:\.\d+)?/);
+  const str = String(val)
+    .trim()
+    .replace(/[\u2212\u2013\u2014]/g, '-');
+  const match = str.match(/-?\d+(?:\.\d+)?/);
   if (match) return Number(match[0]);
   return null;
 }
@@ -80,7 +81,7 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
   const response = await fetch('/api/extract-scorecard', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ images, customApiKey: customKey || null, subjects, model, featureKey: 'mock_exam_generator' })
+    body: JSON.stringify({ images, customApiKey: customKey || null, subjects, model, featureKey: 'mock_score_extractor' })
   });
   
   if (!response.ok) {
@@ -114,45 +115,144 @@ export async function parseScorecardImage(images: { base64: string, mimeType: st
   const parsed = await response.json();
   
   const cleanStr = (val: any) => {
-    if (val === null || val === undefined || String(val).toLowerCase() === 'null' || String(val).toLowerCase() === 'none' || String(val).toLowerCase() === 'unknown') return "";
-    return String(val);
+    if (val === null || val === undefined) return "";
+    const s = String(val).trim();
+    const lower = s.toLowerCase();
+    if (lower === 'null' || lower === 'none' || lower === 'unknown' || lower === 'n/a' || lower === 'na' || lower === 'undefined') return "";
+    return s;
   };
+
+  const cleanMockName = (val: any) => {
+    const s = cleanStr(val);
+    if (!s) return "";
+    const lower = s.toLowerCase();
+    const fakeHeaderPatterns = [
+      'section wise performance',
+      'section-wise performance',
+      'banking & insurance',
+      'banking and insurance',
+      'your overall performance',
+      'overall performance',
+      'rank & percentile analysis',
+      'rank and percentile analysis',
+      'toppers benchmark',
+      'performance analysis',
+      'test analysis',
+      'scorecard',
+      'search for courses',
+    ];
+    if (fakeHeaderPatterns.some(p => lower === p || lower.startsWith(p))) {
+      return "";
+    }
+    return s;
+  };
+
+  const cleanedDate = cleanStr(parsed.date);
+  const validDate = cleanedDate && /^\d{4}-\d{2}-\d{2}/.test(cleanedDate)
+    ? cleanedDate.split('T')[0]
+    : new Date().toISOString().split('T')[0];
+
+  const detectedSubj = cleanStr(parsed.detectedSubject) || null;
+
+  const rawScore = parsed.score != null ? extractNum(parsed.score) : null;
+  const rawPercentile = parsed.percentile != null ? extractNum(parsed.percentile) : null;
+  const rawPercentage = parsed.percentage != null ? extractNum(parsed.percentage) : null;
+  const rawAccuracy = parsed.accuracy != null ? extractNum(parsed.accuracy) : null;
 
   const returnObj = {
     examType: cleanStr(parsed.examType),
     examRole: cleanStr(parsed.examRole),
     examPhase: cleanStr(parsed.examPhase),
     examScope: cleanStr(parsed.examScope),
-    mockName: cleanStr(parsed.mockName),
+    mockName: cleanMockName(parsed.mockName),
     platform: cleanStr(parsed.platform),
-    detectedSubject: parsed.detectedSubject || null,
-    date: parsed.date || new Date().toISOString().split('T')[0],
-    score: parsed.score != null ? extractNum(parsed.score) : null,
-    percentile: parsed.percentile != null ? extractNum(parsed.percentile) : null,
-    percentage: parsed.percentage != null ? extractNum(parsed.percentage) : null,
-    accuracy: parsed.accuracy != null ? extractNum(parsed.accuracy) : null,
+    detectedSubject: detectedSubj,
+    date: validDate,
+    score: rawScore,
+    percentile: rawPercentile ?? rawPercentage,
+    percentage: rawPercentage,
+    accuracy: rawAccuracy,
   } as any;
 
-  if (subjects) {
-    subjects.forEach(s => {
-      if (parsed[s.id]) {
-        (returnObj as any)[s.id] = {
-          score: parsed[s.id]?.score != null ? extractNum(parsed[s.id].score) : null,
-          percentile: parsed[s.id]?.percentile != null ? extractNum(parsed[s.id].percentile) : null,
-          accuracy: parsed[s.id]?.accuracy != null ? extractNum(parsed[s.id].accuracy) : null,
+  const subjectKeys = subjects && subjects.length > 0
+    ? subjects.map(s => s.id)
+    : ['quant', 'reasoning', 'english', 'ga', 'computer'];
+
+  let populatedSectionCount = 0;
+  let totalCorrect = 0;
+  let totalWrong = 0;
+  let hasCorrectWrongCounts = false;
+
+  subjectKeys.forEach(key => {
+    if (parsed[key]) {
+      let sCorrect = parsed[key]?.correct != null ? extractNum(parsed[key].correct) : null;
+      const sWrong = parsed[key]?.wrong != null ? extractNum(parsed[key].wrong) : null;
+      const sScore = parsed[key]?.score != null ? extractNum(parsed[key].score) : null;
+      const sPct = parsed[key]?.percentile != null ? extractNum(parsed[key].percentile) : null;
+      let sAcc = parsed[key]?.accuracy != null ? extractNum(parsed[key].accuracy) : null;
+
+      if (sCorrect !== null && sWrong !== null && sCorrect >= 0 && sWrong >= 0) {
+        // If a Lite model accidentally read 'Answered' (e.g. 32) instead of 'Correct' (24),
+        // verify against the printed sectional accuracy (e.g. 75%):
+        // (32 - 8) / 32 * 100 = 75%, whereas 32 / (32 + 8) * 100 = 80%.
+        if (sAcc !== null && sCorrect > sWrong && sWrong > 0) {
+          const accIfCorrect = (sCorrect / (sCorrect + sWrong)) * 100;
+          const accIfAnswered = ((sCorrect - sWrong) / sCorrect) * 100;
+          if (Math.abs(accIfAnswered - sAcc) + 1 < Math.abs(accIfCorrect - sAcc)) {
+            sCorrect = sCorrect - sWrong;
+          }
+        }
+
+        totalCorrect += sCorrect;
+        totalWrong += sWrong;
+        hasCorrectWrongCounts = true;
+        if (sAcc === null && (sCorrect + sWrong) > 0) {
+          sAcc = Number(((sCorrect / (sCorrect + sWrong)) * 100).toFixed(2));
         }
       }
-    });
-  } else {
-    ['quant', 'reasoning', 'english', 'ga'].forEach(s => {
-      if (parsed[s]) {
-        (returnObj as any)[s] = {
-          score: parsed[s]?.score != null ? extractNum(parsed[s].score) : null,
-          percentile: parsed[s]?.percentile != null ? extractNum(parsed[s].percentile) : null,
-          accuracy: parsed[s]?.accuracy != null ? extractNum(parsed[s].accuracy) : null,
-        }
+
+      returnObj[key] = {
+        score: sScore,
+        percentile: sPct,
+        accuracy: sAcc,
+      };
+      if (sScore !== null || sPct !== null || sAcc !== null) {
+        populatedSectionCount++;
       }
-    });
+    }
+  });
+
+  // Deterministic JavaScript calculation for overall accuracy when Correct & Wrong counts are present
+  if (hasCorrectWrongCounts && (totalCorrect + totalWrong) > 0) {
+    const exactOverallAccuracy = Number(((totalCorrect / (totalCorrect + totalWrong)) * 100).toFixed(2));
+    if (
+      returnObj.accuracy === null ||
+      returnObj.accuracy === returnObj.score ||
+      returnObj.accuracy === returnObj.percentile ||
+      Math.abs(returnObj.accuracy - exactOverallAccuracy) > 0.5
+    ) {
+      returnObj.accuracy = exactOverallAccuracy;
+    }
   }
+
+  // Deterministic Mains detection if GA or Computer has any metric (even 0) or 4+ sections are populated
+  const hasGa = returnObj.ga && (returnObj.ga.score !== null || returnObj.ga.percentile !== null || returnObj.ga.accuracy !== null);
+  const hasComputer = returnObj.computer && (returnObj.computer.score !== null || returnObj.computer.percentile !== null || returnObj.computer.accuracy !== null);
+  if (hasGa || hasComputer || populatedSectionCount >= 4) {
+    returnObj.examPhase = 'Mains';
+  }
+
+  // If this is a Sectional test and the model populated either overall or the detected subject, sync both
+  if (returnObj.examScope?.toLowerCase() === 'sectional' && detectedSubj && subjectKeys.includes(detectedSubj)) {
+    const subjObj = returnObj[detectedSubj] || { score: null, percentile: null, accuracy: null };
+    if (subjObj.score == null && returnObj.score != null) subjObj.score = returnObj.score;
+    if (subjObj.percentile == null && returnObj.percentile != null) subjObj.percentile = returnObj.percentile;
+    if (subjObj.accuracy == null && returnObj.accuracy != null) subjObj.accuracy = returnObj.accuracy;
+    if (returnObj.score == null && subjObj.score != null) returnObj.score = subjObj.score;
+    if (returnObj.percentile == null && subjObj.percentile != null) returnObj.percentile = subjObj.percentile;
+    if (returnObj.accuracy == null && subjObj.accuracy != null) returnObj.accuracy = subjObj.accuracy;
+    returnObj[detectedSubj] = subjObj;
+  }
+
   return returnObj;
 }

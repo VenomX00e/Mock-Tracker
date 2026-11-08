@@ -6,7 +6,7 @@ import { useGeminiResolution } from '../../../hooks/useGeminiResolution';
 
 export function JarvisWidget() {
   const { isOpen, messages, isThinking, navigationNotice, toggleOpen, streamedResponse, sendMessage } = useJarvis();
-  const { isFeatureAllowed, isModelLocked, activeModel } = useGeminiResolution('jarvis');
+  const { isFeatureAllowed, isModelLocked, activeModel, userHasPersonalKey } = useGeminiResolution('jarvis');
   const [input, setInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +41,7 @@ export function JarvisWidget() {
       {isModelLocked && (
         <div className="px-3 py-1 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800/50 text-[10px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5 font-medium shrink-0">
           <Lock size={12} className="text-amber-500 shrink-0" />
-          <span className="truncate">{activeModel} (Global Key) • Add personal key to switch model</span>
+          <span className="truncate">{activeModel} • Model locked by Admin {userHasPersonalKey ? '(Custom Key)' : '(Global Access)'}</span>
         </div>
       )}
 
